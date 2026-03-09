@@ -1,0 +1,54 @@
+[project]
+name = "zephyr"
+version = "0.1.0"
+description = "Zephyr Intelligent Data Extraction Pipeline"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
+
+[dependency-groups]
+lint = [
+  "ruff>=0.15.0,<1.0.0",
+  "mypy>=1.19.1,<2.0.0",
+  "types-requests>=2.32.4,<3.0.0",
+  "pyright>=1.1.0",
+]
+test = [
+  { include-group = "lint" },
+  "pytest>=9.0.0,<10.0.0",
+  "pytest-cov>=7.0.0,<8.0.0",
+  "pytest-xdist>=3.8.0,<4.0.0",
+]
+dev = [
+  "pre-commit>=4.0.0,<5.0.0",
+]
+
+[tool.uv.workspace]
+members = ["packages/*"]
+
+# 参考 unstructured / unstructured-api：pyright 严格模式写在 pyproject <!--citation:1-->
+[tool.pyright]
+pythonPlatform = "Linux"
+pythonVersion = "3.12"
+typeCheckingMode = "strict"
+stubPath = "./typings"
+reportUnnecessaryCast = true
+reportUnnecessaryTypeIgnoreComment = true
+
+# 针对 monorepo：明确扫描范围（避免把无关目录也扫进来）
+include = ["packages/*/src"]
+exclude = ["**/.venv", "**/dist", "**/build", "**/.mypy_cache", "**/.ruff_cache"]
+
+[tool.pytest.ini_options]
+testpaths = ["packages"]
+addopts = "-q"
+
+[tool.mypy]
+python_version = "3.12"
+mypy_path = "typings"
+namespace_packages = true
+explicit_package_bases = true
+warn_unused_ignores = true
+no_implicit_optional = true
+# 先别把历史/搬运代码逼死：初期允许缺失导入，后续再收紧
+ignore_missing_imports = true
