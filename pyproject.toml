@@ -35,6 +35,13 @@ stubPath = "./typings"
 reportUnnecessaryCast = true
 reportUnnecessaryTypeIgnoreComment = true
 
+
+extraPaths = [
+    "packages/zephyr-core/src",
+    "packages/zephyr-api/src",
+    "packages/zephyr-ingest/src",
+]
+
 [tool.ruff]
 # 针对 monorepo：明确扫描范围（避免把无关目录也扫进来）
 #include = ["packages/*/src"]
