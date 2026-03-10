@@ -1,0 +1,19 @@
+# Default: normalize text files and use LF in repo + working tree
+* text=auto eol=lf
+
+# Binary files: never touch line endings
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.pdf binary
+*.ico binary
+*.zip binary
+*.gz  binary
+*.7z  binary
+*.woff binary
+*.woff2 binary
+
+# Windows-specific files (only if you later introduce them)
+*.bat text eol=crlf
+*.cmd text eol=crlf
