@@ -1,0 +1,45 @@
+[project]
+name = "uns-stream"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "farr-lesende", email = "1602058210@qq.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "httpx>=0.28.1",
+    "pydantic-settings>=2.13.1",
+    "tenacity>=9.1.4",
+    "unstructured>=0.21.5",
+    "zephyr-core",
+]
+
+[project.optional-dependencies]
+all-docs = ["unstructured[all-docs]"]
+pdf = ["unstructured[pdf]"]
+doc = ["unstructured[doc]"]
+docx = ["unstructured[docx]"]
+ppt = ["unstructured[ppt]"]
+pptx = ["unstructured[pptx]"]
+xlsx = ["unstructured[xlsx]"]
+csv = ["unstructured[csv]"]
+tsv = ["unstructured[tsv]"]
+md = ["unstructured[md]"]
+rtf = ["unstructured[rtf]"]
+rst = ["unstructured[rst]"]
+epub = ["unstructured[epub]"]
+odt = ["unstructured[odt]"]
+org = ["unstructured[org]"]
+image = ["unstructured[image]"]
+email = ["unstructured[email]"]
+html = ["unstructured[html]"]
+xml = ["unstructured[xml]"]
+json = ["unstructured[json]"]
+
+[build-system]
+requires = ["uv_build>=0.10.8,<0.11.0"]
+build-backend = "uv_build"
+
+[tool.uv.sources]
+zephyr-core = { workspace = true }

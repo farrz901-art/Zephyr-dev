@@ -40,13 +40,14 @@ extraPaths = [
     "packages/zephyr-core/src",
     "packages/zephyr-api/src",
     "packages/zephyr-ingest/src",
+    "packages/uns-stream/src",
 ]
 
 [tool.ruff]
 # 针对 monorepo：明确扫描范围（避免把无关目录也扫进来）
 #include = ["packages/*/src"]
 line-length = 100
-src = ["packages/zephyr-core/src", "packages/zephyr-ingest/src", "packages/zephyr-api/src"]
+src = ["packages/uns-stream/src", "packages/zephyr-core/src", "packages/zephyr-ingest/src", "packages/zephyr-api/src"]
 exclude = ["**/.venv", "**/dist", "**/build", "**/.mypy_cache", "**/.ruff_cache"]
 #exclude = [
 #    "prepline_*/api",
