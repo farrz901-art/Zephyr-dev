@@ -1,8 +1,8 @@
-from zephyr_core.contracts.v1.enums import PartitionStrategy
-from zephyr_core.contracts.v1.models import (
+from zephyr_core.contracts.v1 import (
     DocumentMetadata,
     EngineInfo,
     PartitionResult,
+    PartitionStrategy,
     ZephyrElement,
 )
 

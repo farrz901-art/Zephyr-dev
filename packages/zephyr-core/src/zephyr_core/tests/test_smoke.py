@@ -1,14 +1,25 @@
-# """Smoke tests for zephyr-core package."""
-#
-# import zephyr_core
-#
-#
-# def test_package_exists():
-#     """Test that the core package can be imported."""
-#     assert zephyr_core is not None
-#
-#
-# def test_version_exists():
-#     """Test that the package has a version attribute."""
-#     assert hasattr(zephyr_core, "__version__")
-#     assert isinstance(zephyr_core.__version__, str)
+"""Smoke tests for zephyr-core package."""
+
+import zephyr_core
+
+
+def test_package_exists() -> None:
+    assert zephyr_core is not None
+
+
+def test_version_exists() -> None:
+    assert hasattr(zephyr_core, "__version__")
+    assert isinstance(zephyr_core.__version__, str)
+
+
+def test_contract_exports_exist() -> None:
+    assert hasattr(zephyr_core, "PartitionResult")
+    assert hasattr(zephyr_core, "ZephyrElement")
+    assert hasattr(zephyr_core, "DocumentMetadata")
+    assert hasattr(zephyr_core, "EngineInfo")
+    assert hasattr(zephyr_core, "PartitionStrategy")
+
+
+def test_error_exports_exist() -> None:
+    assert hasattr(zephyr_core, "ErrorCode")
+    assert hasattr(zephyr_core, "ZephyrError")
