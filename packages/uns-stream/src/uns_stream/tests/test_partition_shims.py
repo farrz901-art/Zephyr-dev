@@ -42,3 +42,17 @@ def test_auto_routes_txt(tmp_path: Path) -> None:
 
     res = auto_partition(filename=str(f), backend=DummyBackend())
     assert res.elements[0].text == "kind=text"
+
+
+def test_auto_routes_md(tmp_path: Path) -> None:
+    f = tmp_path / "a.md"
+    f.write_text("# hello", encoding="utf-8")
+    res = auto_partition(filename=str(f), backend=DummyBackend())
+    assert res.elements[0].text == "kind=md"
+
+
+def test_auto_routes_json(tmp_path: Path) -> None:
+    f = tmp_path / "a.json"
+    f.write_text('{"a": 1}', encoding="utf-8")
+    res = auto_partition(filename=str(f), backend=DummyBackend())
+    assert res.elements[0].text == "kind=json"

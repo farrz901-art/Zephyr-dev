@@ -6,6 +6,9 @@ from pathlib import Path
 from uns_stream.backends.base import PartitionBackend
 from uns_stream.partition.email import partition_email
 from uns_stream.partition.html import partition_html
+from uns_stream.partition.json import partition_json
+from uns_stream.partition.md import partition_md
+from uns_stream.partition.msg import partition_msg
 from uns_stream.partition.text import partition_text
 from uns_stream.partition.xml import partition_xml
 from zephyr_core import ErrorCode, PartitionResult, PartitionStrategy, ZephyrError
@@ -18,6 +21,10 @@ _ROUTER: dict[str, Callable[..., PartitionResult]] = {
     ".htm": partition_html,
     ".xml": partition_xml,
     ".eml": partition_email,
+    ".msg": partition_msg,
+    ".json": partition_json,
+    ".md": partition_md,
+    ".markdown": partition_md,
     # 后续继续添加其他格式
 }
 

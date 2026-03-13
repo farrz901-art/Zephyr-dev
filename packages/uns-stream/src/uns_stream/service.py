@@ -32,7 +32,11 @@ def partition_file(
     backend: PartitionBackend | None = None,
 ) -> PartitionResult:
     p = Path(filename)
-    elements: list[ZephyrElement] = (backend or LocalUnstructuredBackend()).partition_elements(
+
+    # === 关键修改：只构造一次 backend ===
+    b: PartitionBackend = backend or LocalUnstructuredBackend()
+
+    elements: list[ZephyrElement] = b.partition_elements(
         filename=str(p),
         kind=kind,
         strategy=strategy,
@@ -49,7 +53,6 @@ def partition_file(
         created_at_utc=datetime.now(timezone.utc).isoformat(),
     )
 
-    b = backend or LocalUnstructuredBackend()
     engine = EngineInfo(name=b.name, backend=b.backend, version=b.version, strategy=strategy)
 
     return PartitionResult(
