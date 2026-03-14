@@ -90,6 +90,39 @@ def test_partition_image_passes_kind_and_strategy(tmp_path: Path) -> None:
     assert res.elements[0].text == "kind=image|strategy=ocr_only"
 
 
+def test_auto_routes_csv(tmp_path: Path) -> None:
+    """测试 .csv 文件路由到 kind=csv"""
+    f = tmp_path / "data.csv"
+    f.write_text("name,age\nAlice,30", encoding="utf-8")
+
+    res = auto_partition(filename=str(f), backend=DummyBackend())
+    kv = _kv(res.elements[0].text)
+    assert kv["kind"] == "csv"
+    assert kv["strategy"] == "auto"
+
+
+def test_auto_routes_xlsx(tmp_path: Path) -> None:
+    """测试 .xlsx 文件路由到 kind=xlsx"""
+    f = tmp_path / "data.xlsx"
+    f.write_bytes(b"fake xlsx content")  # DummyBackend 不需要真实内容
+
+    res = auto_partition(filename=str(f), backend=DummyBackend())
+    kv = _kv(res.elements[0].text)
+    assert kv["kind"] == "xlsx"
+    assert kv["strategy"] == "auto"
+
+
+def test_auto_routes_jsonl(tmp_path: Path) -> None:
+    """测试 .jsonl 文件路由到 kind=ndjson"""
+    f = tmp_path / "data.jsonl"
+    f.write_text('{"id":1,"text":"hello"}\n{"id":2,"text":"world"}', encoding="utf-8")
+
+    res = auto_partition(filename=str(f), backend=DummyBackend())
+    kv = _kv(res.elements[0].text)
+    assert kv["kind"] == "ndjson"  # 注意：Unstructured 中 .jsonl 通常走 ndjson
+    assert kv["strategy"] == "auto"
+
+
 def _kv(text: str) -> dict[str, str]:
     # "kind=text|strategy=auto" -> {"kind": "text", "strategy": "auto"}
     out: dict[str, str] = {}

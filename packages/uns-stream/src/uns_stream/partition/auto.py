@@ -4,14 +4,18 @@ from collections.abc import Callable
 from pathlib import Path
 
 from uns_stream.backends.base import PartitionBackend
+from uns_stream.partition.csv import partition_csv
 from uns_stream.partition.email import partition_email
 from uns_stream.partition.html import partition_html
 from uns_stream.partition.image import partition_image
 from uns_stream.partition.json import partition_json
 from uns_stream.partition.md import partition_md
 from uns_stream.partition.msg import partition_msg
+from uns_stream.partition.ndjson import partition_ndjson
 from uns_stream.partition.pdf import partition_pdf
 from uns_stream.partition.text import partition_text
+from uns_stream.partition.tsv import partition_tsv
+from uns_stream.partition.xlsx import partition_xlsx
 from uns_stream.partition.xml import partition_xml
 from zephyr_core import ErrorCode, PartitionResult, PartitionStrategy, ZephyrError
 
@@ -35,6 +39,12 @@ _ROUTER: dict[str, Callable[..., PartitionResult]] = {
     ".tif": partition_image,
     ".bmp": partition_image,
     ".heic": partition_image,
+    ".csv": partition_csv,
+    ".tsv": partition_tsv,
+    ".xlsx": partition_xlsx,
+    ".xls": partition_xlsx,
+    ".ndjson": partition_ndjson,
+    ".jsonl": partition_ndjson,
     # 后续继续添加其他格式
 }
 
