@@ -6,9 +6,11 @@ from pathlib import Path
 from uns_stream.backends.base import PartitionBackend
 from uns_stream.partition.email import partition_email
 from uns_stream.partition.html import partition_html
+from uns_stream.partition.image import partition_image
 from uns_stream.partition.json import partition_json
 from uns_stream.partition.md import partition_md
 from uns_stream.partition.msg import partition_msg
+from uns_stream.partition.pdf import partition_pdf
 from uns_stream.partition.text import partition_text
 from uns_stream.partition.xml import partition_xml
 from zephyr_core import ErrorCode, PartitionResult, PartitionStrategy, ZephyrError
@@ -25,6 +27,14 @@ _ROUTER: dict[str, Callable[..., PartitionResult]] = {
     ".json": partition_json,
     ".md": partition_md,
     ".markdown": partition_md,
+    ".pdf": partition_pdf,
+    ".png": partition_image,
+    ".jpg": partition_image,
+    ".jpeg": partition_image,
+    ".tiff": partition_image,
+    ".tif": partition_image,
+    ".bmp": partition_image,
+    ".heic": partition_image,
     # 后续继续添加其他格式
 }
 

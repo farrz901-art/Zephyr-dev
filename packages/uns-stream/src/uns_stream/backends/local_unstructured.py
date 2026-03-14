@@ -71,9 +71,48 @@ class LocalUnstructuredBackend:
         unique_element_ids: bool = True,
         **kwargs: Any,
     ) -> list[ZephyrElement]:
+        """
+        根据文件类型安全地调用 unstructured 的对应 partition 函数。
+
+        策略：
+        - pdf：支持 fast / hi_res / ocr_only / auto
+        - image：支持 auto / hi_res / ocr_only（FAST 自动降级为 auto）
+        - 其他格式：不传递 strategy 参数，避免 TypeError
+        """
         fn = _load_partition_fn(kind)
 
-        # Phase1: keep call minimal and safe across kinds.
-        # pdf/image strategy will be wired in P1-05 at the module level.
-        elements = fn(filename=filename, unique_element_ids=unique_element_ids, **kwargs)
+        # 构造调用参数
+        call_kwargs: dict[str, Any] = {
+            "filename": filename,
+            "unique_element_ids": unique_element_ids,
+            **kwargs,
+        }
+
+        # 只对 pdf 和 image 传递 strategy 参数
+        if kind in {"pdf", "image"}:
+            if kind == "image" and strategy == PartitionStrategy.FAST:
+                # Image 不支持 fast，官方推荐使用 auto
+                call_kwargs["strategy"] = "auto"
+            else:
+                call_kwargs["strategy"] = strategy.value
+
+        # 执行调用
+        elements = fn(**call_kwargs)
+
         return to_zephyr_elements(elements)
+
+    # def partition_elements(
+    #     self,
+    #     *,
+    #     filename: str,
+    #     kind: str,
+    #     strategy: PartitionStrategy,
+    #     unique_element_ids: bool = True,
+    #     **kwargs: Any,
+    # ) -> list[ZephyrElement]:
+    #     fn = _load_partition_fn(kind)
+    #
+    #     # Phase1: keep call minimal and safe across kinds.
+    #     # pdf/image strategy will be wired in P1-05 at the module level.
+    #     elements = fn(filename=filename, unique_element_ids=unique_element_ids, **kwargs)
+    #     return to_zephyr_elements(elements)

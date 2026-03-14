@@ -30,6 +30,7 @@ def partition_file(
     strategy: PartitionStrategy = PartitionStrategy.AUTO,
     unique_element_ids: bool = True,
     backend: PartitionBackend | None = None,
+    **partition_kwargs: object,
 ) -> PartitionResult:
     p = Path(filename)
 
@@ -41,6 +42,7 @@ def partition_file(
         kind=kind,
         strategy=strategy,
         unique_element_ids=unique_element_ids,
+        **partition_kwargs,
     )
 
     normalized_text = "\n\n".join([e.text for e in elements if e.text])
