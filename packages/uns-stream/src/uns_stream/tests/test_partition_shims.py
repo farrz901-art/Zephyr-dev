@@ -37,7 +37,10 @@ def test_partition_text_uses_backend(tmp_path: Path) -> None:
 
     res = partition_text(filename=str(f), backend=DummyBackend())
     assert res.engine.name == "dummy"
-    assert res.elements[0].text == "kind=text"
+    # assert res.elements[0].text == "kind=text"
+    kv = _kv(res.elements[0].text)
+    assert kv["kind"] == "text"
+    assert kv["strategy"] == "auto"
 
 
 def test_auto_routes_txt(tmp_path: Path) -> None:
@@ -45,21 +48,30 @@ def test_auto_routes_txt(tmp_path: Path) -> None:
     f.write_text("hello", encoding="utf-8")
 
     res = auto_partition(filename=str(f), backend=DummyBackend())
-    assert res.elements[0].text == "kind=text"
+    # assert res.elements[0].text == "kind=text"
+    kv = _kv(res.elements[0].text)
+    assert kv["kind"] == "text"
+    assert kv["strategy"] == "auto"
 
 
 def test_auto_routes_md(tmp_path: Path) -> None:
     f = tmp_path / "a.md"
     f.write_text("# hello", encoding="utf-8")
     res = auto_partition(filename=str(f), backend=DummyBackend())
-    assert res.elements[0].text == "kind=md"
+    # assert res.elements[0].text == "kind=md"
+    kv = _kv(res.elements[0].text)
+    assert kv["kind"] == "md"
+    assert kv["strategy"] == "auto"
 
 
 def test_auto_routes_json(tmp_path: Path) -> None:
     f = tmp_path / "a.json"
     f.write_text('{"a": 1}', encoding="utf-8")
     res = auto_partition(filename=str(f), backend=DummyBackend())
-    assert res.elements[0].text == "kind=json"
+    # assert res.elements[0].text == "kind=json"
+    kv = _kv(res.elements[0].text)
+    assert kv["kind"] == "json"
+    assert kv["strategy"] == "auto"
 
 
 def test_partition_pdf_passes_kind_and_strategy(tmp_path: Path) -> None:
@@ -76,3 +88,12 @@ def test_partition_image_passes_kind_and_strategy(tmp_path: Path) -> None:
         filename=str(f), strategy=PartitionStrategy.OCR_ONLY, backend=DummyBackend()
     )
     assert res.elements[0].text == "kind=image|strategy=ocr_only"
+
+
+def _kv(text: str) -> dict[str, str]:
+    # "kind=text|strategy=auto" -> {"kind": "text", "strategy": "auto"}
+    out: dict[str, str] = {}
+    for part in text.split("|"):
+        k, v = part.split("=", 1)
+        out[k] = v
+    return out
