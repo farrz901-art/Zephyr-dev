@@ -7,9 +7,11 @@ from uns_stream._internal.serde import to_zephyr_elements
 from zephyr_core import ErrorCode, PartitionStrategy, ZephyrElement, ZephyrError
 
 _EXTRA_BY_KIND: dict[str, str] = {
-    # 大多与 kind 同名；先列常见，后续逐步补齐即可
     "pdf": "pdf",
+    # doc/ppt 统一指向 docx/pptx（按官方 full installation 文档）
+    "doc": "docx",
     "docx": "docx",
+    "ppt": "pptx",
     "pptx": "pptx",
     "xlsx": "xlsx",
     "csv": "csv",
@@ -24,8 +26,11 @@ _EXTRA_BY_KIND: dict[str, str] = {
     "email": "email",
     "html": "html",
     "xml": "xml",
+    # ndjson 本质属于 json 能力（extra 列表里通常给的是 json）
+    "ndjson": "json",
     "json": "json",
-    "text": "all-docs",  # text 通常不需要 extra，这里给个宽松兜底
+    "msg": "msg",
+    "text": "all-docs",
 }
 
 

@@ -89,6 +89,9 @@ indent-style = "space"
 [tool.pytest.ini_options]
 testpaths = ["packages"]
 addopts = "-q"
+markers = [
+  "integration: requires optional extras and fixture files",
+]
 
 [tool.mypy]
 python_version = "3.12"
