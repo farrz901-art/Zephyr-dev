@@ -9,6 +9,7 @@ authors = [
 requires-python = ">=3.12"
 dependencies = [
     "httpx>=0.28.1",
+    "pydantic>=2.12.5",
     "pydantic-settings>=2.13.1",
     "tenacity>=9.1.4",
     "unstructured>=0.21.5",

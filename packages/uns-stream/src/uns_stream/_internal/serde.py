@@ -16,7 +16,7 @@ def to_zephyr_elements(unstructured_elements: Iterable[Any]) -> list[ZephyrEleme
         # Unstructured elements support .to_dict()
         d = el.to_dict()
         raw_meta = dict(d.get("metadata") or {})
-        norm_meta = normalize_unstructured_metadata(raw_meta)
+        norm_meta, _ = normalize_unstructured_metadata(raw_meta)
 
         out.append(
             ZephyrElement(

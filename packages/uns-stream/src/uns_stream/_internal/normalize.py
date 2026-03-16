@@ -2,21 +2,26 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 
-# 1. 定义一个仅供内部使用的“数据清洗模型”
+# 1. 内部元数据校验模型：真正利用 Pydantic 的自动转型能力
+class _MetadataCleaner(BaseModel):
+    model_config = ConfigDict(extra="allow")  # 允许并保留未定义的其他字段
+
+    # Pydantic 会自动把 "true"/"1"/True 转为布尔值 True
+    is_extracted: bool | None = None
+
+    # 明确排除掉的敏感字段
+    file_directory: Any = Field(None, exclude=True)
+
+
 class _UnstructuredCoords(BaseModel):
-    model_config = ConfigDict(extra="ignore")  # 忽略掉不需要的字段
-
+    model_config = ConfigDict(extra="ignore")
     points: list[list[float]]
-    system: str | None = None
-    layout_width: float | None = None
-    layout_height: float | None = None
 
     @property
     def bbox(self) -> dict[str, float]:
-        """逻辑内聚：在模型内部计算 bbox"""
         xs = [p[0] for p in self.points]
         ys = [p[1] for p in self.points]
         return {
@@ -27,29 +32,35 @@ class _UnstructuredCoords(BaseModel):
         }
 
 
-def normalize_unstructured_metadata(meta: dict[str, Any]) -> dict[str, Any]:
-    """使用 Pydantic 强校验并清洗元数据"""
-    m = dict(meta)
+def normalize_unstructured_metadata(meta: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    """
+    规范化元数据。
+    返回: (规范化后的字典, 警告信息列表)
+    """
+    warnings: list[str] = []
 
-    # 1) 路径脱敏
-    m.pop("file_directory", None)
+    # 1) 利用 Pydantic 模型进行字段脱敏和类型转换
+    try:
+        cleaner = _MetadataCleaner.model_validate(meta)
+        # 导出字典，exclude_none=True 保持干净，同时 Pydantic 会自动移除 Field(exclude=True) 的字段
+        m = cleaner.model_dump(exclude_unset=True)
+    except ValidationError as e:
+        # TODO: P1-07-03 引入 logger.warning
+        warnings.append(f"Metadata validation partially failed: {e}")
+        m = dict(meta)
+        m.pop("file_directory", None)  # 兜底脱敏
 
-    # 2) 自动类型转换 (Pydantic 会自动把 "true" 转为 True)
-    # 如果你以后元数据字段多了，可以定义一个完整的 MetadataModel
-    if isinstance(m.get("is_extracted"), str):
-        val = m["is_extracted"].lower()
-        if val in ("true", "false"):
-            m["is_extracted"] = val == "true"
-
-    # 3) 健壮的坐标转换
+    # 2) 坐标转换
     coords_raw = m.get("coordinates")
     if isinstance(coords_raw, dict):
         try:
-            # 这一步会瞬间解决所有 Pyright 的类型推断问题
             coords_obj = _UnstructuredCoords.model_validate(coords_raw)
             m["bbox"] = coords_obj.bbox
-        except Exception:
-            # 如果 Unstructured 吐出的坐标格式不对，不影响主流程
-            pass
+        except ValidationError as e:
+            # 关键改进：不再悄悄 pass，记录下原因
+            # TODO: P1-07-03 记录到 logger.debug
+            warnings.append(f"Failed to derive bbox from coordinates: {e}")
+        except Exception as e:
+            warnings.append(f"Unexpected error during bbox derivation: {e}")
 
-    return m
+    return m, warnings
