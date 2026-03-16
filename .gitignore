@@ -8,3 +8,5 @@ wheels/
 
 # Virtual environments
 .venv
+
+packages/uns-stream/src/uns_stream/tests/fixtures/*

@@ -63,9 +63,19 @@ class LocalUnstructuredBackend:
     backend = "local"
 
     def __init__(self) -> None:
-        from unstructured import __version__ as v  # local import
+        # from unstructured import __version__ as v  # local import
+        #
+        # self.version: str = str(v)
+        try:
+            from importlib.metadata import version
 
-        self.version: str = str(v)
+            self.version = version("unstructured")
+        except Exception:
+            # 兜底方案
+            from unstructured import __version__ as v
+
+            # 如果 v 是模块，尝试取其属性，否则转字符串
+            self.version = getattr(v, "__version__", str(v))
 
     def partition_elements(
         self,

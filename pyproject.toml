@@ -21,10 +21,19 @@ test = [
 ]
 dev = [
   "pre-commit>=4.0.0,<5.0.0",
+  "uns-stream[all-docs]", # 联动：让根环境包含 uns-stream 的所有 AI 库
+  "zephyr-core",          # 联动：让根环境包含核心库
 ]
 
 [tool.uv.workspace]
 members = ["packages/*"]
+
+[tool.uv.sources]
+# 告诉 uv，这些包就在本地 packages 文件夹里
+uns-stream = { workspace = true }
+zephyr-core = { workspace = true }
+zephyr-api = { workspace = true }
+zephyr-ingest = { workspace = true }
 
 # 参考 unstructured / unstructured-api：pyright 严格模式写在 pyproject <!--citation:1-->
 [tool.pyright]
@@ -34,7 +43,14 @@ typeCheckingMode = "strict"
 stubPath = "./typings"
 reportUnnecessaryCast = true
 reportUnnecessaryTypeIgnoreComment = true
-
+exclude = [
+    "packages/uns-stream/src/uns_stream/tests/fixtures",
+    "**/node_modules",
+    "**/__pycache__",
+    "**/.venv",
+    "**/typings",
+    "**/tools"
+]
 
 extraPaths = [
     "packages/zephyr-core/src",
@@ -47,8 +63,8 @@ extraPaths = [
 # 针对 monorepo：明确扫描范围（避免把无关目录也扫进来）
 #include = ["packages/*/src"]
 line-length = 100
-src = ["packages/uns-stream/src", "packages/zephyr-core/src", "packages/zephyr-ingest/src", "packages/zephyr-api/src"]
-exclude = ["**/.venv", "**/dist", "**/build", "**/.mypy_cache", "**/.ruff_cache", "**/typings"]
+src = ["packages/uns-stream/src/uns_stream/tests/fixtures", "packages/uns-stream/src", "packages/zephyr-core/src", "packages/zephyr-ingest/src", "packages/zephyr-api/src"]
+exclude = ["**/.venv", "**/dist", "**/build", "**/.mypy_cache", "**/.ruff_cache", "**/typings", "**/tools"]
 #exclude = [
 #    "prepline_*/api",
 #]
