@@ -46,7 +46,7 @@ def test_partition_wraps_unknown_exception(tmp_path: Path) -> None:
     err = ei.value
     assert err.code == ErrorCode.UNS_PARTITION_FAILED
     assert err.details is not None
-
+    assert err.details["retryable"] is False
     assert err.details["kind"] == "text"
     assert err.details["strategy"] == "auto"
     assert err.details["engine"]["name"] == "dummy"

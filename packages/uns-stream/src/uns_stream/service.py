@@ -7,6 +7,7 @@ from hashlib import sha256
 from pathlib import Path
 from typing import Any, cast
 
+from uns_stream._internal.retry_policy import is_retryable_exception
 from uns_stream.backends.base import PartitionBackend
 from uns_stream.backends.local_unstructured import LocalUnstructuredBackend
 from zephyr_core import (
@@ -109,8 +110,11 @@ def partition_file(
     except Exception as e:
         duration_ms = int((time.perf_counter() - t0) * 1000)
 
-        # 统一 wrap 为可治理的 ZephyrError
-        is_retryable = False
+        # # 统一 wrap 为可治理的 ZephyrError
+        # is_retryable = False
+        # --- 调用中央策略进行分诊 ---
+        is_retryable = is_retryable_exception(e)
+
         wrapped = ZephyrError(
             code=ErrorCode.UNS_PARTITION_FAILED,
             message="Partition failed",
