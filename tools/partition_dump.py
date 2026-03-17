@@ -3,12 +3,14 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import time
 import uuid
 from datetime import datetime, timezone
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
+from uns_stream._internal.artifacts import dump_partition_error, dump_partition_success
 from uns_stream.partition.auto import partition as auto_partition
 from zephyr_core import PartitionStrategy, ZephyrError
 
@@ -50,6 +52,9 @@ def main() -> None:
     timestamp_iso = datetime.now(timezone.utc).isoformat()
     pipeline_version = "p1"
 
+    # 记录起始时间
+    t0 = time.perf_counter()
+
     try:
         res = auto_partition(
             filename=str(in_path),
@@ -57,53 +62,82 @@ def main() -> None:
             unique_element_ids=bool(args.unique_element_ids),
         )
 
-        out_dir = out_root / res.document.sha256
-        out_dir.mkdir(parents=True, exist_ok=True)
+        # 计算耗时
+        duration_ms = int((time.perf_counter() - t0) * 1000)
 
-        _write_json(out_dir / "elements.json", [asdict(e) for e in res.elements])
-        _write_text(out_dir / "normalized.txt", res.normalized_text)
-        _write_json(
-            out_dir / "run_meta.json",
-            {
-                "run_id": run_id,
-                "pipeline_version": pipeline_version,
-                "timestamp_utc": timestamp_iso,
-                "document": asdict(res.document),
-                "engine": {
-                    "name": res.engine.name,
-                    "backend": res.engine.backend,
-                    "version": res.engine.version,
-                    "strategy": str(res.engine.strategy),
-                },
-                "metrics": {
-                    "elements_count": len(res.elements),
-                    "normalized_text_len": len(res.normalized_text),
-                },
-                "warnings": list(res.warnings),
-            },
+        # out_dir = out_root / res.document.sha256
+        # out_dir.mkdir(parents=True, exist_ok=True)
+        #
+        # _write_json(out_dir / "elements.json", [asdict(e) for e in res.elements])
+        # _write_text(out_dir / "normalized.txt", res.normalized_text)
+        # _write_json(
+        #     out_dir / "run_meta.json",
+        #     {
+        #         "run_id": run_id,
+        #         "pipeline_version": pipeline_version,
+        #         "timestamp_utc": timestamp_iso,
+        #         "document": asdict(res.document),
+        #         "engine": {
+        #             "name": res.engine.name,
+        #             "backend": res.engine.backend,
+        #             "version": res.engine.version,
+        #             "strategy": str(res.engine.strategy),
+        #         },
+        #         "metrics": {
+        #             "elements_count": len(res.elements),
+        #             "normalized_text_len": len(res.normalized_text),
+        #         },
+        #         "warnings": list(res.warnings),
+        #     },
+        # )
+        #
+        # logger.info("Wrote artifacts to: %s", out_dir)
+
+        out_dir = dump_partition_success(
+            out_root=out_root,
+            result=res,
+            run_id=run_id,
+            pipeline_version=pipeline_version,
+            timestamp_utc=timestamp_iso,
+            duration_ms=duration_ms,
         )
 
-        logger.info("Wrote artifacts to: %s", out_dir)
+        logger.info("Wrote artifacts to: %s (RunID: %s)", out_dir, run_id)
 
     except ZephyrError as e:
         # 失败也写一份 run_meta.json 便于回放/排障
         import hashlib
 
-        h = hashlib.sha256(in_path.read_bytes()).hexdigest()
-        out_dir = out_root / h
-        out_dir.mkdir(parents=True, exist_ok=True)
+        duration_ms = int((time.perf_counter() - t0) * 1000)
 
-        _write_json(
-            out_dir / "run_meta.json",
-            {
-                "error": {
-                    "code": str(e.code),
-                    "message": e.message,
-                    "details": e.details,
-                }
-            },
+        h = hashlib.sha256(in_path.read_bytes()).hexdigest()
+        # out_dir = out_root / h
+        # out_dir.mkdir(parents=True, exist_ok=True)
+        #
+        # _write_json(
+        #     out_dir / "run_meta.json",
+        #     {
+        #         "error": {
+        #             "code": str(e.code),
+        #             "message": e.message,
+        #             "details": e.details,
+        #         }
+        #     },
+        # )
+        # logger.error("Partition failed. Wrote error meta to: %s", out_dir)
+
+        out_dir = dump_partition_error(
+            out_root=out_root,
+            sha256=h,
+            error=e,
+            run_id=run_id,
+            pipeline_version=pipeline_version,
+            timestamp_utc=timestamp_iso,
+            duration_ms=duration_ms,
         )
-        logger.error("Partition failed. Wrote error meta to: %s", out_dir)
+
+        logger.error("Partition failed. Wrote error meta to: %s (RunID: %s)", out_dir, run_id)
+
         raise
 
 
