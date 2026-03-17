@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import logging
+import time
 from datetime import datetime, timezone
 from hashlib import sha256
 from pathlib import Path
+from typing import Any, cast
 
 from uns_stream.backends.base import PartitionBackend
 from uns_stream.backends.local_unstructured import LocalUnstructuredBackend
@@ -15,6 +18,8 @@ from zephyr_core import (
     ZephyrElement,
     ZephyrError,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _sha256_file(path: Path) -> str:
@@ -34,10 +39,28 @@ def partition_file(
     backend: PartitionBackend | None = None,
     **partition_kwargs: object,
 ) -> PartitionResult:
+    t0 = time.perf_counter()
     p = Path(filename)
 
-    # === 关键修改：只构造一次 backend ===
+    # IO metadata (log/audit-friendly)
+    size_bytes = p.stat().st_size
+    sha = _sha256_file(p)
+
+    # === only construct backend once ===
     b: PartitionBackend = backend or LocalUnstructuredBackend()
+
+    logger.info(
+        "partition_start file=%s kind=%s strategy=%s "
+        "engine=%s backend=%s bytes=%s sha256=%s kwargs=%s",
+        p.name,
+        kind,
+        str(strategy),
+        b.name,
+        b.backend,
+        size_bytes,
+        sha,
+        sorted(partition_kwargs.keys()),
+    )
 
     try:
         elements: list[ZephyrElement] = b.partition_elements(
@@ -47,36 +70,100 @@ def partition_file(
             unique_element_ids=unique_element_ids,
             **partition_kwargs,
         )
-    except ZephyrError:
-        # 保留已标准化的错误语义（比如 missing extra / unsupported type）
+
+    except ZephyrError as ze:
+        duration_ms = int((time.perf_counter() - t0) * 1000)
+
+        # 1. 拿到原始属性
+        raw_details = getattr(ze, "details", None)
+        raw_code = getattr(ze, "code", ErrorCode.UNS_PARTITION_FAILED)
+
+        retryable: bool | None = None
+
+        # 2. 核心修复：通过 isinstance 检查后，立即用 cast 锁定类型为 dict[str, Any]
+        # 这样 Pyright 就能识别出 .get() 方法，且不会报 Unknown 错误
+        if isinstance(raw_details, dict):
+            typed_details = cast("dict[str, Any]", raw_details)
+            val = typed_details.get("retryable")
+
+            # 3. 这里的比较逻辑依然保持最稳健的写法
+            if val is True or val == "true":
+                retryable = True
+            elif val is False or val == "false":
+                retryable = False
+
+        # 使用 f-string 确保 code 转换为字符串时不会触发 Unknown 报错
+        code_str = f"{raw_code}"
+
+        logger.warning(
+            "partition_error file=%s kind=%s strategy=%s ms=%s code=%s retryable=%s",
+            p.name,
+            kind,
+            str(strategy),
+            duration_ms,
+            code_str,
+            retryable,
+        )
         raise
+
     except Exception as e:
+        duration_ms = int((time.perf_counter() - t0) * 1000)
+
         # 统一 wrap 为可治理的 ZephyrError
         is_retryable = False
-
-        raise ZephyrError(
+        wrapped = ZephyrError(
             code=ErrorCode.UNS_PARTITION_FAILED,
             message="Partition failed",
             details={
                 "filename": str(p),
                 "kind": kind,
-                "strategy": str(strategy),  # StrEnum -> "auto"/"hi_res"/...
+                "strategy": str(strategy),
                 "engine": {"name": b.name, "backend": b.backend, "version": b.version},
-                # 保证 JSON-serializable：统一转字符串
+                "sha256": sha,
+                "size_bytes": size_bytes,
+                "duration_ms": duration_ms,
                 "extra_kwargs": {k: str(v) for k, v in partition_kwargs.items()},
                 "exc_type": type(e).__name__,
                 "exc": str(e),
-                "retryable": is_retryable,  # ← 注入分类标记
+                "retryable": is_retryable,
             },
-        ) from e
+        )
+
+        logger.error(
+            "partition_failed file=%s kind=%s strategy=%s"
+            "engine=%s backend=%s ms=%s exc_type=%s retryable=%s",
+            p.name,
+            kind,
+            str(strategy),
+            b.name,
+            b.backend,
+            duration_ms,
+            type(e).__name__,
+            is_retryable,
+        )
+        raise wrapped from e
 
     normalized_text = "\n\n".join([e.text for e in elements if e.text])
+
+    duration_ms = int((time.perf_counter() - t0) * 1000)
+    logger.info(
+        "partition_done file=%s kind=%s strategy=%s engine=%s"
+        "backend=%s ms=%s elements=%s text_len=%s",
+        p.name,
+        kind,
+        str(strategy),
+        b.name,
+        b.backend,
+        duration_ms,
+        len(elements),
+        len(normalized_text),
+    )
 
     doc = DocumentMetadata(
         filename=p.name,
         mime_type=None,
-        sha256=_sha256_file(p),
-        size_bytes=p.stat().st_size,
+        sha256=sha,
+        size_bytes=size_bytes,
         created_at_utc=datetime.now(timezone.utc).isoformat(),
     )
 
