@@ -52,6 +52,8 @@ def partition_file(
         raise
     except Exception as e:
         # 统一 wrap 为可治理的 ZephyrError
+        is_retryable = False
+
         raise ZephyrError(
             code=ErrorCode.UNS_PARTITION_FAILED,
             message="Partition failed",
@@ -64,6 +66,7 @@ def partition_file(
                 "extra_kwargs": {k: str(v) for k, v in partition_kwargs.items()},
                 "exc_type": type(e).__name__,
                 "exc": str(e),
+                "retryable": is_retryable,  # ← 注入分类标记
             },
         ) from e
 
