@@ -1,21 +1,22 @@
 from __future__ import annotations
 
 import argparse
-import json
+# import json
 import logging
 import time
-import uuid
-from datetime import datetime, timezone
-from dataclasses import asdict
+# import uuid
+# from datetime import datetime, timezone
+# from dataclasses import asdict
 from pathlib import Path
-from typing import Any
 
 from uns_stream._internal.utils import sha256_file
 from zephyr_core.contracts.v1.run_meta import RunMetaV1, EngineMetaV1, MetricsV1, ErrorInfoV1
 from uns_stream._internal.artifacts import dump_partition_artifacts
 from uns_stream.partition.auto import partition as auto_partition
 from zephyr_core import PartitionStrategy, ZephyrError
-from zephyr_core.versioning import PIPELINE_VERSION
+# from zephyr_core.versioning import PIPELINE_VERSION
+from zephyr_core.run_context import RunContext
+
 
 
 # def _write_text(path: Path, text: str) -> None:
@@ -38,6 +39,11 @@ def main() -> None:
         help="Partition strategy (mainly for pdf/image).",
     )
     parser.add_argument("--out", default=".cache/out", help="Output directory root")
+
+    parser.add_argument("--pipeline-version", help="Override pipeline version")
+    parser.add_argument("--run-id", help="Override run ID (UUID)")
+    parser.add_argument("--timestamp-utc", help="Override timestamp (ISO 8601)")
+
     parser.add_argument("--unique-element-ids", action="store_true", default=True)
     parser.add_argument("--no-unique-element-ids", dest="unique_element_ids", action="store_false")
     args = parser.parse_args()
@@ -52,9 +58,16 @@ def main() -> None:
     strategy = PartitionStrategy(args.strategy)
 
 
-    run_id = str(uuid.uuid4())
-    timestamp_iso = datetime.now(timezone.utc).isoformat()
-    pipeline_version = PIPELINE_VERSION
+    # run_id = str(uuid.uuid4())
+    # timestamp_iso = datetime.now(timezone.utc).isoformat()
+    # pipeline_version = PIPELINE_VERSION
+
+    ctx = RunContext.new(
+        pipeline_version=args.pipeline_version or None,  # 为 None 则使用默认值
+        run_id=args.run_id,
+        timestamp_utc=args.timestamp_utc,
+    )
+
     t0 = time.perf_counter()
 
     try:
@@ -65,11 +78,13 @@ def main() -> None:
         )
         duration_ms = int((time.perf_counter() - t0) * 1000)
 
+
         # 1. 【成功时】构造强类型契约对象
         meta = RunMetaV1(
-            run_id=run_id,
-            pipeline_version=pipeline_version,
-            timestamp_utc=timestamp_iso,
+            run_id=ctx.run_id,
+            pipeline_version=ctx.pipeline_version,
+            timestamp_utc=ctx.timestamp_utc,
+            schema_version=ctx.run_meta_schema_version,
             document=res.document,
             engine=EngineMetaV1(
                 name=res.engine.name,
@@ -102,9 +117,10 @@ def main() -> None:
 
         # 2. 【失败时】构造包含 ErrorInfo 的契约对象
         meta = RunMetaV1(
-            run_id=run_id,
-            pipeline_version=pipeline_version,
-            timestamp_utc=timestamp_iso,
+            run_id=ctx.run_id,
+            pipeline_version=ctx.pipeline_version,
+            timestamp_utc=ctx.timestamp_utc,
+            schema_version=ctx.run_meta_schema_version,
             metrics=MetricsV1(duration_ms=duration_ms),
             error=ErrorInfoV1(
                 code=str(e.code),
