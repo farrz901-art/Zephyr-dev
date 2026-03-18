@@ -3,11 +3,11 @@ from __future__ import annotations
 import logging
 import time
 from datetime import datetime, timezone
-from hashlib import sha256
 from pathlib import Path
 from typing import Any, cast
 
 from uns_stream._internal.retry_policy import is_retryable_exception
+from uns_stream._internal.utils import sha256_file
 from uns_stream.backends.base import PartitionBackend
 from uns_stream.backends.local_unstructured import LocalUnstructuredBackend
 from zephyr_core import (
@@ -21,14 +21,6 @@ from zephyr_core import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-def _sha256_file(path: Path) -> str:
-    h = sha256()
-    with path.open("rb") as f:
-        for chunk in iter(lambda: f.read(1024 * 1024), b""):
-            h.update(chunk)
-    return h.hexdigest()
 
 
 def partition_file(
@@ -45,7 +37,8 @@ def partition_file(
 
     # IO metadata (log/audit-friendly)
     size_bytes = p.stat().st_size
-    sha = _sha256_file(p)
+    # sha = _sha256_file(p)
+    sha = sha256_file(p)
 
     # === only construct backend once ===
     b: PartitionBackend = backend or LocalUnstructuredBackend()

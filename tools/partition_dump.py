@@ -10,18 +10,19 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
+from uns_stream._internal.utils import sha256_file
 from zephyr_core.contracts.v1.run_meta import RunMetaV1, EngineMetaV1, MetricsV1, ErrorInfoV1
 from uns_stream._internal.artifacts import dump_partition_artifacts
 from uns_stream.partition.auto import partition as auto_partition
 from zephyr_core import PartitionStrategy, ZephyrError
 
 
-def _write_text(path: Path, text: str) -> None:
-    path.write_text(text, encoding="utf-8")
-
-
-def _write_json(path: Path, obj: Any) -> None:
-    path.write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
+# def _write_text(path: Path, text: str) -> None:
+#     path.write_text(text, encoding="utf-8")
+#
+#
+# def _write_json(path: Path, obj: Any) -> None:
+#     path.write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def main() -> None:
@@ -95,7 +96,8 @@ def main() -> None:
         import hashlib
 
         duration_ms = int((time.perf_counter() - t0) * 1000)
-        h = hashlib.sha256(in_path.read_bytes()).hexdigest()
+        # h = hashlib.sha256(in_path.read_bytes()).hexdigest()
+        h = sha256_file(in_path)
 
         # 2. 【失败时】构造包含 ErrorInfo 的契约对象
         meta = RunMetaV1(

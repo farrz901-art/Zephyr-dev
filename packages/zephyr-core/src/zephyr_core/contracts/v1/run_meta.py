@@ -28,22 +28,29 @@ class ErrorInfoV1:
     details: dict[str, Any] | None = None
 
 
+def _empty_warnings() -> list[str]:
+    return []
+
+
 @dataclass(frozen=True, slots=True)
 class RunMetaV1:
     run_id: str
     pipeline_version: str
     timestamp_utc: str
+    schema_version: int = 1
 
     document: DocumentMetadata | None = None
     engine: EngineMetaV1 | None = None
     metrics: MetricsV1 = field(default_factory=MetricsV1)
     # warnings: list[str] = field(default_factory=list)
-    warnings: list[str] = field(default_factory=lambda: [])
+    # warnings: list[str] = field(default_factory=lambda: [])
+    warnings: list[str] = field(default_factory=_empty_warnings)
     error: ErrorInfoV1 | None = None
 
     def to_dict(self) -> dict[str, Any]:
         # 手写 dict，避免 Enum / dataclass 嵌套导致 JSON 序列化意外
         return {
+            "schema_version": self.schema_version,
             "run_id": self.run_id,
             "pipeline_version": self.pipeline_version,
             "timestamp_utc": self.timestamp_utc,

@@ -35,7 +35,7 @@ def dump_partition_artifacts(
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # 1. 如果成功（有 result），写入数据文件
-    if result:
+    if result is not None:
         _write_json(out_dir / "elements.json", [asdict(cast(Any, e)) for e in result.elements])
         _write_text(out_dir / "normalized.txt", result.normalized_text)
 
