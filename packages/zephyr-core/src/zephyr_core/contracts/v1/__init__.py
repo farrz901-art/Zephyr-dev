@@ -5,6 +5,7 @@ from zephyr_core.contracts.v1.models import (
     PartitionResult,
     ZephyrElement,
 )
+from zephyr_core.contracts.v1.run_meta import RunMetaV1
 
 __all__ = [
     "PartitionStrategy",
@@ -12,4 +13,5 @@ __all__ = [
     "EngineInfo",
     "PartitionResult",
     "ZephyrElement",
+    "RunMetaV1",
 ]
