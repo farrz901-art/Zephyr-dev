@@ -15,6 +15,7 @@ from zephyr_core.contracts.v1.run_meta import RunMetaV1, EngineMetaV1, MetricsV1
 from uns_stream._internal.artifacts import dump_partition_artifacts
 from uns_stream.partition.auto import partition as auto_partition
 from zephyr_core import PartitionStrategy, ZephyrError
+from zephyr_core.versioning import PIPELINE_VERSION
 
 
 # def _write_text(path: Path, text: str) -> None:
@@ -53,7 +54,7 @@ def main() -> None:
 
     run_id = str(uuid.uuid4())
     timestamp_iso = datetime.now(timezone.utc).isoformat()
-    pipeline_version = "p1"
+    pipeline_version = PIPELINE_VERSION
     t0 = time.perf_counter()
 
     try:

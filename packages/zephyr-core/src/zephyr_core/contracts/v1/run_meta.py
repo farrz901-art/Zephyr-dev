@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from zephyr_core.contracts.v1.models import DocumentMetadata
+from zephyr_core.versioning import RUN_META_SCHEMA_VERSION
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,7 +38,7 @@ class RunMetaV1:
     run_id: str
     pipeline_version: str
     timestamp_utc: str
-    schema_version: int = 1
+    schema_version: int = RUN_META_SCHEMA_VERSION
 
     document: DocumentMetadata | None = None
     engine: EngineMetaV1 | None = None

@@ -43,6 +43,9 @@ typeCheckingMode = "strict"
 stubPath = "./typings"
 reportUnnecessaryCast = true
 reportUnnecessaryTypeIgnoreComment = true
+strictListInference = true
+strictDictionaryInference = true
+strictSetInference = true
 exclude = [
     "packages/uns-stream/src/uns_stream/tests/fixtures",
     "**/node_modules",
