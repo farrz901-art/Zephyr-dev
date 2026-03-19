@@ -9,6 +9,7 @@ import time
 # from dataclasses import asdict
 from pathlib import Path
 
+from zephyr_core.versioning import PIPELINE_VERSION
 from uns_stream._internal.utils import sha256_file
 from zephyr_core.contracts.v1.run_meta import RunMetaV1, EngineMetaV1, MetricsV1, ErrorInfoV1
 from uns_stream._internal.artifacts import dump_partition_artifacts
@@ -63,7 +64,7 @@ def main() -> None:
     # pipeline_version = PIPELINE_VERSION
 
     ctx = RunContext.new(
-        pipeline_version=args.pipeline_version or None,  # 为 None 则使用默认值
+        pipeline_version=args.pipeline_version or PIPELINE_VERSION,  # 为 None 则使用默认值
         run_id=args.run_id,
         timestamp_utc=args.timestamp_utc,
     )
