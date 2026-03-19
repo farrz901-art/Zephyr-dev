@@ -23,6 +23,8 @@ dev = [
   "pre-commit>=4.0.0,<5.0.0",
   "uns-stream[all-docs]", # 联动：让根环境包含 uns-stream 的所有 AI 库
   "zephyr-core",          # 联动：让根环境包含核心库
+  "zephyr-ingest",
+  "zephyr-api",
 ]
 
 [tool.uv.workspace]

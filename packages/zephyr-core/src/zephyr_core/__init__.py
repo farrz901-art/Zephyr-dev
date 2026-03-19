@@ -9,6 +9,7 @@ from zephyr_core.contracts import (  # noqa: E402
     PartitionStrategy,
     ZephyrElement,
 )
+from zephyr_core.contracts.v1.document_ref import DocumentRef
 from zephyr_core.contracts.v1.run_meta import RunMetaV1
 from zephyr_core.errors import ErrorCode, ZephyrError  # noqa: E402
 from zephyr_core.versioning import PIPELINE_VERSION, RUN_META_SCHEMA_VERSION
@@ -25,4 +26,5 @@ __all__ = [
     "RunMetaV1",
     "PIPELINE_VERSION",
     "RUN_META_SCHEMA_VERSION",
+    "DocumentRef",
 ]
