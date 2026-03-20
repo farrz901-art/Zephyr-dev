@@ -54,6 +54,8 @@ class RunnerConfig:
     strategy: PartitionStrategy = PartitionStrategy.AUTO
     unique_element_ids: bool = True
     skip_unsupported: bool = True
+    skip_existing: bool = True
+    force: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,6 +64,7 @@ class RunStats:
     success: int = 0
     failed: int = 0
     skipped_unsupported: int = 0
+    skipped_existing: int = 0
 
 
 def run_documents(
@@ -75,12 +78,19 @@ def run_documents(
     out_root = cfg.out_root.expanduser().resolve()
     out_root.mkdir(parents=True, exist_ok=True)
 
-    total, success, failed, skipped = 0, 0, 0, 0
+    total, success, failed, skipped_unsupported, skipped_existing = 0, 0, 0, 0, 0
 
     for d in docs:
         total += 1
         p = Path(d.uri)
         sha = sha256_file(p)
+
+        out_dir = out_root / sha
+        meta_path = out_dir / "run_meta.json"
+        if cfg.skip_existing and meta_path.exists() and not cfg.force:
+            skipped_existing += 1
+            continue
+
         t0 = time.perf_counter()
 
         try:
@@ -123,7 +133,7 @@ def run_documents(
             e_details = cast("dict[str, Any] | None", getattr(e, "details", None))
 
             if cfg.skip_unsupported and e_code == "ZE-UNS-UNSUPPORTED-TYPE":
-                skipped += 1
+                skipped_unsupported += 1
             else:
                 failed += 1
 
@@ -137,7 +147,13 @@ def run_documents(
             )
             artifacts_writer(out_root=out_root, sha256=sha, meta=meta, result=None)
 
-    stats = RunStats(total=total, success=success, failed=failed, skipped_unsupported=skipped)
+    stats = RunStats(
+        total=total,
+        success=success,
+        failed=failed,
+        skipped_unsupported=skipped_unsupported,
+        skipped_existing=skipped_existing,
+    )
 
     batch_report = {
         "run_id": ctx.run_id,
@@ -149,6 +165,7 @@ def run_documents(
             "success": stats.success,
             "failed": stats.failed,
             "skipped_unsupported": stats.skipped_unsupported,
+            "skipped_existing": stats.skipped_existing,
         },
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
     }

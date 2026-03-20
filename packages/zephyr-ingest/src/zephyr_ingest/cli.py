@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
@@ -19,6 +20,8 @@ class RunCmd:
     out: str
     strategy: str
     skip_unsupported: bool
+    skip_existing: bool
+    force: bool
     unique_element_ids: bool
     pipeline_version: str | None
     run_id: str | None
@@ -40,6 +43,9 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Partition strategy (mainly for pdf/image)",
     )
     run.add_argument("--skip-unsupported", action="store_true", default=True)
+    run.add_argument("--skip-existing", action="store_true", default=True)
+    run.add_argument("--no-skip-existing", dest="skip_existing", action="store_false")
+    run.add_argument("--force", action="store_true", default=False)
     run.add_argument("--unique-element-ids", action="store_true", default=True)
     run.add_argument("--no-unique-element-ids", dest="unique_element_ids", action="store_false")
 
@@ -64,6 +70,8 @@ def _parse_run_cmd(argv: Sequence[str]) -> RunCmd:
         out=str(ns.out),
         strategy=str(ns.strategy),
         skip_unsupported=bool(ns.skip_unsupported),
+        skip_existing=bool(ns.skip_existing),
+        force=bool(ns.force),
         unique_element_ids=bool(ns.unique_element_ids),
         pipeline_version=ns.pipeline_version
         if ns.pipeline_version is None
@@ -74,7 +82,7 @@ def _parse_run_cmd(argv: Sequence[str]) -> RunCmd:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    argv = [] if argv is None else argv
+    argv = sys.argv[1:] if argv is None else argv
 
     cmd = _parse_run_cmd(argv)
 
@@ -92,6 +100,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         strategy=PartitionStrategy(cmd.strategy),
         unique_element_ids=cmd.unique_element_ids,
         skip_unsupported=cmd.skip_unsupported,
+        skip_existing=cmd.skip_existing,
+        force=cmd.force,
     )
 
     run_documents(docs=docs, cfg=cfg, ctx=ctx)
