@@ -20,6 +20,7 @@ class MetricsV1:
     duration_ms: int | None = None
     elements_count: int | None = None
     normalized_text_len: int | None = None
+    attempts: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,6 +77,7 @@ class RunMetaV1:
                 "duration_ms": self.metrics.duration_ms,
                 "elements_count": self.metrics.elements_count,
                 "normalized_text_len": self.metrics.normalized_text_len,
+                "attempts": self.metrics.attempts,
             },
             "warnings": list(self.warnings),
             "error": None

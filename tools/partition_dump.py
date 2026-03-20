@@ -97,6 +97,7 @@ def main() -> None:
                 duration_ms=duration_ms,
                 elements_count=len(res.elements),
                 normalized_text_len=len(res.normalized_text),
+                attempts=1,
             ),
             warnings=list(res.warnings),
         )
@@ -122,7 +123,7 @@ def main() -> None:
             pipeline_version=ctx.pipeline_version,
             timestamp_utc=ctx.timestamp_utc,
             schema_version=ctx.run_meta_schema_version,
-            metrics=MetricsV1(duration_ms=duration_ms),
+            metrics=MetricsV1(duration_ms=duration_ms, attempts=1),
             error=ErrorInfoV1(
                 code=str(e.code),
                 message=e.message,
