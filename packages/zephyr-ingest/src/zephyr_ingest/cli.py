@@ -9,7 +9,7 @@ from typing import Sequence
 from zephyr_core import RunContext
 from zephyr_core.contracts.v1.enums import PartitionStrategy
 from zephyr_core.versioning import PIPELINE_VERSION
-from zephyr_ingest.runner import RunnerConfig, run_documents
+from zephyr_ingest.runner import RetryConfig, RunnerConfig, run_documents
 from zephyr_ingest.sources.local_file import LocalFileSource
 
 
@@ -26,6 +26,10 @@ class RunCmd:
     pipeline_version: str | None
     run_id: str | None
     timestamp_utc: str | None
+    retry_enabled: bool
+    max_attempts: int
+    base_backoff_ms: int
+    max_backoff_ms: int
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -53,6 +57,13 @@ def _build_parser() -> argparse.ArgumentParser:
     run.add_argument("--pipeline-version", default=None, help="Override pipeline version")
     run.add_argument("--run-id", default=None, help="Override run ID (UUID)")
     run.add_argument("--timestamp-utc", default=None, help="Override timestamp (ISO 8601)")
+
+    # Retry config (P2-M2-04)
+    run.add_argument("--no-retry", dest="retry_enabled", action="store_false", default=True)
+    run.add_argument("--max-attempts", type=int, default=3)
+    run.add_argument("--base-backoff-ms", type=int, default=200)
+    run.add_argument("--max-backoff-ms", type=int, default=5000)
+
     return p
 
 
@@ -78,6 +89,10 @@ def _parse_run_cmd(argv: Sequence[str]) -> RunCmd:
         else str(ns.pipeline_version),
         run_id=ns.run_id if ns.run_id is None else str(ns.run_id),
         timestamp_utc=ns.timestamp_utc if ns.timestamp_utc is None else str(ns.timestamp_utc),
+        retry_enabled=bool(ns.retry_enabled),
+        max_attempts=int(ns.max_attempts),
+        base_backoff_ms=int(ns.base_backoff_ms),
+        max_backoff_ms=int(ns.max_backoff_ms),
     )
 
 
@@ -102,6 +117,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         skip_unsupported=cmd.skip_unsupported,
         skip_existing=cmd.skip_existing,
         force=cmd.force,
+        retry=RetryConfig(
+            enabled=cmd.retry_enabled,
+            max_attempts=cmd.max_attempts,
+            base_backoff_ms=cmd.base_backoff_ms,
+            max_backoff_ms=cmd.max_backoff_ms,
+        ),
     )
 
     run_documents(docs=docs, cfg=cfg, ctx=ctx)

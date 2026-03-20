@@ -19,6 +19,10 @@ def test_cli_run_invokes_runner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
         # Just verify we got docs iterable and cfg/out_root
         called["ok"] = True
         assert cfg.out_root == tmp_path / "out"
+        assert cfg.retry.enabled is False
+        assert cfg.retry.max_attempts == 1
+        assert cfg.retry.base_backoff_ms == 0
+        assert cfg.retry.max_backoff_ms == 0
 
     monkeypatch.setattr(cli, "run_documents", fake_run_documents)
 
@@ -33,6 +37,13 @@ def test_cli_run_invokes_runner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
             str(tmp_path / "out"),
             "--strategy",
             "auto",
+            "--no-retry",
+            "--max-attempts",
+            "1",
+            "--base-backoff-ms",
+            "0",
+            "--max-backoff-ms",
+            "0",
         ]
     )
     assert rc == 0
