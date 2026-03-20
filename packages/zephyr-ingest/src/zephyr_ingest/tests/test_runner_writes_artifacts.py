@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 # 为测试文件增加 relaxation，因为 Mock 函数的类型推断在 strict 下极度困难
 # pyright: reportUnknownParameterType=false
 # pyright: reportUnknownVariableType=false
@@ -80,4 +82,13 @@ def test_runner_writes_batch_report(tmp_path: Path) -> None:
     assert stats.total == 1
     assert stats.success == 1
     assert (out_root / "batch_report.json").exists()
+
+    report = json.loads((out_root / "batch_report.json").read_text(encoding="utf-8"))
+    assert "counts_by_extension" in report
+    assert report["counts_by_extension"][".txt"] == 1
+    assert "retry" in report
+    assert report["retry"]["retry_attempts_total"] == 0
+    assert "durations_ms" in report
+    assert report["durations_ms"]["max"] is not None
+
     assert len(calls) == 1

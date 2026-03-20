@@ -81,6 +81,28 @@ class RunStats:
     skipped_existing: int = 0
 
 
+def _p95_int(values: list[int]) -> int | None:
+    if not values:
+        return None
+    vals = sorted(values)
+    # ceil(0.95*n)-1, pure integer math
+    idx = (len(vals) * 95 + 99) // 100 - 1
+    if idx < 0:
+        idx = 0
+    return vals[idx]
+
+
+def _duration_stats(values: list[int]) -> dict[str, int | None]:
+    if not values:
+        return {"min": None, "max": None, "avg": None, "p95": None}
+    return {
+        "min": min(values),
+        "max": max(values),
+        "avg": sum(values) // len(values),
+        "p95": _p95_int(values),
+    }
+
+
 def run_documents(
     *,
     docs: Iterable[DocumentRef],
@@ -94,8 +116,21 @@ def run_documents(
 
     total, success, failed, skipped_unsupported, skipped_existing = 0, 0, 0, 0, 0
 
+    counts_by_extension: dict[str, int] = {}
+    counts_by_error_code: dict[str, int] = {}
+
+    durations_ms_list: list[int] = []
+
+    retry_attempts_total: int = 0
+    retried_success: int = 0
+    retryable_failed: int = 0
+
     for d in docs:
         total += 1
+
+        ext = d.extension or Path(d.uri).suffix.lower()
+        counts_by_extension[ext] = counts_by_extension.get(ext, 0) + 1
+
         p = Path(d.uri)
         sha = sha256_file(p)
 
@@ -119,6 +154,12 @@ def run_documents(
                     unique_element_ids=cfg.unique_element_ids,
                 )
                 duration_ms = int((time.perf_counter() - t0) * 1000)
+
+                durations_ms_list.append(duration_ms)
+
+                if attempts > 1:
+                    retry_attempts_total += attempts - 1
+                    retried_success += 1
 
                 meta = RunMetaV1(
                     run_id=ctx.run_id,
@@ -165,7 +206,18 @@ def run_documents(
                 e_msg = str(getattr(e, "message", "Unknown error"))
                 e_details = cast("dict[str, Any] | None", getattr(e, "details", None))
 
-                if cfg.skip_unsupported and e_code == "ZE-UNS-UNSUPPORTED-TYPE":
+                durations_ms_list.append(duration_ms)
+
+                counts_by_error_code[e_code] = counts_by_error_code.get(e_code, 0) + 1
+
+                if attempts > 1:
+                    retry_attempts_total += attempts - 1
+
+                # 只有最终失败时才统计 retryable_failed（unsupported 也可以统计，看你偏好）
+                if retryable:
+                    retryable_failed += 1
+
+                if cfg.skip_unsupported and e_code == str(ErrorCode.UNS_UNSUPPORTED_TYPE):
                     skipped_unsupported += 1
                 else:
                     failed += 1
@@ -201,6 +253,18 @@ def run_documents(
             "skipped_unsupported": stats.skipped_unsupported,
             "skipped_existing": stats.skipped_existing,
         },
+        "counts_by_extension": counts_by_extension,
+        "counts_by_error_code": counts_by_error_code,
+        "retry": {
+            "enabled": cfg.retry.enabled,
+            "max_attempts": cfg.retry.max_attempts,
+            "base_backoff_ms": cfg.retry.base_backoff_ms,
+            "max_backoff_ms": cfg.retry.max_backoff_ms,
+            "retry_attempts_total": retry_attempts_total,
+            "retried_success": retried_success,
+            "retryable_failed": retryable_failed,
+        },
+        "durations_ms": _duration_stats(durations_ms_list),
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
     }
 
