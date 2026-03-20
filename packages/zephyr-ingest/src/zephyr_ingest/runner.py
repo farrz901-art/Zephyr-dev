@@ -3,12 +3,13 @@ from __future__ import annotations
 import json
 import logging
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Protocol, cast
 
 from uns_stream._internal.artifacts import dump_partition_artifacts
+from uns_stream._internal.retry_policy import is_retryable_exception
 from uns_stream._internal.utils import sha256_file
 from uns_stream.partition.auto import partition as auto_partition
 from zephyr_core import (
@@ -49,6 +50,18 @@ class ArtifactsWriter(Protocol):
 
 
 @dataclass(frozen=True, slots=True)
+class RetryConfig:
+    enabled: bool = True
+    max_attempts: int = 3
+    base_backoff_ms: int = 200
+    max_backoff_ms: int = 5_000
+
+
+def _default_retry() -> RetryConfig:
+    return RetryConfig()
+
+
+@dataclass(frozen=True, slots=True)
 class RunnerConfig:
     out_root: Path
     strategy: PartitionStrategy = PartitionStrategy.AUTO
@@ -56,6 +69,7 @@ class RunnerConfig:
     skip_unsupported: bool = True
     skip_existing: bool = True
     force: bool = False
+    retry: RetryConfig = field(default_factory=_default_retry)
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,60 +107,79 @@ def run_documents(
 
         t0 = time.perf_counter()
 
-        try:
-            res = partition_fn(
-                filename=str(p),
-                strategy=cfg.strategy,
-                unique_element_ids=cfg.unique_element_ids,
-            )
-            duration_ms = int((time.perf_counter() - t0) * 1000)
+        attempts = 0
 
-            meta = RunMetaV1(
-                run_id=ctx.run_id,
-                pipeline_version=ctx.pipeline_version,
-                timestamp_utc=ctx.timestamp_utc,
-                schema_version=ctx.run_meta_schema_version,
-                document=res.document,
-                engine=EngineMetaV1(
-                    name=res.engine.name,
-                    backend=res.engine.backend,
-                    version=res.engine.version,
-                    strategy=str(res.engine.strategy),
-                ),
-                metrics=MetricsV1(
-                    duration_ms=duration_ms,
-                    elements_count=len(res.elements),
-                    normalized_text_len=len(res.normalized_text),
-                    attempts=1,
-                ),
-                warnings=list(res.warnings),
-            )
+        while True:
+            attempts += 1
 
-            artifacts_writer(out_root=out_root, sha256=sha, meta=meta, result=res)
-            success += 1
+            try:
+                res = partition_fn(
+                    filename=str(p),
+                    strategy=cfg.strategy,
+                    unique_element_ids=cfg.unique_element_ids,
+                )
+                duration_ms = int((time.perf_counter() - t0) * 1000)
 
-        except ZephyrError as e:
-            duration_ms = int((time.perf_counter() - t0) * 1000)
+                meta = RunMetaV1(
+                    run_id=ctx.run_id,
+                    pipeline_version=ctx.pipeline_version,
+                    timestamp_utc=ctx.timestamp_utc,
+                    schema_version=ctx.run_meta_schema_version,
+                    document=res.document,
+                    engine=EngineMetaV1(
+                        name=res.engine.name,
+                        backend=res.engine.backend,
+                        version=res.engine.version,
+                        strategy=str(res.engine.strategy),
+                    ),
+                    metrics=MetricsV1(
+                        duration_ms=duration_ms,
+                        elements_count=len(res.elements),
+                        normalized_text_len=len(res.normalized_text),
+                        attempts=attempts,
+                    ),
+                    warnings=list(res.warnings),
+                )
 
-            # 使用 getattr 确保在所有环境下属性访问都安全
-            e_code = str(getattr(e, "code", ErrorCode.UNS_PARTITION_FAILED))
-            e_msg = str(getattr(e, "message", "Unknown error"))
-            e_details = cast("dict[str, Any] | None", getattr(e, "details", None))
+                artifacts_writer(out_root=out_root, sha256=sha, meta=meta, result=res)
+                success += 1
+                break
 
-            if cfg.skip_unsupported and e_code == "ZE-UNS-UNSUPPORTED-TYPE":
-                skipped_unsupported += 1
-            else:
-                failed += 1
+            except ZephyrError as e:
+                duration_ms = int((time.perf_counter() - t0) * 1000)
 
-            meta = RunMetaV1(
-                run_id=ctx.run_id,
-                pipeline_version=ctx.pipeline_version,
-                timestamp_utc=ctx.timestamp_utc,
-                schema_version=ctx.run_meta_schema_version,
-                metrics=MetricsV1(duration_ms=duration_ms, attempts=1),
-                error=ErrorInfoV1(code=e_code, message=e_msg, details=e_details),
-            )
-            artifacts_writer(out_root=out_root, sha256=sha, meta=meta, result=None)
+                # 是否值得重试：统一用 retry_policy
+                retryable = is_retryable_exception(e)
+
+                if cfg.retry.enabled and retryable and attempts < cfg.retry.max_attempts:
+                    backoff_ms = min(
+                        cfg.retry.max_backoff_ms,
+                        cfg.retry.base_backoff_ms * (2 ** (attempts - 1)),
+                    )
+                    if backoff_ms > 0:
+                        time.sleep(backoff_ms / 1000.0)
+                    continue
+
+                # 使用 getattr 确保在所有环境下属性访问都安全
+                e_code = str(getattr(e, "code", ErrorCode.UNS_PARTITION_FAILED))
+                e_msg = str(getattr(e, "message", "Unknown error"))
+                e_details = cast("dict[str, Any] | None", getattr(e, "details", None))
+
+                if cfg.skip_unsupported and e_code == "ZE-UNS-UNSUPPORTED-TYPE":
+                    skipped_unsupported += 1
+                else:
+                    failed += 1
+
+                meta = RunMetaV1(
+                    run_id=ctx.run_id,
+                    pipeline_version=ctx.pipeline_version,
+                    timestamp_utc=ctx.timestamp_utc,
+                    schema_version=ctx.run_meta_schema_version,
+                    metrics=MetricsV1(duration_ms=duration_ms, attempts=attempts),
+                    error=ErrorInfoV1(code=e_code, message=e_msg, details=e_details),
+                )
+                artifacts_writer(out_root=out_root, sha256=sha, meta=meta, result=None)
+                break
 
     stats = RunStats(
         total=total,
