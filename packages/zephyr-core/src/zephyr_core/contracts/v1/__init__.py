@@ -1,5 +1,5 @@
 from zephyr_core.contracts.v1.document_ref import DocumentRef
-from zephyr_core.contracts.v1.enums import PartitionStrategy
+from zephyr_core.contracts.v1.enums import PartitionStrategy, RunOutcome
 from zephyr_core.contracts.v1.models import (
     DocumentMetadata,
     EngineInfo,
@@ -10,6 +10,7 @@ from zephyr_core.contracts.v1.run_meta import RunMetaV1
 
 __all__ = [
     "PartitionStrategy",
+    "RunOutcome",
     "DocumentMetadata",
     "DocumentRef",
     "EngineInfo",

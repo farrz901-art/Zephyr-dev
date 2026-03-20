@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from zephyr_core.contracts.v1.enums import RunOutcome
 from zephyr_core.contracts.v1.models import DocumentMetadata
 from zephyr_core.versioning import RUN_META_SCHEMA_VERSION
 
@@ -49,10 +50,13 @@ class RunMetaV1:
     warnings: list[str] = field(default_factory=_empty_warnings)
     error: ErrorInfoV1 | None = None
 
+    outcome: RunOutcome | None = None
+
     def to_dict(self) -> dict[str, Any]:
         # 手写 dict，避免 Enum / dataclass 嵌套导致 JSON 序列化意外
         return {
             "schema_version": self.schema_version,
+            "outcome": None if self.outcome is None else str(self.outcome),
             "run_id": self.run_id,
             "pipeline_version": self.pipeline_version,
             "timestamp_utc": self.timestamp_utc,

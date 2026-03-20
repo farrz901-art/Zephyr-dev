@@ -12,6 +12,7 @@ from pathlib import Path
 from zephyr_core.versioning import PIPELINE_VERSION
 from uns_stream._internal.utils import sha256_file
 from zephyr_core.contracts.v1.run_meta import RunMetaV1, EngineMetaV1, MetricsV1, ErrorInfoV1
+from zephyr_core.contracts.v1.enums import RunOutcome
 from uns_stream._internal.artifacts import dump_partition_artifacts
 from uns_stream.partition.auto import partition as auto_partition
 from zephyr_core import PartitionStrategy, ZephyrError
@@ -86,6 +87,7 @@ def main() -> None:
             pipeline_version=ctx.pipeline_version,
             timestamp_utc=ctx.timestamp_utc,
             schema_version=ctx.run_meta_schema_version,
+            outcome=RunOutcome.SUCCESS,
             document=res.document,
             engine=EngineMetaV1(
                 name=res.engine.name,
@@ -124,6 +126,7 @@ def main() -> None:
             timestamp_utc=ctx.timestamp_utc,
             schema_version=ctx.run_meta_schema_version,
             metrics=MetricsV1(duration_ms=duration_ms, attempts=1),
+            outcome=RunOutcome.FAILED,
             error=ErrorInfoV1(
                 code=str(e.code),
                 message=e.message,

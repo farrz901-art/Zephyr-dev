@@ -21,6 +21,7 @@ from zephyr_core import (
     RunMetaV1,
     ZephyrError,
 )
+from zephyr_core.contracts.v1.enums import RunOutcome
 from zephyr_core.contracts.v1.run_meta import EngineMetaV1, ErrorInfoV1, MetricsV1
 
 logger = logging.getLogger(__name__)
@@ -166,6 +167,7 @@ def run_documents(
                     pipeline_version=ctx.pipeline_version,
                     timestamp_utc=ctx.timestamp_utc,
                     schema_version=ctx.run_meta_schema_version,
+                    outcome=RunOutcome.SUCCESS,
                     document=res.document,
                     engine=EngineMetaV1(
                         name=res.engine.name,
@@ -204,7 +206,16 @@ def run_documents(
                 # 使用 getattr 确保在所有环境下属性访问都安全
                 e_code = str(getattr(e, "code", ErrorCode.UNS_PARTITION_FAILED))
                 e_msg = str(getattr(e, "message", "Unknown error"))
-                e_details = cast("dict[str, Any] | None", getattr(e, "details", None))
+
+                is_unsupported = e_code == str(ErrorCode.UNS_UNSUPPORTED_TYPE)
+
+                # 决定 Outcome (B2)
+                if cfg.skip_unsupported and is_unsupported:
+                    current_outcome = RunOutcome.SKIPPED_UNSUPPORTED
+                    skipped_unsupported += 1
+                else:
+                    current_outcome = RunOutcome.FAILED
+                    failed += 1
 
                 durations_ms_list.append(duration_ms)
 
@@ -217,10 +228,15 @@ def run_documents(
                 if retryable:
                     retryable_failed += 1
 
-                if cfg.skip_unsupported and e_code == str(ErrorCode.UNS_UNSUPPORTED_TYPE):
-                    skipped_unsupported += 1
-                else:
-                    failed += 1
+                e_details = cast("dict[str, Any] | None", getattr(e, "details", None))
+                merged_details = dict(e_details) if e_details else {}
+                if "retryable" not in merged_details:
+                    merged_details["retryable"] = retryable
+
+                # if cfg.skip_unsupported and e_code == str(ErrorCode.UNS_UNSUPPORTED_TYPE):
+                #     skipped_unsupported += 1
+                # else:
+                #     failed += 1
 
                 meta = RunMetaV1(
                     run_id=ctx.run_id,
@@ -228,7 +244,8 @@ def run_documents(
                     timestamp_utc=ctx.timestamp_utc,
                     schema_version=ctx.run_meta_schema_version,
                     metrics=MetricsV1(duration_ms=duration_ms, attempts=attempts),
-                    error=ErrorInfoV1(code=e_code, message=e_msg, details=e_details),
+                    outcome=current_outcome,
+                    error=ErrorInfoV1(code=e_code, message=e_msg, details=merged_details),
                 )
                 artifacts_writer(out_root=out_root, sha256=sha, meta=meta, result=None)
                 break

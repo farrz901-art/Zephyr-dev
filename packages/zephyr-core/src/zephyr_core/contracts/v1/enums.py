@@ -8,3 +8,10 @@ class PartitionStrategy(StrEnum):
     FAST = "fast"
     HI_RES = "hi_res"
     OCR_ONLY = "ocr_only"
+
+
+class RunOutcome(StrEnum):
+    SUCCESS = "success"
+    FAILED = "failed"
+    SKIPPED_UNSUPPORTED = "skipped_unsupported"
+    SKIPPED_EXISTING = "skipped_existing"
