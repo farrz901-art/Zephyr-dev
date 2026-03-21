@@ -75,6 +75,7 @@ class RunnerConfig:
     force: bool = False
     retry: RetryConfig = field(default_factory=_default_retry)
     workers: int = 1  # 默认单线程，保持行为稳定
+    destination: Destination | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -273,7 +274,7 @@ def run_documents(
     # artifacts_writer: ArtifactsWriter = dump_partition_artifacts,
     destination: Destination | None = None,
 ) -> RunStats:
-    destination = destination or FilesystemDestination()
+    destination = destination or cfg.destination or FilesystemDestination()
 
     out_root = cfg.out_root.expanduser().resolve()
     out_root.mkdir(parents=True, exist_ok=True)

@@ -6,11 +6,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
-from uns_stream.partition.auto import partition as auto_partition
 from zephyr_core import RunContext
 from zephyr_core.contracts.v1.enums import PartitionStrategy
 from zephyr_core.versioning import PIPELINE_VERSION
-from zephyr_ingest.destinations.base import Destination
 from zephyr_ingest.destinations.filesystem import FilesystemDestination
 from zephyr_ingest.runner import RetryConfig, RunnerConfig, run_documents
 from zephyr_ingest.sources.local_file import LocalFileSource
@@ -120,7 +118,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         timestamp_utc=cmd.timestamp_utc,
     )
 
-    dest: Destination = FilesystemDestination()
+    dest = FilesystemDestination()
 
     src = LocalFileSource(path=Path(cmd.path), glob=cmd.glob)
     docs = src.iter_documents()
@@ -139,9 +137,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             max_backoff_ms=cmd.max_backoff_ms,
         ),
         workers=cmd.workers,
+        destination=dest,
     )
 
-    run_documents(docs=docs, cfg=cfg, ctx=ctx, partition_fn=auto_partition, destination=dest)
+    run_documents(docs=docs, cfg=cfg, ctx=ctx, destination=dest)
     return 0
 
 

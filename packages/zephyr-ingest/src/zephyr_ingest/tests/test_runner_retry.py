@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from zephyr_core import DocumentRef, ErrorCode, RunContext, ZephyrError
 from zephyr_core.contracts.v1.enums import PartitionStrategy
@@ -62,20 +62,27 @@ def test_retry_then_success(tmp_path: Path) -> None:
             )
         return _ok_result()
 
-    def fake_destination(
-        *,
-        out_root: Path,
-        sha256: str,
-        meta: RunMetaV1,
-        result: PartitionResult | None = None,
-    ) -> DeliveryReceipt:
-        captured.append(meta)
-        d = out_root / sha256
-        d.mkdir(parents=True, exist_ok=True)
-        (d / "run_meta.json").write_text("{}", encoding="utf-8")
-        return DeliveryReceipt(destination="fake", ok=True, details={"out_dir": str(d)})
+        # 使用内部类确保符合 Destination Protocol (包含 name 属性)
 
-    cast(Any, fake_destination).name = "fake_dest"
+    class MockDest:
+        name = "mock"
+
+        def __call__(
+            self,
+            *,
+            out_root: Path,
+            sha256: str,
+            meta: RunMetaV1,
+            result: PartitionResult | None = None,
+        ) -> DeliveryReceipt:
+            captured.append(meta)
+            # 模拟落盘
+            d = out_root / sha256
+            d.mkdir(parents=True, exist_ok=True)
+            (d / "run_meta.json").write_text("{}", encoding="utf-8")
+            return DeliveryReceipt(destination=self.name, ok=True)
+
+    dest_instance = MockDest()
 
     cfg = RunnerConfig(
         out_root=tmp_path / "out",
@@ -85,7 +92,7 @@ def test_retry_then_success(tmp_path: Path) -> None:
     ctx = RunContext.new(pipeline_version="p1", timestamp_utc="2026-03-20T00:00:00Z", run_id="r1")
 
     stats = run_documents(
-        docs=[doc], cfg=cfg, ctx=ctx, partition_fn=flakey_partition_fn, destination=fake_destination
+        docs=[doc], cfg=cfg, ctx=ctx, partition_fn=flakey_partition_fn, destination=dest_instance
     )
 
     assert stats.total == 1
@@ -112,18 +119,25 @@ def test_no_retry_when_not_retryable(tmp_path: Path) -> None:
     #     (d / "run_meta.json").write_text("{}", encoding="utf-8")
     #     return d
 
-    def fake_destination(
-        *,
-        out_root: Path,
-        sha256: str,
-        meta: RunMetaV1,
-        result: PartitionResult | None = None,
-    ) -> DeliveryReceipt:
-        captured.append(meta)
-        d = out_root / sha256
-        d.mkdir(parents=True, exist_ok=True)
-        (d / "run_meta.json").write_text("{}", encoding="utf-8")
-        return DeliveryReceipt(destination="fake", ok=True, details={"out_dir": str(d)})
+    class MockDest:
+        name = "mock"
+
+        def __call__(
+            self,
+            *,
+            out_root: Path,
+            sha256: str,
+            meta: RunMetaV1,
+            result: PartitionResult | None = None,
+        ) -> DeliveryReceipt:
+            captured.append(meta)
+            # 模拟落盘
+            d = out_root / sha256
+            d.mkdir(parents=True, exist_ok=True)
+            (d / "run_meta.json").write_text("{}", encoding="utf-8")
+            return DeliveryReceipt(destination=self.name, ok=True)
+
+    dest_instance = MockDest()
 
     cfg = RunnerConfig(
         out_root=tmp_path / "out",
@@ -133,7 +147,7 @@ def test_no_retry_when_not_retryable(tmp_path: Path) -> None:
     ctx = RunContext.new(pipeline_version="p1", timestamp_utc="2026-03-20T00:00:00Z", run_id="r2")
 
     stats = run_documents(
-        docs=[doc], cfg=cfg, ctx=ctx, partition_fn=fail_partition_fn, destination=fake_destination
+        docs=[doc], cfg=cfg, ctx=ctx, partition_fn=fail_partition_fn, destination=dest_instance
     )
 
     assert stats.total == 1
@@ -161,18 +175,25 @@ def test_retry_exhausted(tmp_path: Path) -> None:
     #     (d / "run_meta.json").write_text("{}", encoding="utf-8")
     #     return d
 
-    def fake_destination(
-        *,
-        out_root: Path,
-        sha256: str,
-        meta: RunMetaV1,
-        result: PartitionResult | None = None,
-    ) -> DeliveryReceipt:
-        captured.append(meta)
-        d = out_root / sha256
-        d.mkdir(parents=True, exist_ok=True)
-        (d / "run_meta.json").write_text("{}", encoding="utf-8")
-        return DeliveryReceipt(destination="fake", ok=True, details={"out_dir": str(d)})
+    class MockDest:
+        name = "mock"
+
+        def __call__(
+            self,
+            *,
+            out_root: Path,
+            sha256: str,
+            meta: RunMetaV1,
+            result: PartitionResult | None = None,
+        ) -> DeliveryReceipt:
+            captured.append(meta)
+            # 模拟落盘
+            d = out_root / sha256
+            d.mkdir(parents=True, exist_ok=True)
+            (d / "run_meta.json").write_text("{}", encoding="utf-8")
+            return DeliveryReceipt(destination=self.name, ok=True)
+
+    dest_instance = MockDest()
 
     cfg = RunnerConfig(
         out_root=tmp_path / "out",
@@ -186,7 +207,7 @@ def test_retry_exhausted(tmp_path: Path) -> None:
         cfg=cfg,
         ctx=ctx,
         partition_fn=always_retryable_fail,
-        destination=fake_destination,
+        destination=dest_instance,
     )
 
     assert stats.total == 1

@@ -6,7 +6,7 @@ import json
 # pyright: reportUnknownParameterType=false
 # pyright: reportUnknownVariableType=false
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from zephyr_core import (
     DocumentMetadata,
@@ -81,27 +81,32 @@ def test_runner_writes_batch_report(tmp_path: Path) -> None:
     #     artifacts_writer=fake_writer,
     # )
 
-    def fake_destination(
-        *,
-        out_root: Path,
-        sha256: str,
-        meta: RunMetaV1,
-        result: PartitionResult | None = None,
-    ) -> DeliveryReceipt:
-        calls.append((sha256, meta, result is not None))
-        d = out_root / sha256
-        d.mkdir(parents=True, exist_ok=True)
-        (d / "run_meta.json").write_text("{}", encoding="utf-8")
-        return DeliveryReceipt(destination="fake", ok=True, details={"out_dir": str(d)})
+    class MockDest:
+        name = "mock"
 
-    cast(Any, fake_destination).name = "fake_report_dest"
+        def __call__(
+            self,
+            *,
+            out_root: Path,
+            sha256: str,
+            meta: RunMetaV1,
+            result: PartitionResult | None = None,
+        ) -> DeliveryReceipt:
+            calls.append((sha256, meta, result is not None))
+            # 模拟落盘
+            d = out_root / sha256
+            d.mkdir(parents=True, exist_ok=True)
+            (d / "run_meta.json").write_text("{}", encoding="utf-8")
+            return DeliveryReceipt(destination=self.name, ok=True)
+
+    dest_instance = MockDest()
 
     stats = run_documents(
         docs=docs,
         cfg=cfg,
         ctx=ctx,
         partition_fn=fake_partition_fn,
-        destination=fake_destination,
+        destination=dest_instance,
     )
 
     assert stats.total == 1
