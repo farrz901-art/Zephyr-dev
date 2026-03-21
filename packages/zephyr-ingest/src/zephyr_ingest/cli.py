@@ -30,6 +30,7 @@ class RunCmd:
     max_attempts: int
     base_backoff_ms: int
     max_backoff_ms: int
+    workers: int
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -64,6 +65,10 @@ def _build_parser() -> argparse.ArgumentParser:
     run.add_argument("--base-backoff-ms", type=int, default=200)
     run.add_argument("--max-backoff-ms", type=int, default=5000)
 
+    run.add_argument(
+        "--workers", type=int, default=1, help="Number of concurrent workers (default: 1)"
+    )
+
     return p
 
 
@@ -93,6 +98,7 @@ def _parse_run_cmd(argv: Sequence[str]) -> RunCmd:
         max_attempts=int(ns.max_attempts),
         base_backoff_ms=int(ns.base_backoff_ms),
         max_backoff_ms=int(ns.max_backoff_ms),
+        workers=int(ns.workers),
     )
 
 
@@ -123,6 +129,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             base_backoff_ms=cmd.base_backoff_ms,
             max_backoff_ms=cmd.max_backoff_ms,
         ),
+        workers=cmd.workers,
     )
 
     run_documents(docs=docs, cfg=cfg, ctx=ctx)

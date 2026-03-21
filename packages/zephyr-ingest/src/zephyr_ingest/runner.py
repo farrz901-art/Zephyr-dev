@@ -71,6 +71,7 @@ class RunnerConfig:
     skip_existing: bool = True
     force: bool = False
     retry: RetryConfig = field(default_factory=_default_retry)
+    workers: int = 1  # 默认单线程，保持行为稳定
 
 
 @dataclass(frozen=True, slots=True)
