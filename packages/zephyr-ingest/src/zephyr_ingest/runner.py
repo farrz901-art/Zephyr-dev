@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -145,102 +146,117 @@ def _process_one(
             skipped_existing=True,
         )
 
-    t0 = time.perf_counter()
-    attempts = 0
+    # 并发竞争锁 (Write-only)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    lock_path = out_dir / ".zephyr.lock"
+    lock_acquired = False
 
-    while True:
-        attempts += 1
+    try:
         try:
-            res = partition_fn(
-                filename=str(p),
-                strategy=cfg.strategy,
-                unique_element_ids=cfg.unique_element_ids,
-            )
-            duration_ms = int((time.perf_counter() - t0) * 1000)
-
-            meta = RunMetaV1(
-                run_id=ctx.run_id,
-                pipeline_version=ctx.pipeline_version,
-                timestamp_utc=ctx.timestamp_utc,
-                schema_version=ctx.run_meta_schema_version,
-                outcome=RunOutcome.SUCCESS,
-                document=res.document,
-                engine=EngineMetaV1(
-                    name=res.engine.name,
-                    backend=res.engine.backend,
-                    version=res.engine.version,
-                    strategy=str(res.engine.strategy),
-                ),
-                metrics=MetricsV1(
-                    duration_ms=duration_ms,
-                    elements_count=len(res.elements),
-                    normalized_text_len=len(res.normalized_text),
-                    attempts=attempts,
-                ),
-                warnings=list(res.warnings),
-                error=None,
-            )
-
-            artifacts_writer(out_root=out_root, sha256=sha, meta=meta, result=res)
-
+            with lock_path.open("x", encoding="utf-8") as f:
+                f.write(ctx.run_id)
+            lock_acquired = True
+        except FileExistsError:
+            # 另一个线程正在处理相同内容
             return DocProcessResult(
                 sha256=sha,
                 extension=ext,
-                outcome=RunOutcome.SUCCESS,
-                duration_ms=duration_ms,
-                attempts=attempts,
+                outcome=RunOutcome.SKIPPED_EXISTING,
+                duration_ms=None,
+                attempts=0,
                 retryable=None,
                 error_code=None,
-                skipped_existing=False,
+                skipped_existing=True,
             )
+        t0 = time.perf_counter()
+        attempts = 0
 
-        except ZephyrError as e:
-            duration_ms = int((time.perf_counter() - t0) * 1000)
-            retryable = is_retryable_exception(e)
-
-            if cfg.retry.enabled and retryable and attempts < cfg.retry.max_attempts:
-                backoff_ms = min(
-                    cfg.retry.max_backoff_ms,
-                    cfg.retry.base_backoff_ms * (2 ** (attempts - 1)),
+        while True:
+            attempts += 1
+            try:
+                res = partition_fn(
+                    filename=str(p),
+                    strategy=cfg.strategy,
+                    unique_element_ids=cfg.unique_element_ids,
                 )
-                if backoff_ms > 0:
-                    time.sleep(backoff_ms / 1000.0)
-                continue
-
-            e_code = str(e.code)
-            merged_details: dict[str, Any] = {}
-            if isinstance(e.details, dict):
-                merged_details = dict(e.details)
-            if "retryable" not in merged_details:
-                merged_details["retryable"] = retryable
-
-            if cfg.skip_unsupported and e_code == str(ErrorCode.UNS_UNSUPPORTED_TYPE):
-                outcome = RunOutcome.SKIPPED_UNSUPPORTED
-            else:
-                outcome = RunOutcome.FAILED
-
-            meta = RunMetaV1(
-                run_id=ctx.run_id,
-                pipeline_version=ctx.pipeline_version,
-                timestamp_utc=ctx.timestamp_utc,
-                schema_version=ctx.run_meta_schema_version,
-                outcome=outcome,
-                metrics=MetricsV1(duration_ms=duration_ms, attempts=attempts),
-                error=ErrorInfoV1(code=e_code, message=e.message, details=merged_details),
-            )
-
-            artifacts_writer(out_root=out_root, sha256=sha, meta=meta, result=None)
-
-            return DocProcessResult(
-                sha256=sha,
-                extension=ext,
-                outcome=outcome,
-                duration_ms=duration_ms,
-                attempts=attempts,
-                retryable=retryable,
-                error_code=e_code,
-                skipped_existing=False,
-            )
+                duration_ms = int((time.perf_counter() - t0) * 1000)
+                meta = RunMetaV1(
+                    run_id=ctx.run_id,
+                    pipeline_version=ctx.pipeline_version,
+                    timestamp_utc=ctx.timestamp_utc,
+                    schema_version=ctx.run_meta_schema_version,
+                    outcome=RunOutcome.SUCCESS,
+                    document=res.document,
+                    engine=EngineMetaV1(
+                        name=res.engine.name,
+                        backend=res.engine.backend,
+                        version=res.engine.version,
+                        strategy=str(res.engine.strategy),
+                    ),
+                    metrics=MetricsV1(
+                        duration_ms=duration_ms,
+                        elements_count=len(res.elements),
+                        normalized_text_len=len(res.normalized_text),
+                        attempts=attempts,
+                    ),
+                    warnings=list(res.warnings),
+                    error=None,
+                )
+                artifacts_writer(out_root=out_root, sha256=sha, meta=meta, result=res)
+                return DocProcessResult(
+                    sha256=sha,
+                    extension=ext,
+                    outcome=RunOutcome.SUCCESS,
+                    duration_ms=duration_ms,
+                    attempts=attempts,
+                    retryable=None,
+                    error_code=None,
+                    skipped_existing=False,
+                )
+            except ZephyrError as e:
+                duration_ms = int((time.perf_counter() - t0) * 1000)
+                retryable = is_retryable_exception(e)
+                if cfg.retry.enabled and retryable and attempts < cfg.retry.max_attempts:
+                    backoff_ms = min(
+                        cfg.retry.max_backoff_ms,
+                        cfg.retry.base_backoff_ms * (2 ** (attempts - 1)),
+                    )
+                    if backoff_ms > 0:
+                        time.sleep(backoff_ms / 1000.0)
+                    continue
+                e_code = str(e.code)
+                merged_details: dict[str, Any] = {}
+                if isinstance(e.details, dict):
+                    merged_details = dict(e.details)
+                if "retryable" not in merged_details:
+                    merged_details["retryable"] = retryable
+                if cfg.skip_unsupported and e_code == str(ErrorCode.UNS_UNSUPPORTED_TYPE):
+                    outcome = RunOutcome.SKIPPED_UNSUPPORTED
+                else:
+                    outcome = RunOutcome.FAILED
+                meta = RunMetaV1(
+                    run_id=ctx.run_id,
+                    pipeline_version=ctx.pipeline_version,
+                    timestamp_utc=ctx.timestamp_utc,
+                    schema_version=ctx.run_meta_schema_version,
+                    outcome=outcome,
+                    metrics=MetricsV1(duration_ms=duration_ms, attempts=attempts),
+                    error=ErrorInfoV1(code=e_code, message=e.message, details=merged_details),
+                )
+                artifacts_writer(out_root=out_root, sha256=sha, meta=meta, result=None)
+                return DocProcessResult(
+                    sha256=sha,
+                    extension=ext,
+                    outcome=outcome,
+                    duration_ms=duration_ms,
+                    attempts=attempts,
+                    retryable=retryable,
+                    error_code=e_code,
+                    skipped_existing=False,
+                )
+    finally:
+        if lock_acquired:
+            lock_path.unlink(missing_ok=True)
 
 
 def run_documents(
@@ -265,19 +281,9 @@ def run_documents(
     retried_success: int = 0
     retryable_failed: int = 0
 
-    for d in docs:
-        total += 1
-        ext = d.extension or Path(d.uri).suffix.lower()
-        counts_by_extension[ext] = counts_by_extension.get(ext, 0) + 1
-
-        r = _process_one(
-            doc=d,
-            cfg=cfg,
-            ctx=ctx,
-            out_root=out_root,
-            partition_fn=partition_fn,
-            artifacts_writer=artifacts_writer,
-        )
+    def consume_result(r: DocProcessResult) -> None:
+        nonlocal success, failed, skipped_unsupported, skipped_existing
+        nonlocal retry_attempts_total, retried_success, retryable_failed
 
         if r.outcome == RunOutcome.SUCCESS:
             success += 1
@@ -286,29 +292,108 @@ def run_documents(
             if r.attempts > 1:
                 retry_attempts_total += r.attempts - 1
                 retried_success += 1
-
         elif r.outcome == RunOutcome.SKIPPED_EXISTING:
             skipped_existing += 1
-
         elif r.outcome == RunOutcome.SKIPPED_UNSUPPORTED:
             skipped_unsupported += 1
             if r.duration_ms is not None:
                 durations_ms_list.append(r.duration_ms)
-            if r.error_code is not None:
+            if r.error_code:
                 counts_by_error_code[r.error_code] = counts_by_error_code.get(r.error_code, 0) + 1
             if r.attempts > 1:
                 retry_attempts_total += r.attempts - 1
-
-        else:  # FAILED
+        else:
             failed += 1
             if r.duration_ms is not None:
                 durations_ms_list.append(r.duration_ms)
-            if r.error_code is not None:
+            if r.error_code:
                 counts_by_error_code[r.error_code] = counts_by_error_code.get(r.error_code, 0) + 1
             if r.attempts > 1:
                 retry_attempts_total += r.attempts - 1
             if r.retryable:
                 retryable_failed += 1
+
+    # 执行分支
+    if cfg.workers <= 1:
+        for d in docs:
+            total += 1
+            ext = d.extension or Path(d.uri).suffix.lower()
+            counts_by_extension[ext] = counts_by_extension.get(ext, 0) + 1
+            res = _process_one(
+                doc=d,
+                cfg=cfg,
+                ctx=ctx,
+                out_root=out_root,
+                partition_fn=partition_fn,
+                artifacts_writer=artifacts_writer,
+            )
+            consume_result(res)
+    else:
+        futures: list[Future[DocProcessResult]] = []
+        with ThreadPoolExecutor(max_workers=cfg.workers) as executor:
+            for d in docs:
+                total += 1
+                ext = d.extension or Path(d.uri).suffix.lower()
+                counts_by_extension[ext] = counts_by_extension.get(ext, 0) + 1
+                futures.append(
+                    executor.submit(
+                        _process_one,
+                        doc=d,
+                        cfg=cfg,
+                        ctx=ctx,
+                        out_root=out_root,
+                        partition_fn=partition_fn,
+                        artifacts_writer=artifacts_writer,
+                    )
+                )
+
+            for fut in as_completed(futures):
+                consume_result(fut.result())
+
+    # for d in docs:
+    #     total += 1
+    #     ext = d.extension or Path(d.uri).suffix.lower()
+    #     counts_by_extension[ext] = counts_by_extension.get(ext, 0) + 1
+    #
+    #     r = _process_one(
+    #         doc=d,
+    #         cfg=cfg,
+    #         ctx=ctx,
+    #         out_root=out_root,
+    #         partition_fn=partition_fn,
+    #         artifacts_writer=artifacts_writer,
+    #     )
+    #
+    #     if r.outcome == RunOutcome.SUCCESS:
+    #         success += 1
+    #         if r.duration_ms is not None:
+    #             durations_ms_list.append(r.duration_ms)
+    #         if r.attempts > 1:
+    #             retry_attempts_total += r.attempts - 1
+    #             retried_success += 1
+    #
+    #     elif r.outcome == RunOutcome.SKIPPED_EXISTING:
+    #         skipped_existing += 1
+    #
+    #     elif r.outcome == RunOutcome.SKIPPED_UNSUPPORTED:
+    #         skipped_unsupported += 1
+    #         if r.duration_ms is not None:
+    #             durations_ms_list.append(r.duration_ms)
+    #         if r.error_code is not None:
+    #             counts_by_error_code[r.error_code] = counts_by_error_code.get(r.error_code, 0) + 1
+    #         if r.attempts > 1:
+    #             retry_attempts_total += r.attempts - 1
+    #
+    #     else:  # FAILED
+    #         failed += 1
+    #         if r.duration_ms is not None:
+    #             durations_ms_list.append(r.duration_ms)
+    #         if r.error_code is not None:
+    #             counts_by_error_code[r.error_code] = counts_by_error_code.get(r.error_code, 0) + 1
+    #         if r.attempts > 1:
+    #             retry_attempts_total += r.attempts - 1
+    #         if r.retryable:
+    #             retryable_failed += 1
 
     stats = RunStats(
         total=total,
