@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Protocol
 
-from uns_stream._internal.artifacts import dump_partition_artifacts
+# from uns_stream._internal.artifacts import dump_partition_artifacts
 from uns_stream._internal.retry_policy import is_retryable_exception
 from uns_stream._internal.utils import sha256_file
 from uns_stream.partition.auto import partition as auto_partition
@@ -24,6 +24,8 @@ from zephyr_core import (
 )
 from zephyr_core.contracts.v1.enums import RunOutcome
 from zephyr_core.contracts.v1.run_meta import EngineMetaV1, ErrorInfoV1, MetricsV1
+from zephyr_ingest.destinations.base import Destination
+from zephyr_ingest.destinations.filesystem import FilesystemDestination
 
 logger = logging.getLogger(__name__)
 
@@ -40,15 +42,15 @@ class PartitionFn(Protocol):
     ) -> PartitionResult: ...
 
 
-class ArtifactsWriter(Protocol):
-    def __call__(
-        self,
-        *,
-        out_root: Path,
-        sha256: str,
-        meta: RunMetaV1,
-        result: PartitionResult | None = None,
-    ) -> Path: ...
+# class ArtifactsWriter(Protocol):
+#     def __call__(
+#         self,
+#         *,
+#         out_root: Path,
+#         sha256: str,
+#         meta: RunMetaV1,
+#         result: PartitionResult | None = None,
+#     ) -> Path: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,7 +127,8 @@ def _process_one(
     ctx: RunContext,
     out_root: Path,
     partition_fn: PartitionFn,
-    artifacts_writer: ArtifactsWriter,
+    # artifacts_writer: ArtifactsWriter,
+    destination: Destination,
 ) -> DocProcessResult:
     p = Path(doc.uri)
     sha = sha256_file(p)
@@ -202,7 +205,8 @@ def _process_one(
                     warnings=list(res.warnings),
                     error=None,
                 )
-                artifacts_writer(out_root=out_root, sha256=sha, meta=meta, result=res)
+                # artifacts_writer(out_root=out_root, sha256=sha, meta=meta, result=res)
+                destination(out_root=out_root, sha256=sha, meta=meta, result=res)
                 return DocProcessResult(
                     sha256=sha,
                     extension=ext,
@@ -243,7 +247,8 @@ def _process_one(
                     metrics=MetricsV1(duration_ms=duration_ms, attempts=attempts),
                     error=ErrorInfoV1(code=e_code, message=e.message, details=merged_details),
                 )
-                artifacts_writer(out_root=out_root, sha256=sha, meta=meta, result=None)
+                # artifacts_writer(out_root=out_root, sha256=sha, meta=meta, result=None)
+                destination(out_root=out_root, sha256=sha, meta=meta, result=None)
                 return DocProcessResult(
                     sha256=sha,
                     extension=ext,
@@ -265,8 +270,11 @@ def run_documents(
     cfg: RunnerConfig,
     ctx: RunContext,
     partition_fn: PartitionFn = auto_partition,
-    artifacts_writer: ArtifactsWriter = dump_partition_artifacts,
+    # artifacts_writer: ArtifactsWriter = dump_partition_artifacts,
+    destination: Destination | None = None,
 ) -> RunStats:
+    destination = destination or FilesystemDestination()
+
     out_root = cfg.out_root.expanduser().resolve()
     out_root.mkdir(parents=True, exist_ok=True)
 
@@ -325,7 +333,7 @@ def run_documents(
                 ctx=ctx,
                 out_root=out_root,
                 partition_fn=partition_fn,
-                artifacts_writer=artifacts_writer,
+                destination=destination,
             )
             consume_result(res)
     else:
@@ -343,7 +351,7 @@ def run_documents(
                         ctx=ctx,
                         out_root=out_root,
                         partition_fn=partition_fn,
-                        artifacts_writer=artifacts_writer,
+                        destination=destination,
                     )
                 )
 
@@ -428,6 +436,8 @@ def run_documents(
         },
         "durations_ms": _duration_stats(durations_ms_list),
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+        "workers": cfg.workers,
+        "executor": "serial" if cfg.workers <= 1 else "thread",
     }
 
     (out_root / "batch_report.json").write_text(

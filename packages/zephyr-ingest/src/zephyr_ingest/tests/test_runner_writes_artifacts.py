@@ -6,7 +6,7 @@ import json
 # pyright: reportUnknownParameterType=false
 # pyright: reportUnknownVariableType=false
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from zephyr_core import (
     DocumentMetadata,
@@ -18,6 +18,7 @@ from zephyr_core import (
     RunMetaV1,
     ZephyrElement,
 )
+from zephyr_ingest.destinations.base import DeliveryReceipt
 from zephyr_ingest.runner import RunnerConfig, run_documents
 
 
@@ -58,25 +59,49 @@ def test_runner_writes_batch_report(tmp_path: Path) -> None:
 
     calls: list[tuple[str, RunMetaV1, bool]] = []
 
-    def fake_writer(
-        *, out_root: Path, sha256: str, meta: RunMetaV1, result: PartitionResult | None = None
-    ) -> Path:
-        calls.append((sha256, meta, result is not None))
-        d = out_root / sha256
-        d.mkdir(parents=True, exist_ok=True)
-        (d / "run_meta.json").write_text("{}", encoding="utf-8")
-        return d
+    # def fake_writer(
+    #     *, out_root: Path, sha256: str, meta: RunMetaV1, result: PartitionResult | None = None
+    # ) -> Path:
+    #     calls.append((sha256, meta, result is not None))
+    #     d = out_root / sha256
+    #     d.mkdir(parents=True, exist_ok=True)
+    #     (d / "run_meta.json").write_text("{}", encoding="utf-8")
+    #     return d
+    #
 
     out_root = tmp_path / "out"
     cfg = RunnerConfig(out_root=out_root, strategy=PartitionStrategy.AUTO)
     ctx = RunContext.new(pipeline_version="p1", timestamp_utc="2026-03-19T00:00:00Z", run_id="r1")
+
+    # stats = run_documents(
+    #     docs=docs,
+    #     cfg=cfg,
+    #     ctx=ctx,
+    #     partition_fn=fake_partition_fn,
+    #     artifacts_writer=fake_writer,
+    # )
+
+    def fake_destination(
+        *,
+        out_root: Path,
+        sha256: str,
+        meta: RunMetaV1,
+        result: PartitionResult | None = None,
+    ) -> DeliveryReceipt:
+        calls.append((sha256, meta, result is not None))
+        d = out_root / sha256
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "run_meta.json").write_text("{}", encoding="utf-8")
+        return DeliveryReceipt(destination="fake", ok=True, details={"out_dir": str(d)})
+
+    cast(Any, fake_destination).name = "fake_report_dest"
 
     stats = run_documents(
         docs=docs,
         cfg=cfg,
         ctx=ctx,
         partition_fn=fake_partition_fn,
-        artifacts_writer=fake_writer,
+        destination=fake_destination,
     )
 
     assert stats.total == 1

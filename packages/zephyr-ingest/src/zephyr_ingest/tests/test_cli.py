@@ -24,6 +24,7 @@ def test_cli_run_invokes_runner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
         assert cfg.retry.base_backoff_ms == 0
         assert cfg.retry.max_backoff_ms == 0
         assert cfg.workers == 4
+        assert "destination" in kwargs
 
     monkeypatch.setattr(cli, "run_documents", fake_run_documents)
 
@@ -47,6 +48,8 @@ def test_cli_run_invokes_runner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
             "0",
             "--workers",
             "4",
+            "--destination",
+            "filesystem",
         ]
     )
     assert rc == 0

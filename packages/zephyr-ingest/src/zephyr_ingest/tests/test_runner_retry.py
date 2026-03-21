@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from zephyr_core import DocumentRef, ErrorCode, RunContext, ZephyrError
 from zephyr_core.contracts.v1.enums import PartitionStrategy
@@ -12,6 +12,7 @@ from zephyr_core.contracts.v1.models import (
     ZephyrElement,
 )
 from zephyr_core.contracts.v1.run_meta import RunMetaV1
+from zephyr_ingest.destinations.base import DeliveryReceipt
 from zephyr_ingest.runner import RetryConfig, RunnerConfig, run_documents
 
 
@@ -48,12 +49,12 @@ def _ok_result() -> PartitionResult:
 
 def test_retry_then_success(tmp_path: Path) -> None:
     doc = _one_doc(tmp_path)
-    calls = {"n": 0}
+    partition_tracker = {"n": 0}
     captured: list[RunMetaV1] = []
 
     def flakey_partition_fn(**kwargs: Any) -> PartitionResult:
-        calls["n"] += 1
-        if calls["n"] < 3:
+        partition_tracker["n"] += 1
+        if partition_tracker["n"] < 3:
             raise ZephyrError(
                 code=ErrorCode.UNS_PARTITION_FAILED,
                 message="transient",
@@ -61,14 +62,20 @@ def test_retry_then_success(tmp_path: Path) -> None:
             )
         return _ok_result()
 
-    def writer(
-        *, out_root: Path, sha256: str, meta: RunMetaV1, result: PartitionResult | None = None
-    ) -> Path:
+    def fake_destination(
+        *,
+        out_root: Path,
+        sha256: str,
+        meta: RunMetaV1,
+        result: PartitionResult | None = None,
+    ) -> DeliveryReceipt:
         captured.append(meta)
         d = out_root / sha256
         d.mkdir(parents=True, exist_ok=True)
         (d / "run_meta.json").write_text("{}", encoding="utf-8")
-        return d
+        return DeliveryReceipt(destination="fake", ok=True, details={"out_dir": str(d)})
+
+    cast(Any, fake_destination).name = "fake_dest"
 
     cfg = RunnerConfig(
         out_root=tmp_path / "out",
@@ -78,11 +85,12 @@ def test_retry_then_success(tmp_path: Path) -> None:
     ctx = RunContext.new(pipeline_version="p1", timestamp_utc="2026-03-20T00:00:00Z", run_id="r1")
 
     stats = run_documents(
-        docs=[doc], cfg=cfg, ctx=ctx, partition_fn=flakey_partition_fn, artifacts_writer=writer
+        docs=[doc], cfg=cfg, ctx=ctx, partition_fn=flakey_partition_fn, destination=fake_destination
     )
 
     assert stats.total == 1
     assert stats.success == 1
+    assert partition_tracker["n"] == 3
     assert captured[-1].metrics.attempts == 3
 
 
@@ -95,14 +103,27 @@ def test_no_retry_when_not_retryable(tmp_path: Path) -> None:
             code=ErrorCode.UNS_PARTITION_FAILED, message="perm", details={"retryable": False}
         )
 
-    def writer(
-        *, out_root: Path, sha256: str, meta: RunMetaV1, result: PartitionResult | None = None
-    ) -> Path:
+    # def writer(
+    #     *, out_root: Path, sha256: str, meta: RunMetaV1, result: PartitionResult | None = None
+    # ) -> Path:
+    #     captured.append(meta)
+    #     d = out_root / sha256
+    #     d.mkdir(parents=True, exist_ok=True)
+    #     (d / "run_meta.json").write_text("{}", encoding="utf-8")
+    #     return d
+
+    def fake_destination(
+        *,
+        out_root: Path,
+        sha256: str,
+        meta: RunMetaV1,
+        result: PartitionResult | None = None,
+    ) -> DeliveryReceipt:
         captured.append(meta)
         d = out_root / sha256
         d.mkdir(parents=True, exist_ok=True)
         (d / "run_meta.json").write_text("{}", encoding="utf-8")
-        return d
+        return DeliveryReceipt(destination="fake", ok=True, details={"out_dir": str(d)})
 
     cfg = RunnerConfig(
         out_root=tmp_path / "out",
@@ -112,7 +133,7 @@ def test_no_retry_when_not_retryable(tmp_path: Path) -> None:
     ctx = RunContext.new(pipeline_version="p1", timestamp_utc="2026-03-20T00:00:00Z", run_id="r2")
 
     stats = run_documents(
-        docs=[doc], cfg=cfg, ctx=ctx, partition_fn=fail_partition_fn, artifacts_writer=writer
+        docs=[doc], cfg=cfg, ctx=ctx, partition_fn=fail_partition_fn, destination=fake_destination
     )
 
     assert stats.total == 1
@@ -123,22 +144,35 @@ def test_no_retry_when_not_retryable(tmp_path: Path) -> None:
 def test_retry_exhausted(tmp_path: Path) -> None:
     doc = _one_doc(tmp_path)
     captured: list[RunMetaV1] = []
-    calls = {"n": 0}
+    partition_tracker = {"n": 0}
 
     def always_retryable_fail(**kwargs: Any) -> PartitionResult:
-        calls["n"] += 1
+        partition_tracker["n"] += 1
         raise ZephyrError(
             code=ErrorCode.UNS_PARTITION_FAILED, message="boom", details={"retryable": True}
         )
 
-    def writer(
-        *, out_root: Path, sha256: str, meta: RunMetaV1, result: PartitionResult | None = None
-    ) -> Path:
+    # def writer(
+    #     *, out_root: Path, sha256: str, meta: RunMetaV1, result: PartitionResult | None = None
+    # ) -> Path:
+    #     captured.append(meta)
+    #     d = out_root / sha256
+    #     d.mkdir(parents=True, exist_ok=True)
+    #     (d / "run_meta.json").write_text("{}", encoding="utf-8")
+    #     return d
+
+    def fake_destination(
+        *,
+        out_root: Path,
+        sha256: str,
+        meta: RunMetaV1,
+        result: PartitionResult | None = None,
+    ) -> DeliveryReceipt:
         captured.append(meta)
         d = out_root / sha256
         d.mkdir(parents=True, exist_ok=True)
         (d / "run_meta.json").write_text("{}", encoding="utf-8")
-        return d
+        return DeliveryReceipt(destination="fake", ok=True, details={"out_dir": str(d)})
 
     cfg = RunnerConfig(
         out_root=tmp_path / "out",
@@ -148,10 +182,14 @@ def test_retry_exhausted(tmp_path: Path) -> None:
     ctx = RunContext.new(pipeline_version="p1", timestamp_utc="2026-03-20T00:00:00Z", run_id="r3")
 
     stats = run_documents(
-        docs=[doc], cfg=cfg, ctx=ctx, partition_fn=always_retryable_fail, artifacts_writer=writer
+        docs=[doc],
+        cfg=cfg,
+        ctx=ctx,
+        partition_fn=always_retryable_fail,
+        destination=fake_destination,
     )
 
     assert stats.total == 1
     assert stats.failed == 1
-    assert calls["n"] == 2
+    assert partition_tracker["n"] == 2
     assert captured[-1].metrics.attempts == 2

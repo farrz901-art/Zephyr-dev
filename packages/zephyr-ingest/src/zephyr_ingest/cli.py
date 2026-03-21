@@ -6,9 +6,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
+from uns_stream.partition.auto import partition as auto_partition
 from zephyr_core import RunContext
 from zephyr_core.contracts.v1.enums import PartitionStrategy
 from zephyr_core.versioning import PIPELINE_VERSION
+from zephyr_ingest.destinations.base import Destination
+from zephyr_ingest.destinations.filesystem import FilesystemDestination
 from zephyr_ingest.runner import RetryConfig, RunnerConfig, run_documents
 from zephyr_ingest.sources.local_file import LocalFileSource
 
@@ -31,6 +34,7 @@ class RunCmd:
     base_backoff_ms: int
     max_backoff_ms: int
     workers: int
+    destination: str
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -69,6 +73,8 @@ def _build_parser() -> argparse.ArgumentParser:
         "--workers", type=int, default=1, help="Number of concurrent workers (default: 1)"
     )
 
+    run.add_argument("--destination", default="filesystem", choices=["filesystem"])
+
     return p
 
 
@@ -99,6 +105,7 @@ def _parse_run_cmd(argv: Sequence[str]) -> RunCmd:
         base_backoff_ms=int(ns.base_backoff_ms),
         max_backoff_ms=int(ns.max_backoff_ms),
         workers=int(ns.workers),
+        destination=str(ns.destination),
     )
 
 
@@ -112,6 +119,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         run_id=cmd.run_id,
         timestamp_utc=cmd.timestamp_utc,
     )
+
+    dest: Destination = FilesystemDestination()
 
     src = LocalFileSource(path=Path(cmd.path), glob=cmd.glob)
     docs = src.iter_documents()
@@ -132,7 +141,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         workers=cmd.workers,
     )
 
-    run_documents(docs=docs, cfg=cfg, ctx=ctx)
+    run_documents(docs=docs, cfg=cfg, ctx=ctx, partition_fn=auto_partition, destination=dest)
     return 0
 
 
