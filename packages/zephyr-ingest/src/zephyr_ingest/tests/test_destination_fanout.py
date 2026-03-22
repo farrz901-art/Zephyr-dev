@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from zephyr_core import RunMetaV1
+from zephyr_core import PartitionResult, RunMetaV1
 from zephyr_core.versioning import RUN_META_SCHEMA_VERSION
 from zephyr_ingest.destinations.base import DeliveryReceipt
 from zephyr_ingest.destinations.fanout import FanoutDestination
@@ -12,7 +12,7 @@ class OkDest:
     name = "ok"
 
     def __call__(
-        self, *, out_root: Path, sha256: str, meta: RunMetaV1, result=None
+        self, *, out_root: Path, sha256: str, meta: RunMetaV1, result: PartitionResult | None = None
     ) -> DeliveryReceipt:
         return DeliveryReceipt(destination=self.name, ok=True)
 
@@ -21,7 +21,7 @@ class BadDest:
     name = "bad"
 
     def __call__(
-        self, *, out_root: Path, sha256: str, meta: RunMetaV1, result=None
+        self, *, out_root: Path, sha256: str, meta: RunMetaV1, result: PartitionResult | None = None
     ) -> DeliveryReceipt:
         return DeliveryReceipt(destination=self.name, ok=False)
 
