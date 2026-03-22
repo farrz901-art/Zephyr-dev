@@ -3965,12 +3965,14 @@ name = "zephyr-ingest"
 version = "0.1.0"
 source = { editable = "packages/zephyr-ingest" }
 dependencies = [
+    { name = "httpx" },
     { name = "uns-stream" },
     { name = "zephyr-core" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "uns-stream", editable = "packages/uns-stream" },
     { name = "zephyr-core", editable = "packages/zephyr-core" },
 ]
