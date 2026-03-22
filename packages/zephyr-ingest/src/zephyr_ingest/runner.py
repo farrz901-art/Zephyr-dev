@@ -24,6 +24,7 @@ from zephyr_core import (
 )
 from zephyr_core.contracts.v1.enums import RunOutcome
 from zephyr_core.contracts.v1.run_meta import EngineMetaV1, ErrorInfoV1, MetricsV1
+from zephyr_ingest._internal.delivery_dlq import write_delivery_dlq
 from zephyr_ingest.destinations.base import DeliveryReceipt, Destination
 from zephyr_ingest.destinations.filesystem import FilesystemDestination
 
@@ -89,6 +90,7 @@ class DocProcessResult:
     error_code: str | None
     skipped_existing: bool
     delivery_receipt: DeliveryReceipt | None
+    dlq_written: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -175,6 +177,7 @@ def _process_one(
             error_code=None,
             skipped_existing=True,
             delivery_receipt=None,
+            dlq_written=False,
         )
 
     # 并发竞争锁 (Write-only)
@@ -199,6 +202,7 @@ def _process_one(
                 error_code=None,
                 skipped_existing=True,
                 delivery_receipt=None,
+                dlq_written=False,
             )
         t0 = time.perf_counter()
         attempts = 0
@@ -246,6 +250,16 @@ def _process_one(
 
                 _write_delivery_receipt(out_dir, receipt)
 
+                dlq_written = False
+                if not receipt.ok:
+                    try:
+                        write_delivery_dlq(
+                            out_root=out_root, sha256=sha, meta=meta, receipt=receipt
+                        )
+                        dlq_written = True
+                    except Exception as dlqe:
+                        logger.warning("delivery_dlq_write_failed sha=%s exc=%s", sha, str(dlqe))
+
                 # artifacts_writer(out_root=out_root, sha256=sha, meta=meta, result=res)
                 # destination(out_root=out_root, sha256=sha, meta=meta, result=res)
                 return DocProcessResult(
@@ -258,6 +272,7 @@ def _process_one(
                     error_code=None,
                     skipped_existing=False,
                     delivery_receipt=receipt,
+                    dlq_written=dlq_written,
                 )
             except ZephyrError as e:
                 duration_ms = int((time.perf_counter() - t0) * 1000)
@@ -301,6 +316,16 @@ def _process_one(
 
                 _write_delivery_receipt(out_dir, receipt)
 
+                dlq_written = False
+                if not receipt.ok:
+                    try:
+                        write_delivery_dlq(
+                            out_root=out_root, sha256=sha, meta=meta, receipt=receipt
+                        )
+                        dlq_written = True
+                    except Exception as dlqe:
+                        logger.warning("delivery_dlq_write_failed sha=%s exc=%s", sha, str(dlqe))
+
                 # artifacts_writer(out_root=out_root, sha256=sha, meta=meta, result=None)
                 # destination(out_root=out_root, sha256=sha, meta=meta, result=None)
                 return DocProcessResult(
@@ -313,6 +338,7 @@ def _process_one(
                     error_code=e_code,
                     skipped_existing=False,
                     delivery_receipt=receipt,
+                    dlq_written=dlq_written,
                 )
     finally:
         if lock_acquired:
@@ -348,10 +374,13 @@ def run_documents(
     retried_success: int = 0
     retryable_failed: int = 0
 
+    delivery_dlq_written_total = 0
+
     def consume_result(r: DocProcessResult) -> None:
         nonlocal success, failed, skipped_unsupported, skipped_existing
         nonlocal retry_attempts_total, retried_success, retryable_failed
         nonlocal delivery_total, delivery_ok, delivery_failed
+        nonlocal delivery_dlq_written_total
 
         if r.outcome == RunOutcome.SUCCESS:
             success += 1
@@ -380,6 +409,9 @@ def run_documents(
                 retry_attempts_total += r.attempts - 1
             if r.retryable:
                 retryable_failed += 1
+
+        if r.dlq_written:
+            delivery_dlq_written_total += 1
 
         if r.delivery_receipt is None:
             return
@@ -486,6 +518,8 @@ def run_documents(
             "total": delivery_total,
             "ok": delivery_ok,
             "failed": delivery_failed,
+            "dlq_written_total": delivery_dlq_written_total,
+            "dlq_dir": str((out_root / "_dlq" / "delivery").resolve()),
             "by_destination": delivery_by_destination,
             "fanout_children_by_destination": fanout_children_by_destination,
         },
