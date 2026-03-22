@@ -247,7 +247,7 @@ def _process_one(
                 _write_delivery_receipt(out_dir, receipt)
 
                 # artifacts_writer(out_root=out_root, sha256=sha, meta=meta, result=res)
-                destination(out_root=out_root, sha256=sha, meta=meta, result=res)
+                # destination(out_root=out_root, sha256=sha, meta=meta, result=res)
                 return DocProcessResult(
                     sha256=sha,
                     extension=ext,
@@ -302,7 +302,7 @@ def _process_one(
                 _write_delivery_receipt(out_dir, receipt)
 
                 # artifacts_writer(out_root=out_root, sha256=sha, meta=meta, result=None)
-                destination(out_root=out_root, sha256=sha, meta=meta, result=None)
+                # destination(out_root=out_root, sha256=sha, meta=meta, result=None)
                 return DocProcessResult(
                     sha256=sha,
                     extension=ext,
