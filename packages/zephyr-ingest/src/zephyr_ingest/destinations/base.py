@@ -15,7 +15,9 @@ class DeliveryReceipt:
 
 
 class Destination(Protocol):
-    name: str
+    @property
+    # name: str
+    def name(self) -> str: ...
 
     def __call__(
         self,

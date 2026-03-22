@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -11,7 +11,8 @@ from zephyr_ingest.destinations.base import DeliveryReceipt, Destination
 @dataclass(frozen=True, slots=True)
 class FanoutDestination:
     destinations: tuple[Destination, ...]
-    name: str = "fanout"
+    # name: str = "fanout"
+    name: str = field(default="fanout", init=False)
 
     def __call__(
         self,

@@ -25,7 +25,8 @@ class WebhookDestination:
     transport: httpx.BaseTransport | None = None
 
     send_idempotency_key: bool = True
-    name: str = "webhook"
+    # name: str = "webhook"
+    name: str = field(default="webhook", init=False)
 
     def __call__(
         self,

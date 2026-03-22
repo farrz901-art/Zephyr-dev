@@ -24,7 +24,12 @@ def test_cli_run_invokes_runner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
         assert cfg.retry.base_backoff_ms == 0
         assert cfg.retry.max_backoff_ms == 0
         assert cfg.workers == 4
+
+        dest = kwargs.get("destination")
         assert "destination" in kwargs
+        assert dest is not None
+        # 使用 getattr 规避 strict 模式下对 Mock 对象的属性访问限制
+        assert getattr(dest, "name").startswith("filesystem")
 
     monkeypatch.setattr(cli, "run_documents", fake_run_documents)
 
@@ -50,6 +55,37 @@ def test_cli_run_invokes_runner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
             "4",
             "--destination",
             "filesystem",
+        ]
+    )
+
+    assert rc == 0
+    assert called["ok"] is True
+
+
+def test_cli_run_webhook_fanout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """测试 Webhook 触发的 Fanout 逻辑"""
+    called = {"ok": False}
+
+    def fake_run_documents(*, docs: Any, cfg: Any, ctx: Any, **kwargs: Any) -> Any:
+        called["ok"] = True
+        dest = kwargs.get("destination")
+        assert dest is not None
+        # 验证是否成功启用了分叉目的地
+        assert getattr(dest, "name") == "fanout"
+
+    monkeypatch.setattr(cli, "run_documents", fake_run_documents)
+
+    rc = cli.main(
+        [
+            "run",
+            "--path",
+            str(tmp_path),
+            "--out",
+            str(tmp_path / "out"),
+            "--strategy",
+            "auto",
+            "--webhook-url",
+            "http://test.com",
         ]
     )
     assert rc == 0

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -9,7 +10,10 @@ from typing import Sequence
 from zephyr_core import RunContext
 from zephyr_core.contracts.v1.enums import PartitionStrategy
 from zephyr_core.versioning import PIPELINE_VERSION
+from zephyr_ingest.destinations.base import Destination
+from zephyr_ingest.destinations.fanout import FanoutDestination
 from zephyr_ingest.destinations.filesystem import FilesystemDestination
+from zephyr_ingest.destinations.webhook import WebhookDestination
 from zephyr_ingest.runner import RetryConfig, RunnerConfig, run_documents
 from zephyr_ingest.sources.local_file import LocalFileSource
 
@@ -33,6 +37,8 @@ class RunCmd:
     max_backoff_ms: int
     workers: int
     destination: str
+    webhook_url: str | None
+    webhook_timeout_s: float
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -73,6 +79,11 @@ def _build_parser() -> argparse.ArgumentParser:
 
     run.add_argument("--destination", default="filesystem", choices=["filesystem"])
 
+    run.add_argument("--webhook-url", default=None, help="Optional HTTP Webhook URL")
+    run.add_argument(
+        "--webhook-timeout-s", type=float, default=10.0, help="Webhook timeout in seconds"
+    )
+
     return p
 
 
@@ -104,13 +115,28 @@ def _parse_run_cmd(argv: Sequence[str]) -> RunCmd:
         max_backoff_ms=int(ns.max_backoff_ms),
         workers=int(ns.workers),
         destination=str(ns.destination),
+        webhook_url=None if ns.webhook_url is None else str(ns.webhook_url),
+        webhook_timeout_s=float(ns.webhook_timeout_s),
     )
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s - %(message)s"
+    )
+
     argv = sys.argv[1:] if argv is None else argv
 
     cmd = _parse_run_cmd(argv)
+
+    fs = FilesystemDestination()
+    dest: Destination
+    if cmd.webhook_url:
+        wh = WebhookDestination(url=cmd.webhook_url, timeout_s=cmd.webhook_timeout_s)
+        # 自动开启分叉：本地存储 + Webhook 发送
+        dest = FanoutDestination(destinations=(fs, wh))
+    else:
+        dest = fs
 
     ctx = RunContext.new(
         pipeline_version=cmd.pipeline_version or PIPELINE_VERSION,
@@ -118,7 +144,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         timestamp_utc=cmd.timestamp_utc,
     )
 
-    dest = FilesystemDestination()
+    # dest = FilesystemDestination()
 
     src = LocalFileSource(path=Path(cmd.path), glob=cmd.glob)
     docs = src.iter_documents()
