@@ -4,10 +4,10 @@ import json
 import logging
 import time
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable, Protocol
+from typing import Any, Iterable, Protocol, cast
 
 # from uns_stream._internal.artifacts import dump_partition_artifacts
 from uns_stream._internal.retry_policy import is_retryable_exception
@@ -24,7 +24,7 @@ from zephyr_core import (
 )
 from zephyr_core.contracts.v1.enums import RunOutcome
 from zephyr_core.contracts.v1.run_meta import EngineMetaV1, ErrorInfoV1, MetricsV1
-from zephyr_ingest.destinations.base import Destination
+from zephyr_ingest.destinations.base import DeliveryReceipt, Destination
 from zephyr_ingest.destinations.filesystem import FilesystemDestination
 
 logger = logging.getLogger(__name__)
@@ -88,6 +88,7 @@ class DocProcessResult:
     retryable: bool | None
     error_code: str | None
     skipped_existing: bool
+    delivery_receipt: DeliveryReceipt | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,6 +98,31 @@ class RunStats:
     failed: int = 0
     skipped_unsupported: int = 0
     skipped_existing: int = 0
+
+
+def _write_delivery_receipt(out_dir: Path, receipt: DeliveryReceipt) -> None:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "delivery_receipt.json").write_text(
+        json.dumps(asdict(receipt), ensure_ascii=False, indent=2, default=str),
+        encoding="utf-8",
+    )
+
+
+def _bump_delivery_counter(
+    counters: dict[str, dict[str, int]],
+    *,
+    destination: str,
+    ok: bool,
+) -> None:
+    bucket = counters.get(destination)
+    if bucket is None:
+        bucket = {"total": 0, "ok": 0, "failed": 0}
+        counters[destination] = bucket
+    bucket["total"] += 1
+    if ok:
+        bucket["ok"] += 1
+    else:
+        bucket["failed"] += 1
 
 
 def _p95_int(values: list[int]) -> int | None:
@@ -148,6 +174,7 @@ def _process_one(
             retryable=None,
             error_code=None,
             skipped_existing=True,
+            delivery_receipt=None,
         )
 
     # 并发竞争锁 (Write-only)
@@ -171,6 +198,7 @@ def _process_one(
                 retryable=None,
                 error_code=None,
                 skipped_existing=True,
+                delivery_receipt=None,
             )
         t0 = time.perf_counter()
         attempts = 0
@@ -206,6 +234,18 @@ def _process_one(
                     warnings=list(res.warnings),
                     error=None,
                 )
+
+                try:
+                    receipt = destination(out_root=out_root, sha256=sha, meta=meta, result=res)
+                except Exception as de:
+                    receipt = DeliveryReceipt(
+                        destination=destination.name,
+                        ok=False,
+                        details={"exc_type": type(de).__name__, "exc": str(de)},
+                    )
+
+                _write_delivery_receipt(out_dir, receipt)
+
                 # artifacts_writer(out_root=out_root, sha256=sha, meta=meta, result=res)
                 destination(out_root=out_root, sha256=sha, meta=meta, result=res)
                 return DocProcessResult(
@@ -217,6 +257,7 @@ def _process_one(
                     retryable=None,
                     error_code=None,
                     skipped_existing=False,
+                    delivery_receipt=receipt,
                 )
             except ZephyrError as e:
                 duration_ms = int((time.perf_counter() - t0) * 1000)
@@ -248,6 +289,18 @@ def _process_one(
                     metrics=MetricsV1(duration_ms=duration_ms, attempts=attempts),
                     error=ErrorInfoV1(code=e_code, message=e.message, details=merged_details),
                 )
+
+                try:
+                    receipt = destination(out_root=out_root, sha256=sha, meta=meta, result=None)
+                except Exception as de:
+                    receipt = DeliveryReceipt(
+                        destination=destination.name,
+                        ok=False,
+                        details={"exc_type": type(de).__name__, "exc": str(de)},
+                    )
+
+                _write_delivery_receipt(out_dir, receipt)
+
                 # artifacts_writer(out_root=out_root, sha256=sha, meta=meta, result=None)
                 destination(out_root=out_root, sha256=sha, meta=meta, result=None)
                 return DocProcessResult(
@@ -259,6 +312,7 @@ def _process_one(
                     retryable=retryable,
                     error_code=e_code,
                     skipped_existing=False,
+                    delivery_receipt=receipt,
                 )
     finally:
         if lock_acquired:
@@ -281,6 +335,10 @@ def run_documents(
 
     total, success, failed, skipped_unsupported, skipped_existing = 0, 0, 0, 0, 0
 
+    delivery_total, delivery_ok, delivery_failed = 0, 0, 0
+    delivery_by_destination: dict[str, dict[str, int]] = {}
+    fanout_children_by_destination: dict[str, dict[str, int]] = {}
+
     counts_by_extension: dict[str, int] = {}
     counts_by_error_code: dict[str, int] = {}
 
@@ -293,6 +351,7 @@ def run_documents(
     def consume_result(r: DocProcessResult) -> None:
         nonlocal success, failed, skipped_unsupported, skipped_existing
         nonlocal retry_attempts_total, retried_success, retryable_failed
+        nonlocal delivery_total, delivery_ok, delivery_failed
 
         if r.outcome == RunOutcome.SUCCESS:
             success += 1
@@ -321,6 +380,50 @@ def run_documents(
                 retry_attempts_total += r.attempts - 1
             if r.retryable:
                 retryable_failed += 1
+
+        if r.delivery_receipt is None:
+            return
+
+        delivery_total += 1
+        if r.delivery_receipt.ok:
+            delivery_ok += 1
+        else:
+            delivery_failed += 1
+
+        _bump_delivery_counter(
+            delivery_by_destination,
+            destination=r.delivery_receipt.destination,
+            ok=r.delivery_receipt.ok,
+        )
+
+        details_obj: object = r.delivery_receipt.details
+
+        # 深入统计 fanout 内部情况
+        if r.delivery_receipt.destination == "fanout" and isinstance(details_obj, dict):
+            # 2. 只有确认是字典后，再尝试获取 receipts 列表
+            receipts_obj: object = details_obj.get("receipts")
+
+            if isinstance(receipts_obj, list):
+                typed_receipts = cast("list[object]", receipts_obj)
+
+                # 3. 迭代列表中的每一个项
+                for item_obj in typed_receipts:
+                    # 4. 必须确认每一项也是字典
+                    if not isinstance(item_obj, dict):
+                        continue
+
+                    # 5. 此时使用 cast 安全转换，Pyright 不再报错
+                    item = cast("dict[str, Any]", item_obj)
+                    d_name = item.get("destination")
+                    d_ok = item.get("ok")
+
+                    # 6. 最终验证字段类型，确保调用 _bump_delivery_counter 时参数合法
+                    if isinstance(d_name, str) and isinstance(d_ok, bool):
+                        _bump_delivery_counter(
+                            fanout_children_by_destination,
+                            destination=d_name,
+                            ok=d_ok,
+                        )
 
     # 执行分支
     if cfg.workers <= 1:
@@ -359,51 +462,6 @@ def run_documents(
             for fut in as_completed(futures):
                 consume_result(fut.result())
 
-    # for d in docs:
-    #     total += 1
-    #     ext = d.extension or Path(d.uri).suffix.lower()
-    #     counts_by_extension[ext] = counts_by_extension.get(ext, 0) + 1
-    #
-    #     r = _process_one(
-    #         doc=d,
-    #         cfg=cfg,
-    #         ctx=ctx,
-    #         out_root=out_root,
-    #         partition_fn=partition_fn,
-    #         artifacts_writer=artifacts_writer,
-    #     )
-    #
-    #     if r.outcome == RunOutcome.SUCCESS:
-    #         success += 1
-    #         if r.duration_ms is not None:
-    #             durations_ms_list.append(r.duration_ms)
-    #         if r.attempts > 1:
-    #             retry_attempts_total += r.attempts - 1
-    #             retried_success += 1
-    #
-    #     elif r.outcome == RunOutcome.SKIPPED_EXISTING:
-    #         skipped_existing += 1
-    #
-    #     elif r.outcome == RunOutcome.SKIPPED_UNSUPPORTED:
-    #         skipped_unsupported += 1
-    #         if r.duration_ms is not None:
-    #             durations_ms_list.append(r.duration_ms)
-    #         if r.error_code is not None:
-    #             counts_by_error_code[r.error_code] = counts_by_error_code.get(r.error_code, 0) + 1
-    #         if r.attempts > 1:
-    #             retry_attempts_total += r.attempts - 1
-    #
-    #     else:  # FAILED
-    #         failed += 1
-    #         if r.duration_ms is not None:
-    #             durations_ms_list.append(r.duration_ms)
-    #         if r.error_code is not None:
-    #             counts_by_error_code[r.error_code] = counts_by_error_code.get(r.error_code, 0) + 1
-    #         if r.attempts > 1:
-    #             retry_attempts_total += r.attempts - 1
-    #         if r.retryable:
-    #             retryable_failed += 1
-
     stats = RunStats(
         total=total,
         success=success,
@@ -423,6 +481,13 @@ def run_documents(
             "failed": stats.failed,
             "skipped_unsupported": stats.skipped_unsupported,
             "skipped_existing": stats.skipped_existing,
+        },
+        "delivery": {
+            "total": delivery_total,
+            "ok": delivery_ok,
+            "failed": delivery_failed,
+            "by_destination": delivery_by_destination,
+            "fanout_children_by_destination": fanout_children_by_destination,
         },
         "counts_by_extension": counts_by_extension,
         "counts_by_error_code": counts_by_error_code,

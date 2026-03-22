@@ -57,32 +57,11 @@ def test_runner_writes_batch_report(tmp_path: Path) -> None:
             warnings=[],
         )
 
-    calls: list[tuple[str, RunMetaV1, bool]] = []
+    class MockDestination:
+        name = "fake_report_dest"  # 显式提供协议要求的属性
 
-    # def fake_writer(
-    #     *, out_root: Path, sha256: str, meta: RunMetaV1, result: PartitionResult | None = None
-    # ) -> Path:
-    #     calls.append((sha256, meta, result is not None))
-    #     d = out_root / sha256
-    #     d.mkdir(parents=True, exist_ok=True)
-    #     (d / "run_meta.json").write_text("{}", encoding="utf-8")
-    #     return d
-    #
-
-    out_root = tmp_path / "out"
-    cfg = RunnerConfig(out_root=out_root, strategy=PartitionStrategy.AUTO)
-    ctx = RunContext.new(pipeline_version="p1", timestamp_utc="2026-03-19T00:00:00Z", run_id="r1")
-
-    # stats = run_documents(
-    #     docs=docs,
-    #     cfg=cfg,
-    #     ctx=ctx,
-    #     partition_fn=fake_partition_fn,
-    #     artifacts_writer=fake_writer,
-    # )
-
-    class MockDest:
-        name = "mock"
+        def __init__(self, calls_list: list[Any]) -> None:
+            self.calls = calls_list
 
         def __call__(
             self,
@@ -92,21 +71,36 @@ def test_runner_writes_batch_report(tmp_path: Path) -> None:
             meta: RunMetaV1,
             result: PartitionResult | None = None,
         ) -> DeliveryReceipt:
-            calls.append((sha256, meta, result is not None))
-            # 模拟落盘
+            # 记录调用信息
+            self.calls.append((sha256, meta, result is not None))
+
+            # 模拟文件写入
             d = out_root / sha256
             d.mkdir(parents=True, exist_ok=True)
             (d / "run_meta.json").write_text("{}", encoding="utf-8")
-            return DeliveryReceipt(destination=self.name, ok=True)
 
-    dest_instance = MockDest()
+            return DeliveryReceipt(destination=self.name, ok=True, details={"out_dir": str(d)})
+
+    # calls: list[tuple[str, RunMetaV1, bool]] = []
+
+    # 1. 核心记录器
+    calls: list[Any] = []
+
+    dest_instance = MockDestination(calls)
+
+    # # 注入 Protocol 要求的属性
+    # cast(Any, dest_instance).name = "fake_report_dest"
+
+    out_root = tmp_path / "out"
+    cfg = RunnerConfig(out_root=out_root, strategy=PartitionStrategy.AUTO)
+    ctx = RunContext.new(pipeline_version="p1", timestamp_utc="2026-03-19T00:00:00Z", run_id="r1")
 
     stats = run_documents(
         docs=docs,
         cfg=cfg,
         ctx=ctx,
         partition_fn=fake_partition_fn,
-        destination=dest_instance,
+        destination=dest_instance,  # 使用新的参数名
     )
 
     assert stats.total == 1
