@@ -73,9 +73,32 @@ class WebhookDestination:
             },
         }
 
+        # 2. 构造幂等键
+        idempotency_key = f"{sha256}:{meta.run_id}"
+
+        # 3. 委派给通用的 post_payload 方法
+        return self.post_payload(payload=payload, idempotency_key=idempotency_key)
+
+    def post_payload(
+        self,
+        *,
+        payload: dict[str, Any],
+        idempotency_key: str | None = None,
+    ) -> DeliveryReceipt:
+        """支持自定义 Payload 的投递方法，复用重试机制。"""
         headers = dict(self.headers)
-        if self.send_idempotency_key:
-            headers.setdefault("Idempotency-Key", f"{sha256}:{meta.run_id}")
+        if self.send_idempotency_key and idempotency_key:
+            headers.setdefault("Idempotency-Key", idempotency_key)
+
+        content = json.dumps(payload, ensure_ascii=False)
+        return self._post_with_retry(headers=headers, content=content)
+
+    def _post_with_retry(
+        self,
+        *,
+        headers: dict[str, str],
+        content: str,
+    ) -> DeliveryReceipt:
 
         attempts = 0
         last_status: int | None = None
@@ -91,7 +114,7 @@ class WebhookDestination:
                     resp = client.post(
                         self.url,
                         headers=headers,
-                        content=json.dumps(payload, ensure_ascii=False),
+                        content=content,
                     )
                     last_status = resp.status_code
                     last_text = resp.text[:500]
