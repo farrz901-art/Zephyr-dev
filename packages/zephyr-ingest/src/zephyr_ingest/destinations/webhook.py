@@ -4,7 +4,7 @@ import json
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 import httpx
 
@@ -84,7 +84,7 @@ class WebhookDestination:
     def post_payload(
         self,
         *,
-        payload: dict[str, Any],
+        payload: Mapping[str, Any],
         idempotency_key: str | None = None,
     ) -> DeliveryReceipt:
         """支持自定义 Payload 的投递方法，复用重试机制。"""
