@@ -12,3 +12,5 @@ wheels/
 packages/uns-stream/src/uns_stream/tests/fixtures/*
 
 .cache/
+
+.env

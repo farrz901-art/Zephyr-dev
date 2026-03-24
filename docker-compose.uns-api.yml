@@ -7,5 +7,5 @@ services:
     environment:
       - PORT=8000
       # 启用 API key 校验（启用后你必须在 CLI 里传 --uns-api-key）
-      - UNSTRUCTURED_API_KEY=zephyr-114514
+      - UNSTRUCTURED_API_KEY=${UNS_API_KEY}
     restart: unless-stopped
