@@ -1,0 +1,11 @@
+services:
+  uns-api:
+    image: downloads.unstructured.io/unstructured-io/unstructured-api:latest
+    container_name: uns-api
+    ports:
+      - "8001:8000"
+    environment:
+      - PORT=8000
+      # 启用 API key 校验（启用后你必须在 CLI 里传 --uns-api-key）
+      - UNSTRUCTURED_API_KEY=zephyr-114514
+    restart: unless-stopped

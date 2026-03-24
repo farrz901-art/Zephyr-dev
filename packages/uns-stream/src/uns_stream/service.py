@@ -144,7 +144,7 @@ def partition_file(
 
     duration_ms = int((time.perf_counter() - t0) * 1000)
     logger.info(
-        "partition_done file=%s kind=%s strategy=%s engine=%s"
+        "partition_done file=%s kind=%s strategy=%s engine=%s "
         "backend=%s ms=%s elements=%s text_len=%s",
         p.name,
         kind,
