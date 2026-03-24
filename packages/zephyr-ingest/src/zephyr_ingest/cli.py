@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
+from uns_stream.backends.http_uns_api import HttpUnsApiBackend
 from zephyr_core import RunContext
 from zephyr_core.contracts.v1.document_ref import DocumentRef
 from zephyr_core.contracts.v1.enums import PartitionStrategy
@@ -27,6 +28,10 @@ class RunCmd:
     glob: str
     out: str
     strategy: str
+    backend: str
+    uns_api_url: str
+    uns_api_key: str | None
+    uns_api_timeout_s: float
     skip_unsupported: bool
     skip_existing: bool
     force: bool
@@ -71,6 +76,12 @@ def _build_parser() -> argparse.ArgumentParser:
         choices=["auto", "fast", "hi_res", "ocr_only"],
         help="Partition strategy (mainly for pdf/image)",
     )
+
+    run.add_argument("--backend", default="local", choices=["local", "uns-api"])
+    run.add_argument("--uns-api-url", default="http://localhost:8001/general/v0/general")
+    run.add_argument("--uns-api-key", default=None)
+    run.add_argument("--uns-api-timeout-s", type=float, default=60.0)
+
     run.add_argument("--skip-unsupported", action="store_true", default=True)
     run.add_argument("--skip-existing", action="store_true", default=True)
     run.add_argument("--no-skip-existing", dest="skip_existing", action="store_false")
@@ -158,6 +169,10 @@ def _parse_cmd(argv: Sequence[str]) -> RunCmd | ReplayDeliveryCmd:
             glob=str(ns.glob),
             out=str(ns.out),
             strategy=str(ns.strategy),
+            backend=str(ns.backend),
+            uns_api_url=str(ns.uns_api_url),
+            uns_api_key=ns.uns_api_key if ns.uns_api_key is None else str(ns.uns_api_key),
+            uns_api_timeout_s=float(ns.uns_api_timeout_s),
             skip_unsupported=bool(ns.skip_unsupported),
             skip_existing=bool(ns.skip_existing),
             force=bool(ns.force),
@@ -225,6 +240,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             src = LocalFileSource(path=Path(p_str), glob=cmd.glob)
             all_docs.extend(list(src.iter_documents()))
 
+        backend_obj: object | None = None
+        if cmd.backend == "uns-api":
+            backend_obj = HttpUnsApiBackend(
+                url=cmd.uns_api_url,
+                api_key=cmd.uns_api_key,
+                timeout_s=cmd.uns_api_timeout_s,
+                transport=None,
+            )
+
         cfg = RunnerConfig(
             out_root=Path(cmd.out),
             strategy=PartitionStrategy(cmd.strategy),
@@ -240,6 +264,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             ),
             workers=cmd.workers,
             destination=dest,
+            backend=backend_obj,
         )
 
         run_documents(docs=all_docs, cfg=cfg, ctx=ctx, destination=dest)

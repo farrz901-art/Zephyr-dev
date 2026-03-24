@@ -71,6 +71,7 @@ class RunnerConfig:
     out_root: Path
     strategy: PartitionStrategy = PartitionStrategy.AUTO
     unique_element_ids: bool = True
+    backend: object | None = None
     skip_unsupported: bool = True
     skip_existing: bool = True
     force: bool = False
@@ -214,6 +215,7 @@ def _process_one(
                     filename=str(p),
                     strategy=cfg.strategy,
                     unique_element_ids=cfg.unique_element_ids,
+                    backend=cfg.backend,
                 )
                 duration_ms = int((time.perf_counter() - t0) * 1000)
                 meta = RunMetaV1(
