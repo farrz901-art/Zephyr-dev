@@ -9,6 +9,7 @@ from typing import Any
 import httpx
 
 from zephyr_core import PartitionResult, RunMetaV1
+from zephyr_ingest._internal.delivery_payload import build_delivery_payload_v1
 from zephyr_ingest.destinations.base import DeliveryReceipt
 
 
@@ -61,17 +62,18 @@ class WebhookDestination:
         meta: RunMetaV1,
         result: PartitionResult | None = None,
     ) -> DeliveryReceipt:
-        payload: dict[str, Any] = {
-            "sha256": sha256,
-            "run_meta": meta.to_dict(),
-            # 给下游一个“拉取本地产物”的提示（下游可忽略）
-            "artifacts": {
-                "out_dir": str((out_root / sha256).resolve()),
-                "run_meta_path": str((out_root / sha256 / "run_meta.json").resolve()),
-                "elements_path": str((out_root / sha256 / "elements.json").resolve()),
-                "normalized_path": str((out_root / sha256 / "normalized.txt").resolve()),
-            },
-        }
+        # payload: dict[str, Any] = {
+        #     "sha256": sha256,
+        #     "run_meta": meta.to_dict(),
+        #     # 给下游一个“拉取本地产物”的提示（下游可忽略）
+        #     "artifacts": {
+        #         "out_dir": str((out_root / sha256).resolve()),
+        #         "run_meta_path": str((out_root / sha256 / "run_meta.json").resolve()),
+        #         "elements_path": str((out_root / sha256 / "elements.json").resolve()),
+        #         "normalized_path": str((out_root / sha256 / "normalized.txt").resolve()),
+        #     },
+        # }
+        payload = build_delivery_payload_v1(out_root=out_root, sha256=sha256, meta=meta)
 
         # 2. 构造幂等键
         idempotency_key = f"{sha256}:{meta.run_id}"
