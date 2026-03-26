@@ -44,6 +44,7 @@ class RunCmd:
     base_backoff_ms: int
     max_backoff_ms: int
     workers: int
+    stale_lock_ttl_s: int | None
     destination: str
     webhook_url: str | None
     webhook_timeout_s: float
@@ -104,6 +105,13 @@ def _build_parser() -> argparse.ArgumentParser:
         "--workers", type=int, default=1, help="Number of concurrent workers (default: 1)"
     )
 
+    run.add_argument(
+        "--stale-lock-ttl-s",
+        type=float,
+        default=None,
+        help="TTL in seconds to break stale file locks (default: None, disabled)",
+    )
+
     run.add_argument("--destination", default="filesystem", choices=["filesystem"])
 
     run.add_argument("--webhook-url", default=None, help="Optional HTTP Webhook URL")
@@ -124,39 +132,6 @@ def _build_parser() -> argparse.ArgumentParser:
     replay.add_argument("--no-move-done", dest="move_done", action="store_false", default=True)
 
     return p
-
-
-# def _parse_run_cmd(argv: Sequence[str]) -> RunCmd:
-#     p = _build_parser()
-#     ns = p.parse_args(list(argv))
-#
-#     # ns is argparse.Namespace; in pyright strict we convert to typed RunCmd
-#     if ns.cmd != "run":
-#         raise SystemExit("Unsupported command")
-#
-#     return RunCmd(
-#         path=str(ns.path),
-#         glob=str(ns.glob),
-#         out=str(ns.out),
-#         strategy=str(ns.strategy),
-#         skip_unsupported=bool(ns.skip_unsupported),
-#         skip_existing=bool(ns.skip_existing),
-#         force=bool(ns.force),
-#         unique_element_ids=bool(ns.unique_element_ids),
-#         pipeline_version=ns.pipeline_version
-#         if ns.pipeline_version is None
-#         else str(ns.pipeline_version),
-#         run_id=ns.run_id if ns.run_id is None else str(ns.run_id),
-#         timestamp_utc=ns.timestamp_utc if ns.timestamp_utc is None else str(ns.timestamp_utc),
-#         retry_enabled=bool(ns.retry_enabled),
-#         max_attempts=int(ns.max_attempts),
-#         base_backoff_ms=int(ns.base_backoff_ms),
-#         max_backoff_ms=int(ns.max_backoff_ms),
-#         workers=int(ns.workers),
-#         destination=str(ns.destination),
-#         webhook_url=None if ns.webhook_url is None else str(ns.webhook_url),
-#         webhook_timeout_s=float(ns.webhook_timeout_s)
-#     )
 
 
 def _parse_cmd(argv: Sequence[str]) -> RunCmd | ReplayDeliveryCmd:
@@ -187,6 +162,7 @@ def _parse_cmd(argv: Sequence[str]) -> RunCmd | ReplayDeliveryCmd:
             base_backoff_ms=int(ns.base_backoff_ms),
             max_backoff_ms=int(ns.max_backoff_ms),
             workers=int(ns.workers),
+            stale_lock_ttl_s=None if ns.stale_lock_ttl_s is None else int(ns.stale_lock_ttl_s),
             destination=str(ns.destination),
             webhook_url=None if ns.webhook_url is None else str(ns.webhook_url),
             webhook_timeout_s=float(ns.webhook_timeout_s),
@@ -263,6 +239,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 max_backoff_ms=cmd.max_backoff_ms,
             ),
             workers=cmd.workers,
+            stale_lock_ttl_s=cmd.stale_lock_ttl_s,
             destination=dest,
             backend=backend_obj,
         )

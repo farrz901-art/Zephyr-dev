@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import time
@@ -78,6 +79,8 @@ class RunnerConfig:
     retry: RetryConfig = field(default_factory=_default_retry)
     workers: int = 1  # 默认单线程，保持行为稳定
     destination: Destination | None = None
+    # If set, treat a lock file older than TTL seconds as stale and break it.
+    stale_lock_ttl_s: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -192,19 +195,65 @@ def _process_one(
                 f.write(ctx.run_id)
             lock_acquired = True
         except FileExistsError:
+            ttl = cfg.stale_lock_ttl_s
+            if ttl is not None:
+                try:
+                    # 检查文件修改时间
+                    stat = lock_path.stat()
+                    age_s = time.time() - stat.st_mtime
+
+                    if age_s >= ttl:
+                        # 尝试读取原持有者 ID 用于日志审计
+                        owner = None
+                        try:
+                            with contextlib.suppress(Exception):
+                                owner = lock_path.read_text(encoding="utf-8").strip() or None
+                        except Exception:
+                            pass
+
+                        logger.warning(
+                            "stale_lock_detected_and_removing "
+                            "sha=%s age_s=%s owner_run_id=%s path=%s",
+                            sha,
+                            int(age_s),
+                            owner,
+                            str(lock_path),
+                        )
+
+                        # 强制删除并尝试重新获取
+                        lock_path.unlink(missing_ok=True)
+                        try:
+                            with lock_path.open("x", encoding="utf-8") as f:
+                                f.write(ctx.run_id)
+                            lock_acquired = True
+                        except FileExistsError:
+                            # 如果此时又被别的线程抢走了，老老实实跳过
+                            pass
+                except FileNotFoundError:
+                    # 竞态：锁在 stat() 或 unlink() 期间被原持有者正常释放了
+                    try:
+                        with lock_path.open("x", encoding="utf-8") as f:
+                            f.write(ctx.run_id)
+                        lock_acquired = True
+                    except FileExistsError:
+                        pass
+                except Exception as e:
+                    logger.error("failed_to_handle_stale_lock sha=%s exc=%s", sha, str(e))
+
             # 另一个线程正在处理相同内容
-            return DocProcessResult(
-                sha256=sha,
-                extension=ext,
-                outcome=RunOutcome.SKIPPED_EXISTING,
-                duration_ms=None,
-                attempts=0,
-                retryable=None,
-                error_code=None,
-                skipped_existing=True,
-                delivery_receipt=None,
-                dlq_written=False,
-            )
+            if not lock_acquired:
+                return DocProcessResult(
+                    sha256=sha,
+                    extension=ext,
+                    outcome=RunOutcome.SKIPPED_EXISTING,
+                    duration_ms=None,
+                    attempts=0,
+                    retryable=None,
+                    error_code=None,
+                    skipped_existing=True,
+                    delivery_receipt=None,
+                    dlq_written=False,
+                )
         t0 = time.perf_counter()
         attempts = 0
 

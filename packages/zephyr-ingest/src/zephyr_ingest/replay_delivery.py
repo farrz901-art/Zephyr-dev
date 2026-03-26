@@ -7,6 +7,10 @@ from typing import Any, cast
 
 import httpx
 
+from zephyr_ingest._internal.delivery_payload import (
+    DeliveryPayloadV1,
+    build_delivery_payload_v1_from_run_meta_dict,
+)
 from zephyr_ingest.destinations.webhook import WebhookDestination
 
 
@@ -62,27 +66,35 @@ def replay_delivery_dlq(
 
         sha256 = rec.get("sha256")
         run_id = rec.get("run_id")
-        run_meta = rec.get("run_meta")
+        run_meta_raw = rec.get("run_meta")
 
         if (
             not isinstance(sha256, str)
             or not isinstance(run_id, str)
-            or not isinstance(run_meta, dict)
+            or not isinstance(run_meta_raw, dict)
         ):
             # invalid record, keep it (treat as failed)
             failed += 1
             continue
 
-        payload: dict[str, Any] = {
-            "sha256": sha256,
-            "run_meta": run_meta,
-            "artifacts": {
-                "out_dir": str((out_root / sha256).resolve()),
-                "run_meta_path": str((out_root / sha256 / "run_meta.json").resolve()),
-                "elements_path": str((out_root / sha256 / "elements.json").resolve()),
-                "normalized_path": str((out_root / sha256 / "normalized.txt").resolve()),
-            },
-        }
+        run_meta = cast("dict[str, Any]", run_meta_raw)
+
+        # payload: dict[str, Any] = {
+        #     "sha256": sha256,
+        #     "run_meta": run_meta,
+        #     "artifacts": {
+        #         "out_dir": str((out_root / sha256).resolve()),
+        #         "run_meta_path": str((out_root / sha256 / "run_meta.json").resolve()),
+        #         "elements_path": str((out_root / sha256 / "elements.json").resolve()),
+        #         "normalized_path": str((out_root / sha256 / "normalized.txt").resolve()),
+        #     },
+        # }
+
+        payload: DeliveryPayloadV1 = build_delivery_payload_v1_from_run_meta_dict(
+            out_root=out_root,
+            sha256=sha256,
+            run_meta=run_meta,
+        )
 
         if dry_run:
             continue

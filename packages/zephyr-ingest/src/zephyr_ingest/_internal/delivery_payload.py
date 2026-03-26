@@ -13,6 +13,16 @@ class ArtifactsPathsV1(TypedDict):
     normalized_path: str
 
 
+def build_artifacts_paths_v1(*, out_root: Path, sha256: str) -> ArtifactsPathsV1:
+    out_dir = (out_root / sha256).resolve()
+    return {
+        "out_dir": str(out_dir),
+        "run_meta_path": str((out_dir / "run_meta.json").resolve()),
+        "elements_path": str((out_dir / "elements.json").resolve()),
+        "normalized_path": str((out_dir / "normalized.txt").resolve()),
+    }
+
+
 class DeliveryPayloadV1(TypedDict):
     schema_version: int
     sha256: str
@@ -29,17 +39,33 @@ def build_delivery_payload_v1(
     sha256: str,
     meta: RunMetaV1,
 ) -> DeliveryPayloadV1:
-    out_dir = (out_root / sha256).resolve()
+    # out_dir = (out_root / sha256).resolve()
 
     payload: DeliveryPayloadV1 = {
         "schema_version": DELIVERY_PAYLOAD_SCHEMA_VERSION,
         "sha256": sha256,
         "run_meta": meta.to_dict(),
-        "artifacts": {
-            "out_dir": str(out_dir),
-            "run_meta_path": str((out_dir / "run_meta.json").resolve()),
-            "elements_path": str((out_dir / "elements.json").resolve()),
-            "normalized_path": str((out_dir / "normalized.txt").resolve()),
-        },
+        # "artifacts": {
+        #     "out_dir": str(out_dir),
+        #     "run_meta_path": str((out_dir / "run_meta.json").resolve()),
+        #     "elements_path": str((out_dir / "elements.json").resolve()),
+        #     "normalized_path": str((out_dir / "normalized.txt").resolve()),
+        # },
+        "artifacts": build_artifacts_paths_v1(out_root=out_root, sha256=sha256),
+    }
+    return payload
+
+
+def build_delivery_payload_v1_from_run_meta_dict(
+    *,
+    out_root: Path,
+    sha256: str,
+    run_meta: dict[str, Any],
+) -> DeliveryPayloadV1:
+    payload: DeliveryPayloadV1 = {
+        "schema_version": DELIVERY_PAYLOAD_SCHEMA_VERSION,
+        "sha256": sha256,
+        "run_meta": run_meta,
+        "artifacts": build_artifacts_paths_v1(out_root=out_root, sha256=sha256),
     }
     return payload
