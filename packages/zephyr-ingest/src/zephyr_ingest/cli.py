@@ -107,7 +107,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     run.add_argument(
         "--stale-lock-ttl-s",
-        type=float,
+        type=int,
         default=None,
         help="TTL in seconds to break stale file locks (default: None, disabled)",
     )

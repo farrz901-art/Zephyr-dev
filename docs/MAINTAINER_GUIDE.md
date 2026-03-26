@@ -1,4 +1,4 @@
-# 测试策略/已知隐患与债务（未完成）
+# 测试策略/已知隐患与债务
 
 # Zephyr Maintainer Guide
 (Testing strategy, tech debt, known issues, roadmap)
@@ -129,24 +129,28 @@ for item in items:
 
 >   这一节不是“吐槽清单”，而是为了让后续维护者知道：哪些坑已经被看见、为什么重要、推荐如何修。
 
-### 3.1 `.zephyr.lock` 的“stale lock”问题（高优先级）
 
+### 3.1 .zephyr.lock 的“stale lock”问题（中优先级，部分解决）
 现状：
 
--   每个 `<out>/<sha>/` 下会创建 `.zephyr.lock`（用 `open("x")` 原子创建）
--   如果 lock 已存在，会被当作“另一个线程正在处理”，并直接返回 `SKIPPED_EXISTING`
+[已实现] 自动清理（TTL）：现已支持通过 --stale-lock-ttl-s (CLI) 或 RunnerConfig.stale_lock_ttl_s 配置过期时间。若检测到 st_mtime 超过阈值，Worker 会自动尝试 unlink 并抢锁。
 
-风险：
+[待改进] 语义模糊：目前无论是“处理中被锁”还是“清理过期锁失败”，统一返回 SKIPPED_EXISTING，导致外部难以区分是“已存在结果”还是“并发冲突”。
 
--   进程崩溃/中断时，lock 文件可能残留，导致该 sha 永久被跳过（除非人工清理 out 目录）
--   “被锁”与“已完成”的语义混淆：现在两者都可能表现为 skip
+剩余债务与后续改进：
 
-建议修复路径（按成本从低到高）：
+元信息增强：目前 lock 文件仅写入 run_id。建议增加 timestamp、pid 和 hostname，以支持更精准的 stale 判定（目前仅依赖文件系统的 mtime）。
 
-1.  lock 文件写入更多元信息：run_id + timestamp + pid + hostname
-2.  增加 TTL：如果 lock 超过阈值（例如 1h）则视为 stale 并允许抢锁/覆盖（需记录审计日志）
-3.  将 outcome 区分开：`SKIPPED_LOCKED` vs `SKIPPED_EXISTING`
-4.  更严谨的跨进程锁：使用文件锁库（或平台原语），并在异常路径确保释放
+明确 Outcome：引入 RunOutcome.SKIPPED_LOCKED 显式枚举，以区分“已存在”与“竞争中”。这涉及 core contract 变更，需谨慎评估。
+
+健壮性：在极其高并发的分布式文件系统（如 NFS/SMB）上，open("x") 后的 unlink 抢锁逻辑仍存在微小理论竞态，长期看可能需要 portalocker 等跨平台锁库。
+
+修改建议说明：
+优先级下调：从“高”改为“中”，因为最头疼的“永久死锁”问题已经通过 TTL 补丁解决了。
+
+状态标注：明确标注哪些是“已实现”，哪些是“待改进”，这对 AI 跨 Session 协作非常友好。
+
+技术细节同步：提到了目前仅依赖 mtime，这提醒了维护者如果文件系统时间戳不准，可能会有潜在问题。
 
 ------
 
