@@ -13,6 +13,11 @@ dependencies = [
     "zephyr-core",
 ]
 
+[project.optional-dependencies]
+kafka = [
+    "confluent-kafka>=2.3.0",
+]
+
 [project.scripts]
 zephyr-ingest = "zephyr_ingest.cli:main"
 

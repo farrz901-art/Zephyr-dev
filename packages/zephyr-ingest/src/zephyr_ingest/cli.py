@@ -13,7 +13,6 @@ from zephyr_core.contracts.v1.document_ref import DocumentRef
 from zephyr_core.contracts.v1.enums import PartitionStrategy
 from zephyr_core.versioning import PIPELINE_VERSION
 from zephyr_ingest.destinations.base import Destination
-from zephyr_ingest.destinations.fanout import FanoutDestination
 from zephyr_ingest.destinations.filesystem import FilesystemDestination
 from zephyr_ingest.destinations.webhook import WebhookDestination
 from zephyr_ingest.replay_delivery import replay_delivery_dlq
@@ -48,6 +47,9 @@ class RunCmd:
     destination: str
     webhook_url: str | None
     webhook_timeout_s: float
+    kafka_topic: str | None
+    kafka_brokers: str | None
+    kafka_flush_timeout_s: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -119,6 +121,26 @@ def _build_parser() -> argparse.ArgumentParser:
         "--webhook-timeout-s", type=float, default=10.0, help="Webhook timeout in seconds"
     )
 
+    run.add_argument(
+        "--kafka-topic",
+        type=str,
+        default=None,
+        help="Kafka topic name (optional; requires --kafka-brokers)",
+    )
+    run.add_argument(
+        "--kafka-brokers",
+        type=str,
+        default=None,
+        help="Kafka broker addresses, comma-separated (e.g. localhost:9092)",
+    )
+
+    run.add_argument(
+        "--kafka-flush-timeout-s",
+        type=float,
+        default=10.0,
+        help="Kafka producer flush timeout in seconds",
+    )
+
     replay = sub.add_parser("replay-delivery", help="Replay failed delivery DLQ records")
     replay.add_argument(
         "--out", default=".cache/out", help="Output root directory containing _dlq/"
@@ -166,6 +188,9 @@ def _parse_cmd(argv: Sequence[str]) -> RunCmd | ReplayDeliveryCmd:
             destination=str(ns.destination),
             webhook_url=None if ns.webhook_url is None else str(ns.webhook_url),
             webhook_timeout_s=float(ns.webhook_timeout_s),
+            kafka_topic=ns.kafka_topic,
+            kafka_brokers=ns.kafka_brokers,
+            kafka_flush_timeout_s=ns.kafka_flush_timeout_s,
         )
 
     if ns.cmd == "replay-delivery":
@@ -181,6 +206,20 @@ def _parse_cmd(argv: Sequence[str]) -> RunCmd | ReplayDeliveryCmd:
     raise SystemExit("Unsupported command")
 
 
+def _make_kafka_producer_or_exit(brokers: str):
+    """Create real Kafka producer; exit with error if extra not installed."""
+    try:
+        from zephyr_ingest._internal.kafka_producer import make_kafka_producer
+
+        return make_kafka_producer(brokers=brokers)
+    except ImportError as e:
+        logging.error("Kafka extra not installed: %s", e)
+        logging.error("Install with: uv pip install zephyr-ingest[kafka]")
+        import sys
+
+        sys.exit(1)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s - %(message)s"
@@ -191,12 +230,45 @@ def main(argv: Sequence[str] | None = None) -> int:
     cmd = _parse_cmd(argv)
 
     if isinstance(cmd, RunCmd):
+        # fs = FilesystemDestination()
+        # dest: Destination
+
+        dests: list[Destination] = []
+
+        # 1. 默认包含文件系统（契约要求： artifacts 必须本地落盘）
         fs = FilesystemDestination()
-        dest: Destination
+        dests.append(fs)
         if cmd.webhook_url:
-            wh = WebhookDestination(url=cmd.webhook_url, timeout_s=cmd.webhook_timeout_s)
-            # 自动开启分叉：本地存储 + Webhook 发送
-            dest = FanoutDestination(destinations=(fs, wh))
+            # wh = WebhookDestination(url=cmd.webhook_url, timeout_s=cmd.webhook_timeout_s)
+            # # 自动开启分叉：本地存储 + Webhook 发送
+            # dest = FanoutDestination(destinations=(fs, wh))
+            if cmd.webhook_url:
+                dests.append(
+                    WebhookDestination(url=cmd.webhook_url, timeout_s=cmd.webhook_timeout_s)
+                )
+            if cmd.kafka_topic and cmd.kafka_brokers:
+                from zephyr_ingest.destinations.kafka import KafkaDestination
+
+                producer = _make_kafka_producer_or_exit(cmd.kafka_brokers)
+                kafka_dest = KafkaDestination(
+                    topic=cmd.kafka_topic,
+                    producer=producer,
+                    flush_timeout_s=cmd.kafka_flush_timeout_s,
+                )
+
+                dests.append(kafka_dest)
+            elif cmd.kafka_topic or cmd.kafka_brokers:
+                # 健壮性检查：必须成对出现
+                logging.error("Both --kafka-topic and --kafka-brokers must be specified together")
+                return 1
+
+            if len(dests) == 1:
+                dest = dests[0]
+            else:
+                from zephyr_ingest.destinations.fanout import FanoutDestination
+
+                dest = FanoutDestination(destinations=tuple(dests))
+
         else:
             dest = fs
 
