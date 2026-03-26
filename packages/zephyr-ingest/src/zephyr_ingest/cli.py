@@ -238,39 +238,36 @@ def main(argv: Sequence[str] | None = None) -> int:
         # 1. 默认包含文件系统（契约要求： artifacts 必须本地落盘）
         fs = FilesystemDestination()
         dests.append(fs)
+        # wh = WebhookDestination(url=cmd.webhook_url, timeout_s=cmd.webhook_timeout_s)
+        # # 自动开启分叉：本地存储 + Webhook 发送
+        # dest = FanoutDestination(destinations=(fs, wh))
         if cmd.webhook_url:
-            # wh = WebhookDestination(url=cmd.webhook_url, timeout_s=cmd.webhook_timeout_s)
-            # # 自动开启分叉：本地存储 + Webhook 发送
-            # dest = FanoutDestination(destinations=(fs, wh))
-            if cmd.webhook_url:
-                dests.append(
-                    WebhookDestination(url=cmd.webhook_url, timeout_s=cmd.webhook_timeout_s)
-                )
-            if cmd.kafka_topic and cmd.kafka_brokers:
-                from zephyr_ingest.destinations.kafka import KafkaDestination
+            dests.append(WebhookDestination(url=cmd.webhook_url, timeout_s=cmd.webhook_timeout_s))
+        if cmd.kafka_topic and cmd.kafka_brokers:
+            from zephyr_ingest.destinations.kafka import KafkaDestination
 
-                producer = _make_kafka_producer_or_exit(cmd.kafka_brokers)
-                kafka_dest = KafkaDestination(
-                    topic=cmd.kafka_topic,
-                    producer=producer,
-                    flush_timeout_s=cmd.kafka_flush_timeout_s,
-                )
+            producer = _make_kafka_producer_or_exit(cmd.kafka_brokers)
+            kafka_dest = KafkaDestination(
+                topic=cmd.kafka_topic,
+                producer=producer,
+                flush_timeout_s=cmd.kafka_flush_timeout_s,
+            )
 
-                dests.append(kafka_dest)
-            elif cmd.kafka_topic or cmd.kafka_brokers:
-                # 健壮性检查：必须成对出现
-                logging.error("Both --kafka-topic and --kafka-brokers must be specified together")
-                return 1
+            dests.append(kafka_dest)
+        elif cmd.kafka_topic or cmd.kafka_brokers:
+            # 健壮性检查：必须成对出现
+            logging.error("Both --kafka-topic and --kafka-brokers must be specified together")
+            return 1
 
-            if len(dests) == 1:
-                dest = dests[0]
-            else:
-                from zephyr_ingest.destinations.fanout import FanoutDestination
-
-                dest = FanoutDestination(destinations=tuple(dests))
-
+        if len(dests) == 1:
+            dest = dests[0]
         else:
-            dest = fs
+            from zephyr_ingest.destinations.fanout import FanoutDestination
+
+            dest = FanoutDestination(destinations=tuple(dests))
+
+        # else:
+        #     dest = fs
 
         ctx = RunContext.new(
             pipeline_version=cmd.pipeline_version or PIPELINE_VERSION,

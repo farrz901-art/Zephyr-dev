@@ -23,7 +23,7 @@ def make_kafka_producer(
     Raises ImportError if kafka extra not installed.
     """
     try:
-        from confluent_kafka import Producer  # type: ignore
+        from confluent_kafka import Producer
     except ImportError as e:
         raise ImportError(
             "Kafka client not available. Install with: uv pip install zephyr-ingest[kafka]"
