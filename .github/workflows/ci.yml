@@ -25,7 +25,7 @@ jobs:
         run: uv python install ${{ env.PYTHON_VERSION }}
 
       - name: Install deps
-        run: uv sync --locked --all-groups --all-packages
+        run: uv sync --locked --all-groups --all-packages --all-extras
 
       - name: Lint & Typecheck
         run: make check
