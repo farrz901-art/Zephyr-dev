@@ -5,14 +5,18 @@ import logging
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from types import TracebackType  # 导入这个用于处理 tb 参数
-from typing import Any, Sequence, Type
+from typing import Sequence
 
 from uns_stream.backends.http_uns_api import HttpUnsApiBackend
 from zephyr_core import RunContext
 from zephyr_core.contracts.v1.document_ref import DocumentRef
 from zephyr_core.contracts.v1.enums import PartitionStrategy
 from zephyr_core.versioning import PIPELINE_VERSION
+from zephyr_ingest._internal.weaviate_client import (
+    WeaviateClientProtocol,
+    WeaviateConnectParams,
+    connect_weaviate_and_get_collection,
+)
 from zephyr_ingest.destinations.base import Destination
 from zephyr_ingest.destinations.filesystem import FilesystemDestination
 from zephyr_ingest.destinations.webhook import WebhookDestination
@@ -276,49 +280,30 @@ def _make_kafka_producer_or_exit(brokers: str):
         sys.exit(1)
 
 
-def _make_stub_weaviate_collection(*, reason: str):
-    """
-    Commit 2 only: we do NOT depend on weaviate-client yet.
-    This stub satisfies WeaviateCollectionProtocol for pyright strict,
-    but will fail at runtime (and thus produce DLQ records) if used.
-    """
-    from contextlib import AbstractContextManager
-
-    from zephyr_ingest.destinations.weaviate import (
-        WeaviateBatchManagerProtocol,
-        WeaviateBatchProtocol,
-    )
-
-    class _StubBatch:
-        number_errors: int = 0
-
-        def add_object(self, properties: dict[str, Any], uuid: str | None = None) -> str:
-            raise RuntimeError(reason)
-
-    class _StubBatchCtx(AbstractContextManager[WeaviateBatchProtocol]):
-        def __enter__(self) -> WeaviateBatchProtocol:
-            return _StubBatch()
-
-        def __exit__(
-            self,
-            exc_type: Type[BaseException] | None,
-            exc: BaseException | None,
-            tb: TracebackType | None,
-        ) -> bool | None:
-            return None
-
-    class _StubBatchManager:
-        failed_objects: list[Any] = []
-
-        def dynamic(self) -> AbstractContextManager[WeaviateBatchProtocol]:
-            return _StubBatchCtx()
-
-    class _StubCollection:
-        @property
-        def batch(self) -> WeaviateBatchManagerProtocol:
-            return _StubBatchManager()
-
-    return _StubCollection()
+def _make_weaviate_collection_or_exit(*, cmd: RunCmd) -> tuple[WeaviateClientProtocol, object]:
+    try:
+        params = WeaviateConnectParams(
+            http_host=cmd.weaviate_http_host,
+            http_port=cmd.weaviate_http_port,
+            http_secure=cmd.weaviate_http_secure,
+            grpc_host=cmd.weaviate_grpc_host,
+            grpc_port=cmd.weaviate_grpc_port,
+            grpc_secure=cmd.weaviate_grpc_secure,
+            api_key=cmd.weaviate_api_key,
+            skip_init_checks=cmd.weaviate_skip_init_checks,
+        )
+        client, collection = connect_weaviate_and_get_collection(
+            params=params,
+            collection_name=cmd.weaviate_collection or "",
+        )
+        return client, collection
+    except ImportError as e:
+        logging.error("Weaviate extra not installed: %s", e)
+        logging.error("Install with: uv pip install 'zephyr-ingest[weaviate]'")
+        sys.exit(1)
+    except Exception as e:
+        logging.error("Weaviate connect failed: %s", e)
+        sys.exit(1)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -330,113 +315,115 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     cmd = _parse_cmd(argv)
 
-    if isinstance(cmd, RunCmd):
-        # fs = FilesystemDestination()
-        # dest: Destination
+    weaviate_client: WeaviateClientProtocol | None = None
 
-        dests: list[Destination] = []
+    try:
+        if isinstance(cmd, RunCmd):
+            # fs = FilesystemDestination()
+            # dest: Destination
 
-        # 1. 默认包含文件系统（契约要求： artifacts 必须本地落盘）
-        fs = FilesystemDestination()
-        dests.append(fs)
-        # wh = WebhookDestination(url=cmd.webhook_url, timeout_s=cmd.webhook_timeout_s)
-        # # 自动开启分叉：本地存储 + Webhook 发送
-        # dest = FanoutDestination(destinations=(fs, wh))
-        if cmd.webhook_url:
-            dests.append(WebhookDestination(url=cmd.webhook_url, timeout_s=cmd.webhook_timeout_s))
-        if cmd.kafka_topic and cmd.kafka_brokers:
-            from zephyr_ingest.destinations.kafka import KafkaDestination
+            dests: list[Destination] = []
 
-            producer = _make_kafka_producer_or_exit(cmd.kafka_brokers)
-            kafka_dest = KafkaDestination(
-                topic=cmd.kafka_topic,
-                producer=producer,
-                flush_timeout_s=cmd.kafka_flush_timeout_s,
+            # 1. 默认包含文件系统（契约要求： artifacts 必须本地落盘）
+            fs = FilesystemDestination()
+            dests.append(fs)
+            # wh = WebhookDestination(url=cmd.webhook_url, timeout_s=cmd.webhook_timeout_s)
+            # # 自动开启分叉：本地存储 + Webhook 发送
+            # dest = FanoutDestination(destinations=(fs, wh))
+            if cmd.webhook_url:
+                dests.append(
+                    WebhookDestination(url=cmd.webhook_url, timeout_s=cmd.webhook_timeout_s)
+                )
+            if cmd.kafka_topic and cmd.kafka_brokers:
+                from zephyr_ingest.destinations.kafka import KafkaDestination
+
+                producer = _make_kafka_producer_or_exit(cmd.kafka_brokers)
+                kafka_dest = KafkaDestination(
+                    topic=cmd.kafka_topic,
+                    producer=producer,
+                    flush_timeout_s=cmd.kafka_flush_timeout_s,
+                )
+
+                dests.append(kafka_dest)
+            elif cmd.kafka_topic or cmd.kafka_brokers:
+                # 健壮性检查：必须成对出现
+                logging.error("Both --kafka-topic and --kafka-brokers must be specified together")
+                return 1
+
+            # Weaviate (Commit 2: stub collection only)
+
+            if cmd.weaviate_collection is not None:
+                from zephyr_ingest.destinations.weaviate import WeaviateDestination
+
+                weaviate_client, collection = _make_weaviate_collection_or_exit(cmd=cmd)
+
+                weaviate_dest = WeaviateDestination(
+                    collection_name=cmd.weaviate_collection,
+                    collection=collection,  # type: ignore[arg-type]  # 如果 pyright 提示这里不匹配，就把 helper 返回类型收紧为 Protocol
+                    max_batch_errors=cmd.weaviate_max_batch_errors,
+                )
+                dests.append(weaviate_dest)
+
+            if len(dests) == 1:
+                dest = dests[0]
+            else:
+                from zephyr_ingest.destinations.fanout import FanoutDestination
+
+                dest = FanoutDestination(destinations=tuple(dests))
+
+            # else:
+            #     dest = fs
+
+            ctx = RunContext.new(
+                pipeline_version=cmd.pipeline_version or PIPELINE_VERSION,
+                run_id=cmd.run_id,
+                timestamp_utc=cmd.timestamp_utc,
             )
 
-            dests.append(kafka_dest)
-        elif cmd.kafka_topic or cmd.kafka_brokers:
-            # 健壮性检查：必须成对出现
-            logging.error("Both --kafka-topic and --kafka-brokers must be specified together")
-            return 1
+            # dest = FilesystemDestination()
+            all_docs: list[DocumentRef] = []
 
-        # Weaviate (Commit 2: stub collection only)
+            # src = LocalFileSource(path=Path(cmd.path), glob=cmd.glob)
+            # docs = src.iter_documents()
 
-        if cmd.weaviate_collection is not None:
-            from zephyr_ingest.destinations.weaviate import WeaviateDestination
+            for p_str in cmd.paths:
+                src = LocalFileSource(path=Path(p_str), glob=cmd.glob)
+                all_docs.extend(list(src.iter_documents()))
 
-            reason = (
-                f"WeaviateDestination is wired (P2-M6-03-B2), but real Weaviate client "
-                f"is not implemented yet. This is expected to be added in P2-M6-03-B3. "
-                f"collection={cmd.weaviate_collection} "
-                f"http={cmd.weaviate_http_host}:{cmd.weaviate_http_port} "
-                f"grpc={cmd.weaviate_grpc_host}:{cmd.weaviate_grpc_port}"
+            backend_obj: object | None = None
+            if cmd.backend == "uns-api":
+                backend_obj = HttpUnsApiBackend(
+                    url=cmd.uns_api_url,
+                    api_key=cmd.uns_api_key,
+                    timeout_s=cmd.uns_api_timeout_s,
+                    transport=None,
+                )
+
+            cfg = RunnerConfig(
+                out_root=Path(cmd.out),
+                strategy=PartitionStrategy(cmd.strategy),
+                unique_element_ids=cmd.unique_element_ids,
+                skip_unsupported=cmd.skip_unsupported,
+                skip_existing=cmd.skip_existing,
+                force=cmd.force,
+                retry=RetryConfig(
+                    enabled=cmd.retry_enabled,
+                    max_attempts=cmd.max_attempts,
+                    base_backoff_ms=cmd.base_backoff_ms,
+                    max_backoff_ms=cmd.max_backoff_ms,
+                ),
+                workers=cmd.workers,
+                stale_lock_ttl_s=cmd.stale_lock_ttl_s,
+                destination=dest,
+                backend=backend_obj,
             )
 
-            stub_collection = _make_stub_weaviate_collection(reason=reason)
-            weaviate_dest = WeaviateDestination(
-                collection_name=cmd.weaviate_collection,
-                collection=stub_collection,
-                max_batch_errors=cmd.weaviate_max_batch_errors,
-            )
-            dests.append(weaviate_dest)
+            run_documents(docs=all_docs, cfg=cfg, ctx=ctx, destination=dest)
+            return 0
 
-        if len(dests) == 1:
-            dest = dests[0]
-        else:
-            from zephyr_ingest.destinations.fanout import FanoutDestination
-
-            dest = FanoutDestination(destinations=tuple(dests))
-
-        # else:
-        #     dest = fs
-
-        ctx = RunContext.new(
-            pipeline_version=cmd.pipeline_version or PIPELINE_VERSION,
-            run_id=cmd.run_id,
-            timestamp_utc=cmd.timestamp_utc,
-        )
-
-        # dest = FilesystemDestination()
-        all_docs: list[DocumentRef] = []
-
-        # src = LocalFileSource(path=Path(cmd.path), glob=cmd.glob)
-        # docs = src.iter_documents()
-
-        for p_str in cmd.paths:
-            src = LocalFileSource(path=Path(p_str), glob=cmd.glob)
-            all_docs.extend(list(src.iter_documents()))
-
-        backend_obj: object | None = None
-        if cmd.backend == "uns-api":
-            backend_obj = HttpUnsApiBackend(
-                url=cmd.uns_api_url,
-                api_key=cmd.uns_api_key,
-                timeout_s=cmd.uns_api_timeout_s,
-                transport=None,
-            )
-
-        cfg = RunnerConfig(
-            out_root=Path(cmd.out),
-            strategy=PartitionStrategy(cmd.strategy),
-            unique_element_ids=cmd.unique_element_ids,
-            skip_unsupported=cmd.skip_unsupported,
-            skip_existing=cmd.skip_existing,
-            force=cmd.force,
-            retry=RetryConfig(
-                enabled=cmd.retry_enabled,
-                max_attempts=cmd.max_attempts,
-                base_backoff_ms=cmd.base_backoff_ms,
-                max_backoff_ms=cmd.max_backoff_ms,
-            ),
-            workers=cmd.workers,
-            stale_lock_ttl_s=cmd.stale_lock_ttl_s,
-            destination=dest,
-            backend=backend_obj,
-        )
-
-        run_documents(docs=all_docs, cfg=cfg, ctx=ctx, destination=dest)
-        return 0
+    finally:
+        if weaviate_client is not None:
+            weaviate_client.close()
 
     # replay-delivery
     logging.basicConfig(level=logging.INFO)
