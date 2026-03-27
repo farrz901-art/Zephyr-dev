@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any  # ← 必须导入
+from typing import Any
 
-import pytest  # ← 必须导入
+import pytest
 
 from zephyr_ingest import cli
 
@@ -16,7 +16,6 @@ def test_cli_run_invokes_runner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     called = {"ok": False}
 
     def fake_run_documents(*, docs: Any, cfg: Any, ctx: Any, **kwargs: Any) -> Any:
-        # Just verify we got docs iterable and cfg/out_root
         called["ok"] = True
         assert cfg.out_root == tmp_path / "out"
         assert cfg.retry.enabled is False
@@ -28,7 +27,7 @@ def test_cli_run_invokes_runner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
         dest = kwargs.get("destination")
         assert "destination" in kwargs
         assert dest is not None
-        # 使用 getattr 规避 strict 模式下对 Mock 对象的属性访问限制
+        # 默认目的地包含 filesystem
         assert getattr(dest, "name").startswith("filesystem")
 
     monkeypatch.setattr(cli, "run_documents", fake_run_documents)
@@ -53,8 +52,7 @@ def test_cli_run_invokes_runner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
             "0",
             "--workers",
             "4",
-            "--destination",
-            "filesystem",
+            # 移除 --destination filesystem，因为新版 cli 默认开启 fs 且不支持该参数
         ]
     )
 
@@ -65,12 +63,14 @@ def test_cli_run_invokes_runner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
 def test_cli_run_webhook_fanout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """测试 Webhook 触发的 Fanout 逻辑"""
     called = {"ok": False}
+    # 创建 dummy 目录避免 Source 报错
+    (tmp_path / "dummy.txt").touch()
 
     def fake_run_documents(*, docs: Any, cfg: Any, ctx: Any, **kwargs: Any) -> Any:
         called["ok"] = True
         dest = kwargs.get("destination")
         assert dest is not None
-        # 验证是否成功启用了分叉目的地
+        # 当同时存在 Filesystem 和 Webhook 时，会自动使用 fanout
         assert getattr(dest, "name") == "fanout"
 
     monkeypatch.setattr(cli, "run_documents", fake_run_documents)
@@ -79,7 +79,7 @@ def test_cli_run_webhook_fanout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
         [
             "run",
             "--path",
-            str(tmp_path),
+            str(tmp_path / "dummy.txt"),
             "--out",
             str(tmp_path / "out"),
             "--strategy",
@@ -93,7 +93,7 @@ def test_cli_run_webhook_fanout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
 
 
 def test_cli_run_backend_uns_api(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """测试 --backend uns-api 是否正确构造了后端实例并注入 Config"""
+    """测试 --backend uns-api 是否正确构造了后端实例"""
     called = {"ok": False}
     inbox = tmp_path / "inbox"
     inbox.mkdir()
@@ -101,9 +101,8 @@ def test_cli_run_backend_uns_api(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 
     def fake_run_documents(*, docs: Any, cfg: Any, ctx: Any, **kwargs: Any) -> Any:
         called["ok"] = True
-        # 核心断言：验证后端实例是否正确生成
         assert cfg.backend is not None
-        # 验证 backend 属性 (HttpUnsApiBackend 类中定义的固定属性)
+        # 验证 HttpUnsApiBackend 的属性
         assert getattr(cfg.backend, "backend") == "uns_api"
         assert getattr(cfg.backend, "url") == "https://api.test.com/v0"
         assert getattr(cfg.backend, "timeout_s") == 12.5
@@ -114,7 +113,7 @@ def test_cli_run_backend_uns_api(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
         [
             "run",
             "--path",
-            str(inbox),
+            str(inbox / "dummy.txt"),
             "--out",
             str(tmp_path / "out"),
             "--backend",
@@ -135,16 +134,24 @@ def test_cli_run_backend_uns_api(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 def test_cli_run_backend_local_default(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """测试默认情况下 backend 应该是 None (本地模式)"""
     called = {"ok": False}
+    (tmp_path / "dummy.txt").touch()
 
     def fake_run_documents(*, docs: Any, cfg: Any, ctx: Any, **kwargs: Any) -> Any:
         called["ok"] = True
-        # 核心断言：默认或显式指定 local 时，backend 应该为 None
         assert cfg.backend is None
 
     monkeypatch.setattr(cli, "run_documents", fake_run_documents)
 
     rc = cli.main(
-        ["run", "--path", str(tmp_path), "--out", str(tmp_path / "out"), "--backend", "local"]
+        [
+            "run",
+            "--path",
+            str(tmp_path / "dummy.txt"),
+            "--out",
+            str(tmp_path / "out"),
+            "--backend",
+            "local",
+        ]
     )
 
     assert rc == 0
