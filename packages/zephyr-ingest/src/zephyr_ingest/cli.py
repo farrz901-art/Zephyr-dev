@@ -5,7 +5,8 @@ import logging
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
+from types import TracebackType  # 导入这个用于处理 tb 参数
+from typing import Any, Sequence, Type
 
 from uns_stream.backends.http_uns_api import HttpUnsApiBackend
 from zephyr_core import RunContext
@@ -50,6 +51,19 @@ class RunCmd:
     kafka_topic: str | None
     kafka_brokers: str | None
     kafka_flush_timeout_s: float
+    # Weaviate (Commit 2: CLI wiring only; real client in Commit 3)
+    weaviate_collection: str | None
+    weaviate_max_batch_errors: int
+
+    # Connection params (used in Commit 3; kept now to avoid CLI breaking changes later)
+    weaviate_http_host: str
+    weaviate_http_port: int
+    weaviate_http_secure: bool
+    weaviate_grpc_host: str
+    weaviate_grpc_port: int
+    weaviate_grpc_secure: bool
+    weaviate_api_key: str | None
+    weaviate_skip_init_checks: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -141,6 +155,36 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Kafka producer flush timeout in seconds",
     )
 
+    # ----------------------
+    # Weaviate (Commit 2: parse + wire only; real connect in Commit 3)
+    # Enable WeaviateDestination only if --weaviate-collection is set.
+    # ----------------------
+    run.add_argument(
+        "--weaviate-collection",
+        type=str,
+        default=None,
+        help="Weaviate collection name (optional; enables WeaviateDestination)",
+    )
+    run.add_argument(
+        "--weaviate-max-batch-errors",
+        type=int,
+        default=0,
+        help="Max tolerated batch errors; 0 means any error fails delivery (default: 0)",
+    )
+    run.add_argument("--weaviate-http-host", type=str, default="localhost")
+    run.add_argument("--weaviate-http-port", type=int, default=8080)
+    run.add_argument("--weaviate-http-secure", action="store_true", default=False)
+    run.add_argument("--weaviate-grpc-host", type=str, default="localhost")
+    run.add_argument("--weaviate-grpc-port", type=int, default=50051)
+    run.add_argument("--weaviate-grpc-secure", action="store_true", default=False)
+    run.add_argument("--weaviate-api-key", type=str, default=None)
+    run.add_argument(
+        "--weaviate-skip-init-checks",
+        action="store_true",
+        default=False,
+        help="Skip Weaviate client init checks (Commit 3 will use this)",
+    )
+
     replay = sub.add_parser("replay-delivery", help="Replay failed delivery DLQ records")
     replay.add_argument(
         "--out", default=".cache/out", help="Output root directory containing _dlq/"
@@ -191,6 +235,18 @@ def _parse_cmd(argv: Sequence[str]) -> RunCmd | ReplayDeliveryCmd:
             kafka_topic=ns.kafka_topic,
             kafka_brokers=ns.kafka_brokers,
             kafka_flush_timeout_s=ns.kafka_flush_timeout_s,
+            weaviate_collection=None
+            if ns.weaviate_collection is None
+            else str(ns.weaviate_collection),
+            weaviate_max_batch_errors=int(ns.weaviate_max_batch_errors),
+            weaviate_http_host=str(ns.weaviate_http_host),
+            weaviate_http_port=int(ns.weaviate_http_port),
+            weaviate_http_secure=bool(ns.weaviate_http_secure),
+            weaviate_grpc_host=str(ns.weaviate_grpc_host),
+            weaviate_grpc_port=int(ns.weaviate_grpc_port),
+            weaviate_grpc_secure=bool(ns.weaviate_grpc_secure),
+            weaviate_api_key=None if ns.weaviate_api_key is None else str(ns.weaviate_api_key),
+            weaviate_skip_init_checks=bool(ns.weaviate_skip_init_checks),
         )
 
     if ns.cmd == "replay-delivery":
@@ -218,6 +274,51 @@ def _make_kafka_producer_or_exit(brokers: str):
         import sys
 
         sys.exit(1)
+
+
+def _make_stub_weaviate_collection(*, reason: str):
+    """
+    Commit 2 only: we do NOT depend on weaviate-client yet.
+    This stub satisfies WeaviateCollectionProtocol for pyright strict,
+    but will fail at runtime (and thus produce DLQ records) if used.
+    """
+    from contextlib import AbstractContextManager
+
+    from zephyr_ingest.destinations.weaviate import (
+        WeaviateBatchManagerProtocol,
+        WeaviateBatchProtocol,
+    )
+
+    class _StubBatch:
+        number_errors: int = 0
+
+        def add_object(self, properties: dict[str, Any], uuid: str | None = None) -> str:
+            raise RuntimeError(reason)
+
+    class _StubBatchCtx(AbstractContextManager[WeaviateBatchProtocol]):
+        def __enter__(self) -> WeaviateBatchProtocol:
+            return _StubBatch()
+
+        def __exit__(
+            self,
+            exc_type: Type[BaseException] | None,
+            exc: BaseException | None,
+            tb: TracebackType | None,
+        ) -> bool | None:
+            return None
+
+    class _StubBatchManager:
+        failed_objects: list[Any] = []
+
+        def dynamic(self) -> AbstractContextManager[WeaviateBatchProtocol]:
+            return _StubBatchCtx()
+
+    class _StubCollection:
+        @property
+        def batch(self) -> WeaviateBatchManagerProtocol:
+            return _StubBatchManager()
+
+    return _StubCollection()
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -258,6 +359,27 @@ def main(argv: Sequence[str] | None = None) -> int:
             # 健壮性检查：必须成对出现
             logging.error("Both --kafka-topic and --kafka-brokers must be specified together")
             return 1
+
+        # Weaviate (Commit 2: stub collection only)
+
+        if cmd.weaviate_collection is not None:
+            from zephyr_ingest.destinations.weaviate import WeaviateDestination
+
+            reason = (
+                f"WeaviateDestination is wired (P2-M6-03-B2), but real Weaviate client "
+                f"is not implemented yet. This is expected to be added in P2-M6-03-B3. "
+                f"collection={cmd.weaviate_collection} "
+                f"http={cmd.weaviate_http_host}:{cmd.weaviate_http_port} "
+                f"grpc={cmd.weaviate_grpc_host}:{cmd.weaviate_grpc_port}"
+            )
+
+            stub_collection = _make_stub_weaviate_collection(reason=reason)
+            weaviate_dest = WeaviateDestination(
+                collection_name=cmd.weaviate_collection,
+                collection=stub_collection,
+                max_batch_errors=cmd.weaviate_max_batch_errors,
+            )
+            dests.append(weaviate_dest)
 
         if len(dests) == 1:
             dest = dests[0]
