@@ -25,7 +25,9 @@ jobs:
         run: uv python install ${{ env.PYTHON_VERSION }}
 
       - name: Install deps
-        run: uv sync --locked --all-groups --all-packages --all-extras
+        run: |
+          uv sync --locked --all-groups --all-packages
+          uv sync --locked --package zephyr-ingest --extra kafka
 
       - name: Lint & Typecheck
         run: make check
