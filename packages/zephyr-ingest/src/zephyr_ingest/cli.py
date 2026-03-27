@@ -5,7 +5,7 @@ import logging
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence, cast
+from typing import TYPE_CHECKING, Sequence
 
 from uns_stream.backends.http_uns_api import HttpUnsApiBackend
 from zephyr_core import RunContext
@@ -17,6 +17,9 @@ from zephyr_ingest._internal.weaviate_client import (
     WeaviateConnectParams,
     connect_weaviate_and_get_collection,
 )
+
+if TYPE_CHECKING:
+    from zephyr_ingest.destinations.weaviate import WeaviateCollectionProtocol
 from zephyr_ingest.config.argparse_extract import (
     get_bool,
     get_float,
@@ -225,11 +228,7 @@ def _make_kafka_producer_or_exit(brokers: str):
 
 def _make_weaviate_collection_or_exit(
     *, cfg: WeaviateConfigV1
-) -> tuple[WeaviateClientProtocol, object]:
-    # NOTE: return type is object here to keep this module
-    # independent from destination protocol types.
-    # The destination constructor will receive a WeaviateCollectionProtocol
-    # due to the factory return.
+) -> tuple[WeaviateClientProtocol, "WeaviateCollectionProtocol"]:
     try:
         params = WeaviateConnectParams(
             http_host=cfg.http_host,
@@ -276,18 +275,13 @@ def _build_destinations(*, cmd: RunCmd) -> tuple[Destination, WeaviateClientProt
 
     weaviate_client: WeaviateClientProtocol | None = None
     if cmd.weaviate is not None:
-        from zephyr_ingest.destinations.weaviate import (
-            WeaviateCollectionProtocol,
-            WeaviateDestination,
-        )
+        from zephyr_ingest.destinations.weaviate import WeaviateDestination
 
         weaviate_client, collection = _make_weaviate_collection_or_exit(cfg=cmd.weaviate)
         dests.append(
             WeaviateDestination(
                 collection_name=cmd.weaviate.collection,
-                collection=cast(
-                    WeaviateCollectionProtocol, collection
-                ),  # runtime object, protocol-checked in _internal factory
+                collection=collection,  # runtime object, protocol-checked in _internal factory
                 max_batch_errors=cmd.weaviate.max_batch_errors,
             )
         )
