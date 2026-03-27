@@ -3502,20 +3502,11 @@ doc = [
 docx = [
     { name = "unstructured", extra = ["docx"] },
 ]
-email = [
-    { name = "unstructured" },
-]
 epub = [
     { name = "unstructured", extra = ["epub"] },
 ]
-html = [
-    { name = "unstructured" },
-]
 image = [
     { name = "unstructured", extra = ["image"] },
-]
-json = [
-    { name = "unstructured" },
 ]
 md = [
     { name = "unstructured", extra = ["md"] },
@@ -3547,9 +3538,6 @@ tsv = [
 xlsx = [
     { name = "unstructured", extra = ["xlsx"] },
 ]
-xml = [
-    { name = "unstructured" },
-]
 
 [package.metadata]
 requires-dist = [
@@ -3563,11 +3551,8 @@ requires-dist = [
     { name = "unstructured", extras = ["csv"], marker = "extra == 'csv'" },
     { name = "unstructured", extras = ["doc"], marker = "extra == 'doc'" },
     { name = "unstructured", extras = ["docx"], marker = "extra == 'docx'" },
-    { name = "unstructured", extras = ["email"], marker = "extra == 'email'" },
     { name = "unstructured", extras = ["epub"], marker = "extra == 'epub'" },
-    { name = "unstructured", extras = ["html"], marker = "extra == 'html'" },
     { name = "unstructured", extras = ["image"], marker = "extra == 'image'" },
-    { name = "unstructured", extras = ["json"], marker = "extra == 'json'" },
     { name = "unstructured", extras = ["md"], marker = "extra == 'md'" },
     { name = "unstructured", extras = ["odt"], marker = "extra == 'odt'" },
     { name = "unstructured", extras = ["org"], marker = "extra == 'org'" },
@@ -3578,10 +3563,9 @@ requires-dist = [
     { name = "unstructured", extras = ["rtf"], marker = "extra == 'rtf'" },
     { name = "unstructured", extras = ["tsv"], marker = "extra == 'tsv'" },
     { name = "unstructured", extras = ["xlsx"], marker = "extra == 'xlsx'" },
-    { name = "unstructured", extras = ["xml"], marker = "extra == 'xml'" },
     { name = "zephyr-core", editable = "packages/zephyr-core" },
 ]
-provides-extras = ["all-docs", "pdf", "doc", "docx", "ppt", "pptx", "xlsx", "csv", "tsv", "md", "rtf", "rst", "epub", "odt", "org", "image", "email", "html", "xml", "json"]
+provides-extras = ["all-docs", "pdf", "doc", "docx", "ppt", "pptx", "xlsx", "csv", "tsv", "md", "rtf", "rst", "epub", "odt", "org", "image"]
 
 [[package]]
 name = "unstructured"
