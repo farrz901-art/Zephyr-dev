@@ -254,6 +254,56 @@ def _make_weaviate_collection_or_exit(
         raise SystemExit(1) from e
 
 
+def _build_config_snapshot(*, cmd: RunCmd) -> dict[str, object]:
+    destinations: dict[str, object] = {
+        "filesystem": {"enabled": True},
+    }
+    if cmd.webhook is not None:
+        destinations["webhook"] = cmd.webhook.redacted_dict()
+    if cmd.kafka is not None:
+        destinations["kafka"] = cmd.kafka.redacted_dict()
+    if cmd.weaviate is not None:
+        destinations["weaviate"] = cmd.weaviate.redacted_dict()
+
+    backend: dict[str, object]
+    if cmd.backend == "uns-api":
+        backend = {
+            "kind": "uns-api",
+            "url": cmd.uns_api_url,
+            "timeout_s": cmd.uns_api_timeout_s,
+            "api_key": None if cmd.uns_api_key is None else "***",
+        }
+    else:
+        backend = {"kind": "local"}
+
+    return {
+        "input": {
+            # 为了避免把本地绝对路径写进 batch_report，这里只保留计数 + glob
+            "paths_count": len(cmd.paths),
+            "glob": cmd.glob,
+            "source": "local_file",
+        },
+        "runner": {
+            "out": cmd.out,
+            "strategy": str(cmd.strategy),
+            "skip_existing": cmd.skip_existing,
+            "skip_unsupported": cmd.skip_unsupported,
+            "force": cmd.force,
+            "unique_element_ids": cmd.unique_element_ids,
+            "workers": cmd.workers,
+            "stale_lock_ttl_s": cmd.stale_lock_ttl_s,
+        },
+        "retry": {
+            "enabled": cmd.retry.enabled,
+            "max_attempts": cmd.retry.max_attempts,
+            "base_backoff_ms": cmd.retry.base_backoff_ms,
+            "max_backoff_ms": cmd.retry.max_backoff_ms,
+        },
+        "backend": backend,
+        "destinations": destinations,
+    }
+
+
 def _build_destinations(*, cmd: RunCmd) -> tuple[Destination, WeaviateClientProtocol | None]:
     dests: list[Destination] = []
     dests.append(FilesystemDestination())
@@ -367,8 +417,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             destination=destination,
             backend=backend_obj,
         )
+        config_snapshot = _build_config_snapshot(cmd=cmd)
+        run_documents(
+            docs=docs,
+            cfg=cfg,
+            ctx=ctx,
+            destination=destination,
+            config_snapshot=config_snapshot,
+        )
 
-        run_documents(docs=docs, cfg=cfg, ctx=ctx, destination=destination)
         return 0
     finally:
         if weaviate_client is not None:

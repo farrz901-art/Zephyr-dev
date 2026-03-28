@@ -404,6 +404,7 @@ def run_documents(
     partition_fn: PartitionFn = auto_partition,
     # artifacts_writer: ArtifactsWriter = dump_partition_artifacts,
     destination: Destination | None = None,
+    config_snapshot: dict[str, object] | None = None,
 ) -> RunStats:
     destination = destination or cfg.destination or FilesystemDestination()
 
@@ -553,7 +554,7 @@ def run_documents(
         skipped_existing=skipped_existing,
     )
 
-    batch_report = {
+    batch_report: dict[str, Any] = {
         "run_id": ctx.run_id,
         "pipeline_version": ctx.pipeline_version,
         "timestamp_utc": ctx.timestamp_utc,
@@ -590,6 +591,8 @@ def run_documents(
         "workers": cfg.workers,
         "executor": "serial" if cfg.workers <= 1 else "thread",
     }
+    if config_snapshot is not None:
+        batch_report["config_snapshot"] = config_snapshot
 
     (out_root / "batch_report.json").write_text(
         json.dumps(batch_report, ensure_ascii=False, indent=2),
