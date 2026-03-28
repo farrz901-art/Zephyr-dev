@@ -29,6 +29,7 @@ from zephyr_ingest.config.argparse_extract import (
     get_req_str,
     get_str_list,
 )
+from zephyr_ingest.config.env_overlay import overlay_uns_api_key, overlay_weaviate_api_key
 from zephyr_ingest.config.errors import ConfigError
 from zephyr_ingest.config.models import KafkaConfigV1, WeaviateConfigV1, WebhookConfigV1
 from zephyr_ingest.config.snapshot_v1 import (
@@ -172,18 +173,25 @@ def _parse_run_cmd(ns: argparse.Namespace) -> RunCmd:
         max_backoff_ms=get_int(ns, "max_backoff_ms"),
     )
 
+    backend = get_req_str(ns, "backend")
+
+    uns_api_key = get_opt_str(ns, "uns_api_key")
+    uns_api_key = overlay_uns_api_key(backend=backend, uns_api_key=uns_api_key)
+
     webhook = WebhookConfigV1.from_namespace(ns)
     kafka = KafkaConfigV1.from_namespace(ns)
+
     weaviate = WeaviateConfigV1.from_namespace(ns)
+    weaviate = overlay_weaviate_api_key(weaviate=weaviate)
 
     return RunCmd(
         paths=get_str_list(ns, "paths"),
         glob=get_req_str(ns, "glob"),
         out=get_req_str(ns, "out"),
         strategy=strategy,
-        backend=get_req_str(ns, "backend"),
+        backend=backend,
         uns_api_url=get_req_str(ns, "uns_api_url"),
-        uns_api_key=get_opt_str(ns, "uns_api_key"),
+        uns_api_key=uns_api_key,
         uns_api_timeout_s=get_float(ns, "uns_api_timeout_s"),
         skip_unsupported=get_bool(ns, "skip_unsupported"),
         skip_existing=get_bool(ns, "skip_existing"),
