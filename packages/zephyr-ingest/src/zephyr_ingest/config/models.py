@@ -11,6 +11,11 @@ from zephyr_ingest.config.argparse_extract import (
     get_req_str,
 )
 from zephyr_ingest.config.errors import ConfigError
+from zephyr_ingest.config.snapshot_v1 import (
+    KafkaDestinationSnapshotV1,
+    WeaviateDestinationSnapshotV1,
+    WebhookDestinationSnapshotV1,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,8 +41,16 @@ class WebhookConfigV1:
         timeout_s = get_float(ns, "webhook_timeout_s")
         return WebhookConfigV1(url=url, timeout_s=timeout_s)
 
-    def redacted_dict(self) -> dict[str, object]:
+    def to_snapshot_v1(self) -> WebhookDestinationSnapshotV1:
         return {"url": self.url, "timeout_s": self.timeout_s}
+
+    def redacted_dict(self) -> dict[str, object]:
+        # Keep older call sites stable (dict[str, object])
+        # while the typed snapshot is the source of truth.
+        return dict(self.to_snapshot_v1())
+
+    # def redacted_dict(self) -> dict[str, object]:
+    #     return {"url": self.url, "timeout_s": self.timeout_s}
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,12 +94,23 @@ class KafkaConfigV1:
         flush_timeout_s = get_float(ns, "kafka_flush_timeout_s")
         return KafkaConfigV1(topic=topic, brokers=brokers, flush_timeout_s=flush_timeout_s)
 
-    def redacted_dict(self) -> dict[str, object]:
+    def to_snapshot_v1(self) -> KafkaDestinationSnapshotV1:
         return {
             "topic": self.topic,
             "brokers": self.brokers,
             "flush_timeout_s": self.flush_timeout_s,
         }
+
+    def redacted_dict(self) -> dict[str, object]:
+        """兼容旧接口，复用快照逻辑"""
+        return dict(self.to_snapshot_v1())
+
+    # def redacted_dict(self) -> dict[str, object]:
+    #     return {
+    #         "topic": self.topic,
+    #         "brokers": self.brokers,
+    #         "flush_timeout_s": self.flush_timeout_s,
+    #     }
 
 
 @dataclass(frozen=True, slots=True)
@@ -155,12 +179,27 @@ class WeaviateConfigV1:
             skip_init_checks=get_bool(ns, "weaviate_skip_init_checks"),
         )
 
-    def redacted_dict(self) -> dict[str, object]:
+    def to_snapshot_v1(self) -> WeaviateDestinationSnapshotV1:
+        """生成强类型 Weaviate 快照，包含脱敏和格式化"""
         return {
             "collection": self.collection,
             "max_batch_errors": self.max_batch_errors,
-            "http": f"{self.http_host}:{self.http_port} secure={self.http_secure}",
-            "grpc": f"{self.grpc_host}:{self.grpc_port} secure={self.grpc_secure}",
-            "api_key": None if self.api_key is None else "***",
+            "http": f"{self.http_host}:{self.http_port} (secure={self.http_secure})",
+            "grpc": f"{self.grpc_host}:{self.grpc_port} (secure={self.grpc_secure})",
+            "api_key": "***" if self.api_key else None,
             "skip_init_checks": self.skip_init_checks,
         }
+
+    def redacted_dict(self) -> dict[str, object]:
+        """兼容旧接口，确保 API Key 已屏蔽"""
+        return dict(self.to_snapshot_v1())
+
+    # def redacted_dict(self) -> dict[str, object]:
+    #     return {
+    #         "collection": self.collection,
+    #         "max_batch_errors": self.max_batch_errors,
+    #         "http": f"{self.http_host}:{self.http_port} secure={self.http_secure}",
+    #         "grpc": f"{self.grpc_host}:{self.grpc_port} secure={self.grpc_secure}",
+    #         "api_key": None if self.api_key is None else "***",
+    #         "skip_init_checks": self.skip_init_checks,
+    #     }

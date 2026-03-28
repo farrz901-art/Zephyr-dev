@@ -6,6 +6,7 @@ from typing import Any, cast
 import pytest
 
 from zephyr_ingest import cli
+from zephyr_ingest.config.snapshot_v1 import ConfigSnapshotV1
 
 
 def test_cli_run_invokes_runner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -27,11 +28,11 @@ def test_cli_run_invokes_runner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
         dest = kwargs.get("destination")
         assert "destination" in kwargs
         assert dest is not None
-        # 默认目的地包含 filesystem
         assert getattr(dest, "name").startswith("filesystem")
 
-        snap = cast(dict[str, Any], kwargs.get("config_snapshot"))
+        snap = cast(ConfigSnapshotV1, kwargs.get("config_snapshot"))
         assert isinstance(snap, dict)
+        assert snap["schema_version"] == 1
 
         # 顶层 key
         assert "destinations" in snap
@@ -39,8 +40,7 @@ def test_cli_run_invokes_runner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
         assert "runner" in snap
 
         # backend 脱敏规则（默认 local）
-        backend: dict[str, Any] = snap["backend"]
-        assert isinstance(backend, dict)
+        backend = snap["backend"]
         assert backend["kind"] == "local"
 
     monkeypatch.setattr(cli, "run_documents", fake_run_documents)
@@ -81,26 +81,28 @@ def test_cli_run_webhook_fanout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
 
     def fake_run_documents(*, docs: Any, cfg: Any, ctx: Any, **kwargs: Any) -> Any:
         called["ok"] = True
+
         dest = kwargs.get("destination")
         assert dest is not None
         # 当同时存在 Filesystem 和 Webhook 时，会自动使用 fanout
         assert getattr(dest, "name") == "fanout"
 
-        snap = kwargs.get("config_snapshot")
+        snap = cast(ConfigSnapshotV1, kwargs.get("config_snapshot"))
         assert isinstance(snap, dict)
+        assert snap["schema_version"] == 1
 
         assert "destinations" in snap
         assert "backend" in snap
         assert "runner" in snap
 
         # destinations 必须包含 filesystem + webhook
-        dests: dict[str, Any] = cast(dict[str, Any], snap["destinations"])
-        assert isinstance(dests, dict)
+        dests = snap["destinations"]
+        # assert isinstance(dests, dict)
         assert "filesystem" in dests
         assert "webhook" in dests
 
         # backend 默认 local
-        backend: dict[str, Any] = cast(dict[str, Any], snap["backend"])
+        backend = snap["backend"]
         assert backend["kind"] == "local"
 
     monkeypatch.setattr(cli, "run_documents", fake_run_documents)
@@ -137,15 +139,15 @@ def test_cli_run_backend_uns_api(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
         assert getattr(cfg.backend, "url") == "https://api.test.com/v0"
         assert getattr(cfg.backend, "timeout_s") == 12.5
 
-        snap = kwargs.get("config_snapshot")
+        snap = cast(ConfigSnapshotV1, kwargs.get("config_snapshot"))
         assert isinstance(snap, dict)
+        assert snap["schema_version"] == 1
 
         assert "destinations" in snap
         assert "backend" in snap
         assert "runner" in snap
 
-        backend: dict[str, Any] = cast(dict[str, Any], snap["backend"])
-        assert isinstance(backend, dict)
+        backend = snap["backend"]
         assert backend["kind"] == "uns-api"
 
         # api_key 必须脱敏
@@ -184,15 +186,15 @@ def test_cli_run_backend_local_default(tmp_path: Path, monkeypatch: pytest.Monke
         called["ok"] = True
         assert cfg.backend is None
 
-        snap = kwargs.get("config_snapshot")
+        snap = cast(ConfigSnapshotV1, kwargs.get("config_snapshot"))
         assert isinstance(snap, dict)
+        assert snap["schema_version"] == 1
 
         assert "destinations" in snap
         assert "backend" in snap
         assert "runner" in snap
 
-        backend: dict[str, Any] = cast(dict[str, Any], snap["backend"])
-        assert isinstance(backend, dict)
+        backend = snap["backend"]
         assert backend["kind"] == "local"
 
     monkeypatch.setattr(cli, "run_documents", fake_run_documents)

@@ -26,6 +26,7 @@ from zephyr_core import (
 from zephyr_core.contracts.v1.enums import RunOutcome
 from zephyr_core.contracts.v1.run_meta import EngineMetaV1, ErrorInfoV1, MetricsV1
 from zephyr_ingest._internal.delivery_dlq import write_delivery_dlq
+from zephyr_ingest.config.snapshot_v1 import ConfigSnapshotV1
 from zephyr_ingest.destinations.base import DeliveryReceipt, Destination
 from zephyr_ingest.destinations.filesystem import FilesystemDestination
 
@@ -404,7 +405,7 @@ def run_documents(
     partition_fn: PartitionFn = auto_partition,
     # artifacts_writer: ArtifactsWriter = dump_partition_artifacts,
     destination: Destination | None = None,
-    config_snapshot: dict[str, object] | None = None,
+    config_snapshot: ConfigSnapshotV1 | None = None,
 ) -> RunStats:
     destination = destination or cfg.destination or FilesystemDestination()
 

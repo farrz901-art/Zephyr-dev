@@ -31,6 +31,12 @@ from zephyr_ingest.config.argparse_extract import (
 )
 from zephyr_ingest.config.errors import ConfigError
 from zephyr_ingest.config.models import KafkaConfigV1, WeaviateConfigV1, WebhookConfigV1
+from zephyr_ingest.config.snapshot_v1 import (
+    CONFIG_SNAPSHOT_SCHEMA_VERSION,
+    BackendSnapshotV1,
+    ConfigSnapshotV1,
+    DestinationsSnapshotV1,
+)
 from zephyr_ingest.destinations.base import Destination
 from zephyr_ingest.destinations.filesystem import FilesystemDestination
 from zephyr_ingest.destinations.webhook import WebhookDestination
@@ -254,18 +260,18 @@ def _make_weaviate_collection_or_exit(
         raise SystemExit(1) from e
 
 
-def _build_config_snapshot(*, cmd: RunCmd) -> dict[str, object]:
-    destinations: dict[str, object] = {
+def _build_config_snapshot(*, cmd: RunCmd) -> ConfigSnapshotV1:
+    destinations: DestinationsSnapshotV1 = {
         "filesystem": {"enabled": True},
     }
     if cmd.webhook is not None:
-        destinations["webhook"] = cmd.webhook.redacted_dict()
+        destinations["webhook"] = cmd.webhook.to_snapshot_v1()
     if cmd.kafka is not None:
-        destinations["kafka"] = cmd.kafka.redacted_dict()
+        destinations["kafka"] = cmd.kafka.to_snapshot_v1()
     if cmd.weaviate is not None:
-        destinations["weaviate"] = cmd.weaviate.redacted_dict()
+        destinations["weaviate"] = cmd.weaviate.to_snapshot_v1()
 
-    backend: dict[str, object]
+    backend: BackendSnapshotV1
     if cmd.backend == "uns-api":
         backend = {
             "kind": "uns-api",
@@ -277,8 +283,8 @@ def _build_config_snapshot(*, cmd: RunCmd) -> dict[str, object]:
         backend = {"kind": "local"}
 
     return {
+        "schema_version": CONFIG_SNAPSHOT_SCHEMA_VERSION,
         "input": {
-            # 为了避免把本地绝对路径写进 batch_report，这里只保留计数 + glob
             "paths_count": len(cmd.paths),
             "glob": cmd.glob,
             "source": "local_file",
