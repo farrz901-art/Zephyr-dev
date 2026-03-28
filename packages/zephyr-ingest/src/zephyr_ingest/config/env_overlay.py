@@ -24,40 +24,39 @@ def first_env(*names: str) -> str | None:
     return None
 
 
-def overlay_uns_api_key(*, backend: str, uns_api_key: str | None) -> str | None:
-    """
-    Overlay Unstructured API key from env only when:
-    - backend == "uns-api"
-    - and uns_api_key not provided via CLI/config.
-
-    ENV precedence:
-      ZEPHYR_UNS_API_KEY -> UNS_API_KEY -> UNSTRUCTURED_API_KEY
-    """
+def overlay_uns_api_key(
+    *, backend: str, uns_api_key: str | None, allow_override: bool = False
+) -> str | None:
     if backend != "uns-api":
         return uns_api_key
-    if _normalize_secret(uns_api_key) is not None:
+
+    env_key = first_env("ZEPHYR_UNS_API_KEY", "UNS_API_KEY", "UNSTRUCTURED_API_KEY")
+    if env_key is None:
         return uns_api_key
 
-    return first_env("ZEPHYR_UNS_API_KEY", "UNS_API_KEY", "UNSTRUCTURED_API_KEY")
+    if allow_override:
+        return env_key
+
+    if _normalize_secret(uns_api_key) is None:
+        return env_key
+
+    return uns_api_key
 
 
-def overlay_weaviate_api_key(*, weaviate: WeaviateConfigV1 | None) -> WeaviateConfigV1 | None:
-    """
-    Overlay Weaviate API key from env only when:
-    - Weaviate is enabled (weaviate config exists)
-    - and api_key not provided via CLI/config.
-
-    ENV precedence:
-      ZEPHYR_WEAVIATE_API_KEY -> WEAVIATE_API_KEY
-    """
+def overlay_weaviate_api_key(
+    *, weaviate: WeaviateConfigV1 | None, allow_override: bool = False
+) -> WeaviateConfigV1 | None:
     if weaviate is None:
         return None
-
-    if _normalize_secret(weaviate.api_key) is not None:
-        return weaviate
 
     env_key = first_env("ZEPHYR_WEAVIATE_API_KEY", "WEAVIATE_API_KEY")
     if env_key is None:
         return weaviate
 
-    return replace(weaviate, api_key=env_key)
+    if allow_override:
+        return replace(weaviate, api_key=env_key)
+
+    if _normalize_secret(weaviate.api_key) is None:
+        return replace(weaviate, api_key=env_key)
+
+    return weaviate

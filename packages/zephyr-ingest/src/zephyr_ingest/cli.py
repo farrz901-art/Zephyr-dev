@@ -29,8 +29,12 @@ from zephyr_ingest.config.argparse_extract import (
     get_req_str,
     get_str_list,
 )
-from zephyr_ingest.config.env_overlay import overlay_uns_api_key, overlay_weaviate_api_key
+from zephyr_ingest.config.cli_presence import any_flag_present, collect_present_flags
+from zephyr_ingest.config.env_overlay import (
+    first_env,
+)
 from zephyr_ingest.config.errors import ConfigError
+from zephyr_ingest.config.file_toml_v1 import ConfigFileV1, load_config_file_v1
 from zephyr_ingest.config.models import KafkaConfigV1, WeaviateConfigV1, WebhookConfigV1
 from zephyr_ingest.config.snapshot_v1 import (
     CONFIG_SNAPSHOT_SCHEMA_VERSION,
@@ -103,6 +107,13 @@ def _build_parser() -> argparse.ArgumentParser:
     run.add_argument("--out", default=".cache/out", help="Output root directory")
 
     run.add_argument(
+        "--config",
+        type=str,
+        default=None,
+        help="Optional TOML config file to overlay defaults (CLI > ENV > FILE > DEFAULT)",
+    )
+
+    run.add_argument(
         "--strategy",
         default="auto",
         choices=["auto", "fast", "hi_res", "ocr_only"],
@@ -159,30 +170,337 @@ def _build_parser() -> argparse.ArgumentParser:
     return p
 
 
-def _parse_run_cmd(ns: argparse.Namespace) -> RunCmd:
+def _parse_run_cmd(ns: argparse.Namespace, argv: Sequence[str]) -> RunCmd:
+    present = collect_present_flags(argv)
+
+    config_path = get_opt_str(ns, "config")
+    file_cfg: ConfigFileV1 | None = None
+
+    if config_path is not None:
+        file_cfg = load_config_file_v1(path=Path(config_path))
+
+    # -------------------------
+    # helpers: choose CLI vs FILE vs default
+    # -------------------------
+
+    def _choose_str(*, flag: str, cli_val: str, file_val: str | None) -> str:
+        if flag in present:
+            return cli_val
+
+        return file_val if file_val is not None else cli_val
+
+    def _choose_opt_str(*, flag: str, cli_val: str | None, file_val: str | None) -> str | None:
+        if flag in present:
+            return cli_val
+
+        return file_val if file_val is not None else cli_val
+
+    def _choose_float(*, flag: str, cli_val: float, file_val: float | None) -> float:
+        if flag in present:
+            return cli_val
+
+        return file_val if file_val is not None else cli_val
+
+    def _choose_int(*, flag: str, cli_val: int, file_val: int | None) -> int:
+        if flag in present:
+            return cli_val
+
+        return file_val if file_val is not None else cli_val
+
+    def _choose_bool(*, flags: tuple[str, ...], cli_val: bool, file_val: bool | None) -> bool:
+        if any_flag_present(present, *flags):
+            return cli_val
+
+        return file_val if file_val is not None else cli_val
+
+    run_file = file_cfg.run if file_cfg is not None else None
+    retry_file = file_cfg.retry if file_cfg is not None else None
+    dest_file = file_cfg.destinations if file_cfg is not None else None
+
+    # -------------------------
+    # strategy / backend
+    # -------------------------
+    strategy_str_cli = get_req_str(ns, "strategy")
+    strategy_str = _choose_str(
+        flag="--strategy",
+        cli_val=strategy_str_cli,
+        file_val=None if run_file is None else run_file.strategy,
+    )
+
     strategy_str = get_req_str(ns, "strategy")
     try:
         strategy = PartitionStrategy(strategy_str)
     except ValueError as e:
         raise ConfigError(f"Invalid --strategy: {strategy_str}") from e
 
-    retry = RetryConfig(
-        enabled=get_bool(ns, "retry_enabled"),
-        max_attempts=get_int(ns, "max_attempts"),
-        base_backoff_ms=get_int(ns, "base_backoff_ms"),
-        max_backoff_ms=get_int(ns, "max_backoff_ms"),
+    backend_cli = get_req_str(ns, "backend")
+    backend = _choose_str(
+        flag="--backend",
+        cli_val=backend_cli,
+        file_val=None if run_file is None else run_file.backend,
+    )
+    if backend not in ("local", "uns-api"):
+        raise ConfigError(f"Invalid --backend: {backend}")
+
+    # -------------------------
+    # uns-api fields
+    # -------------------------
+    uns_api_url = _choose_str(
+        flag="--uns-api-url",
+        cli_val=get_req_str(ns, "uns_api_url"),
+        file_val=None if run_file is None else run_file.uns_api_url,
+    )
+    uns_api_timeout_s = _choose_float(
+        flag="--uns-api-timeout-s",
+        cli_val=get_float(ns, "uns_api_timeout_s"),
+        file_val=None if run_file is None else run_file.uns_api_timeout_s,
     )
 
-    backend = get_req_str(ns, "backend")
+    # uns_api_key precedence (secrets): CLI explicit > ENV > FILE > DEFAULT(None)
+    uns_api_key_base = _choose_opt_str(
+        flag="--uns-api-key",
+        cli_val=get_opt_str(ns, "uns_api_key"),
+        file_val=None if run_file is None else run_file.uns_api_key,
+    )
+    if backend == "uns-api" and "--uns-api-key" not in present:
+        env_key = first_env("ZEPHYR_UNS_API_KEY", "UNS_API_KEY", "UNSTRUCTURED_API_KEY")
+        if env_key is not None:
+            uns_api_key_base = env_key
+    uns_api_key = uns_api_key_base if backend == "uns-api" else None
+    # -------------------------
+    # runner flags
+    # -------------------------
+    skip_existing = _choose_bool(
+        flags=("--skip-existing", "--no-skip-existing"),
+        cli_val=get_bool(ns, "skip_existing"),
+        file_val=None if run_file is None else run_file.skip_existing,
+    )
+    skip_unsupported = _choose_bool(
+        flags=("--skip-unsupported",),
+        cli_val=get_bool(ns, "skip_unsupported"),
+        file_val=None if run_file is None else run_file.skip_unsupported,
+    )
+    force = _choose_bool(
+        flags=("--force",),
+        cli_val=get_bool(ns, "force"),
+        file_val=None if run_file is None else run_file.force,
+    )
+    unique_element_ids = _choose_bool(
+        flags=("--unique-element-ids", "--no-unique-element-ids"),
+        cli_val=get_bool(ns, "unique_element_ids"),
+        file_val=None if run_file is None else run_file.unique_element_ids,
+    )
+    workers = _choose_int(
+        flag="--workers",
+        cli_val=get_int(ns, "workers"),
+        file_val=None if run_file is None else run_file.workers,
+    )
+    stale_lock_ttl_s = _choose_opt_str(
+        flag="--stale-lock-ttl-s",
+        cli_val=None
+        if get_opt_int(ns, "stale_lock_ttl_s") is None
+        else str(get_opt_int(ns, "stale_lock_ttl_s")),
+        file_val=None
+        if run_file is None or run_file.stale_lock_ttl_s is None
+        else str(run_file.stale_lock_ttl_s),
+    )
+    stale_lock_ttl_s_i: int | None
+    if stale_lock_ttl_s is None:
+        stale_lock_ttl_s_i = None
+    else:
+        try:
+            stale_lock_ttl_s_i = int(stale_lock_ttl_s)
+        except ValueError as e:
+            raise ConfigError("--stale-lock-ttl-s must be int") from e
 
-    uns_api_key = get_opt_str(ns, "uns_api_key")
-    uns_api_key = overlay_uns_api_key(backend=backend, uns_api_key=uns_api_key)
+    # -------------------------
+    # retry (CLI explicit > FILE > DEFAULT)
+    # Note: CLI has only --no-retry to explicitly override.
+    # -------------------------
+    retry_enabled_cli = get_bool(ns, "retry_enabled")
+    retry_enabled = retry_enabled_cli
+    if "--no-retry" not in present and retry_file is not None and retry_file.enabled is not None:
+        retry_enabled = retry_file.enabled
 
-    webhook = WebhookConfigV1.from_namespace(ns)
-    kafka = KafkaConfigV1.from_namespace(ns)
+    max_attempts = _choose_int(
+        flag="--max-attempts",
+        cli_val=get_int(ns, "max_attempts"),
+        file_val=None if retry_file is None else retry_file.max_attempts,
+    )
+    base_backoff_ms = _choose_int(
+        flag="--base-backoff-ms",
+        cli_val=get_int(ns, "base_backoff_ms"),
+        file_val=None if retry_file is None else retry_file.base_backoff_ms,
+    )
+    max_backoff_ms = _choose_int(
+        flag="--max-backoff-ms",
+        cli_val=get_int(ns, "max_backoff_ms"),
+        file_val=None if retry_file is None else retry_file.max_backoff_ms,
+    )
+    retry = RetryConfig(
+        enabled=retry_enabled,
+        max_attempts=max_attempts,
+        base_backoff_ms=base_backoff_ms,
+        max_backoff_ms=max_backoff_ms,
+    )
 
-    weaviate = WeaviateConfigV1.from_namespace(ns)
-    weaviate = overlay_weaviate_api_key(weaviate=weaviate)
+    # -------------------------
+    # destinations: webhook (CLI explicit fields can override FILE-enabled destination)
+    # -------------------------
+    webhook_url_cli = get_opt_str(ns, "webhook_url")
+    webhook_url_file = (
+        None if dest_file is None or dest_file.webhook is None else dest_file.webhook.url
+    )
+    webhook_url = _choose_opt_str(
+        flag="--webhook-url", cli_val=webhook_url_cli, file_val=webhook_url_file
+    )
+
+    webhook: WebhookConfigV1 | None = None
+
+    if webhook_url is not None:
+        if webhook_url.strip() == "":
+            raise ConfigError("--webhook-url must not be empty")
+        webhook_timeout_file = (
+            None if dest_file is None or dest_file.webhook is None else dest_file.webhook.timeout_s
+        )
+        webhook_timeout_s = _choose_float(
+            flag="--webhook-timeout-s",
+            cli_val=get_float(ns, "webhook_timeout_s"),
+            file_val=webhook_timeout_file,
+        )
+        webhook = WebhookConfigV1(url=webhook_url, timeout_s=webhook_timeout_s)
+
+    # -------------------------
+    # destinations: kafka
+    # - If CLI specifies either topic/brokers, it must specify both.
+    # - If FILE enables kafka, CLI can still override flush timeout.
+    # -------------------------
+    kafka_topic_cli = get_opt_str(ns, "kafka_topic")
+    kafka_brokers_cli = get_opt_str(ns, "kafka_brokers")
+    kafka_topic_file = (
+        None if dest_file is None or dest_file.kafka is None else dest_file.kafka.topic
+    )
+    kafka_brokers_file = (
+        None if dest_file is None or dest_file.kafka is None else dest_file.kafka.brokers
+    )
+
+    kafka_cli_touched = any_flag_present(present, "--kafka-topic", "--kafka-brokers")
+    kafka: KafkaConfigV1 | None = None
+
+    if kafka_cli_touched:
+        if kafka_topic_cli is None or kafka_brokers_cli is None:
+            raise ConfigError("Both --kafka-topic and --kafka-brokers must be specified together")
+        flush_timeout_file = (
+            None
+            if dest_file is None or dest_file.kafka is None
+            else dest_file.kafka.flush_timeout_s
+        )
+        flush_timeout_s = _choose_float(
+            flag="--kafka-flush-timeout-s",
+            cli_val=get_float(ns, "kafka_flush_timeout_s"),
+            file_val=flush_timeout_file,
+        )
+        kafka = KafkaConfigV1(
+            topic=kafka_topic_cli, brokers=kafka_brokers_cli, flush_timeout_s=flush_timeout_s
+        )
+    else:
+        if kafka_topic_file is not None and kafka_brokers_file is not None:
+            flush_timeout_file = (
+                None
+                if dest_file is None or dest_file.kafka is None
+                else dest_file.kafka.flush_timeout_s
+            )
+            flush_timeout_s = _choose_float(
+                flag="--kafka-flush-timeout-s",
+                cli_val=get_float(ns, "kafka_flush_timeout_s"),
+                file_val=flush_timeout_file,
+            )
+            kafka = KafkaConfigV1(
+                topic=kafka_topic_file, brokers=kafka_brokers_file, flush_timeout_s=flush_timeout_s
+            )
+    # -------------------------
+    # destinations: weaviate
+    # Enable if collection is provided either by CLI or FILE.
+    # Secrets precedence: CLI explicit > ENV > FILE > DEFAULT
+    # -------------------------
+    weaviate_collection_cli = get_opt_str(ns, "weaviate_collection")
+    weaviate_collection_file = (
+        None if dest_file is None or dest_file.weaviate is None else dest_file.weaviate.collection
+    )
+    weaviate_collection = _choose_opt_str(
+        flag="--weaviate-collection",
+        cli_val=weaviate_collection_cli,
+        file_val=weaviate_collection_file,
+    )
+    weaviate: WeaviateConfigV1 | None = None
+    if weaviate_collection is not None:
+        if weaviate_collection.strip() == "":
+            raise ConfigError("--weaviate-collection must not be empty")
+        wv_file = None if dest_file is None else dest_file.weaviate
+        max_batch_errors = _choose_int(
+            flag="--weaviate-max-batch-errors",
+            cli_val=get_int(ns, "weaviate_max_batch_errors"),
+            file_val=None if wv_file is None else wv_file.max_batch_errors,
+        )
+        http_host = _choose_str(
+            flag="--weaviate-http-host",
+            cli_val=get_req_str(ns, "weaviate_http_host"),
+            file_val=None if wv_file is None else wv_file.http_host,
+        )
+        http_port = _choose_int(
+            flag="--weaviate-http-port",
+            cli_val=get_int(ns, "weaviate_http_port"),
+            file_val=None if wv_file is None else wv_file.http_port,
+        )
+        http_secure = _choose_bool(
+            flags=("--weaviate-http-secure",),
+            cli_val=get_bool(ns, "weaviate_http_secure"),
+            file_val=None if wv_file is None else wv_file.http_secure,
+        )
+        grpc_host = _choose_str(
+            flag="--weaviate-grpc-host",
+            cli_val=get_req_str(ns, "weaviate_grpc_host"),
+            file_val=None if wv_file is None else wv_file.grpc_host,
+        )
+        grpc_port = _choose_int(
+            flag="--weaviate-grpc-port",
+            cli_val=get_int(ns, "weaviate_grpc_port"),
+            file_val=None if wv_file is None else wv_file.grpc_port,
+        )
+        grpc_secure = _choose_bool(
+            flags=("--weaviate-grpc-secure",),
+            cli_val=get_bool(ns, "weaviate_grpc_secure"),
+            file_val=None if wv_file is None else wv_file.grpc_secure,
+        )
+        # weaviate api key (secrets): CLI explicit > ENV > FILE > DEFAULT(None)
+        api_key_base = _choose_opt_str(
+            flag="--weaviate-api-key",
+            cli_val=get_opt_str(ns, "weaviate_api_key"),
+            file_val=None if wv_file is None else wv_file.api_key,
+        )
+        if "--weaviate-api-key" not in present:
+            env_wv = first_env("ZEPHYR_WEAVIATE_API_KEY", "WEAVIATE_API_KEY")
+            if env_wv is not None:
+                api_key_base = env_wv
+
+        skip_init_checks = _choose_bool(
+            flags=("--weaviate-skip-init-checks",),
+            cli_val=get_bool(ns, "weaviate_skip_init_checks"),
+            file_val=None if wv_file is None else wv_file.skip_init_checks,
+        )
+
+        weaviate = WeaviateConfigV1(
+            collection=weaviate_collection,
+            max_batch_errors=max_batch_errors,
+            http_host=http_host,
+            http_port=http_port,
+            http_secure=http_secure,
+            grpc_host=grpc_host,
+            grpc_port=grpc_port,
+            grpc_secure=grpc_secure,
+            api_key=api_key_base,
+            skip_init_checks=skip_init_checks,
+        )
 
     return RunCmd(
         paths=get_str_list(ns, "paths"),
@@ -190,19 +508,27 @@ def _parse_run_cmd(ns: argparse.Namespace) -> RunCmd:
         out=get_req_str(ns, "out"),
         strategy=strategy,
         backend=backend,
-        uns_api_url=get_req_str(ns, "uns_api_url"),
+        # uns_api_url=get_req_str(ns, "uns_api_url"),
+        uns_api_url=uns_api_url,
         uns_api_key=uns_api_key,
-        uns_api_timeout_s=get_float(ns, "uns_api_timeout_s"),
-        skip_unsupported=get_bool(ns, "skip_unsupported"),
-        skip_existing=get_bool(ns, "skip_existing"),
-        force=get_bool(ns, "force"),
-        unique_element_ids=get_bool(ns, "unique_element_ids"),
+        # uns_api_timeout_s=get_float(ns, "uns_api_timeout_s"),
+        # skip_unsupported=get_bool(ns, "skip_unsupported"),
+        # skip_existing=get_bool(ns, "skip_existing"),
+        # force=get_bool(ns, "force"),
+        # unique_element_ids=get_bool(ns, "unique_element_ids"),
+        uns_api_timeout_s=uns_api_timeout_s,
+        skip_unsupported=skip_unsupported,
+        skip_existing=skip_existing,
+        force=force,
+        unique_element_ids=unique_element_ids,
         pipeline_version=get_opt_str(ns, "pipeline_version"),
         run_id=get_opt_str(ns, "run_id"),
         timestamp_utc=get_opt_str(ns, "timestamp_utc"),
         retry=retry,
-        workers=get_int(ns, "workers"),
-        stale_lock_ttl_s=get_opt_int(ns, "stale_lock_ttl_s"),
+        # workers=get_int(ns, "workers"),
+        # stale_lock_ttl_s=get_opt_int(ns, "stale_lock_ttl_s"),
+        workers=workers,
+        stale_lock_ttl_s=stale_lock_ttl_s_i,
         webhook=webhook,
         kafka=kafka,
         weaviate=weaviate,
@@ -214,7 +540,7 @@ def _parse_cmd(argv: Sequence[str]) -> RunCmd | ReplayDeliveryCmd:
     ns = p.parse_args(list(argv))
 
     if ns.cmd == "run":
-        return _parse_run_cmd(ns)
+        return _parse_run_cmd(ns, argv)
 
     if ns.cmd == "replay-delivery":
         return ReplayDeliveryCmd(
