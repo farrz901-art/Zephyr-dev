@@ -71,6 +71,14 @@ zephyr-ingest config resolve --config ./cfg.toml
 
 This prints JSON that includes `config_snapshot` and `config_snapshot.sources`.
 
+## 3.1) Generate a starter config
+
+```bash
+zephyr-ingest config init --out ./cfg.toml
+```
+
+This writes a valid v1 TOML file with optional destination blocks commented out.
+
 ## 4) `config_snapshot.sources` key naming convention
 
 `sources` uses **flat dotted keys**. Examples:

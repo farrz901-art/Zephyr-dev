@@ -106,6 +106,15 @@ class ResolveConfigCmd:
     strict: bool
 
 
+@dataclass(frozen=True, slots=True)
+class InitConfigCmd:
+    """
+    Generate a starter TOML config file (schema_version=1).
+    """
+
+    out: str | None
+
+
 def _add_runlike_args(*, p: argparse.ArgumentParser, paths_required: bool) -> None:
     # path: required for "run", optional for "config resolve"
     if paths_required:
@@ -201,6 +210,14 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     # For resolve, --config should be required in practice.
     # We enforce it in parsing to keep error handling consistent (ConfigError -> exit 2).
+
+    init = cfg_sub.add_parser("init", help="Print a starter TOML config to stdout or file")
+    init.add_argument(
+        "--out",
+        type=str,
+        default=None,
+        help="Write generated config to this path (default: stdout)",
+    )
 
     return p
 
@@ -684,7 +701,9 @@ def _parse_run_cmd(ns: argparse.Namespace, argv: Sequence[str]) -> RunCmd:
     )
 
 
-def _parse_cmd(argv: Sequence[str]) -> RunCmd | ReplayDeliveryCmd | ResolveConfigCmd:
+def _parse_cmd(
+    argv: Sequence[str],
+) -> RunCmd | ReplayDeliveryCmd | ResolveConfigCmd | InitConfigCmd:
     p = _build_parser()
     ns = p.parse_args(list(argv))
 
@@ -701,6 +720,10 @@ def _parse_cmd(argv: Sequence[str]) -> RunCmd | ReplayDeliveryCmd | ResolveConfi
         strict = get_bool(ns, "strict")
         return ResolveConfigCmd(run_cmd=run_cmd, config_path=config_path, strict=strict)
 
+    if ns.cmd == "config" and ns.config_cmd == "init":
+        out = get_opt_str(ns, "out")
+        return InitConfigCmd(out=out)
+
     if ns.cmd == "replay-delivery":
         return ReplayDeliveryCmd(
             out=get_req_str(ns, "out"),
@@ -712,6 +735,57 @@ def _parse_cmd(argv: Sequence[str]) -> RunCmd | ReplayDeliveryCmd | ResolveConfi
         )
 
     raise SystemExit("Unsupported command")
+
+
+def _default_config_toml() -> str:
+    # Keep this TOML valid by default:
+    # - Only include tables/keys that our parser accepts without required destination fields.
+    # - Provide optional destinations as commented examples.
+    return """\
+schema_version = 1
+
+[run]
+# backend = "local"  # or "uns-api"
+backend = "local"
+strategy = "auto"   # auto/fast/hi_res/ocr_only
+
+# If backend="uns-api", you typically also set:
+# uns_api_url = "http://localhost:8001/general/v0/general"
+# uns_api_timeout_s = 60.0
+# uns_api_key = "..."  # Prefer ENV injection (ZEPHYR_UNS_API_KEY)
+
+[retry]
+enabled = true
+max_attempts = 3
+base_backoff_ms = 200
+max_backoff_ms = 5000
+
+# -------------------------------
+# Optional destinations (examples)
+# Uncomment a block to enable it.
+# -------------------------------
+
+# [destinations.webhook]
+# url = "http://localhost:9000/ingest"
+# timeout_s = 10.0
+
+# [destinations.kafka]
+# topic = "zephyr.delivery"
+# brokers = "localhost:9092"
+# flush_timeout_s = 10.0
+
+# [destinations.weaviate]
+# collection = "ZephyrDoc"
+# max_batch_errors = 0
+# http_host = "localhost"
+# http_port = 8080
+# http_secure = false
+# grpc_host = "localhost"
+# grpc_port = 50051
+# grpc_secure = false
+# skip_init_checks = true
+# api_key = "..."  # Prefer ENV injection (ZEPHYR_WEAVIATE_API_KEY)
+"""
 
 
 def _make_kafka_producer_or_exit(brokers: str):
@@ -895,6 +969,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         }
         sys.stdout.write(json.dumps(out_obj, ensure_ascii=False, indent=2))
         sys.stdout.write("\n")
+        return 0
+
+    if isinstance(cmd, InitConfigCmd):
+        text = _default_config_toml()
+        if cmd.out is None:
+            sys.stdout.write(text)
+            return 0
+
+        out_path = Path(cmd.out)
+        if out_path.exists():
+            logging.error("config init: output path already exists: %s", str(out_path))
+            return 2
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(text, encoding="utf-8")
+        logging.info("wrote config: %s", str(out_path))
         return 0
 
     if isinstance(cmd, ReplayDeliveryCmd):
