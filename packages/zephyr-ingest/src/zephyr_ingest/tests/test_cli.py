@@ -39,6 +39,11 @@ def test_cli_run_invokes_runner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
         assert "backend" in snap
         assert "runner" in snap
 
+        sources = snap.get("sources")
+        assert sources is not None
+        assert isinstance(sources, dict)
+        assert sources.get("backend.kind") in ("cli", "env", "file", "default")
+
         # backend 脱敏规则（默认 local）
         backend = snap["backend"]
         assert backend["kind"] == "local"
@@ -104,6 +109,10 @@ def test_cli_run_webhook_fanout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
         # backend 默认 local
         backend = snap["backend"]
         assert backend["kind"] == "local"
+        sources = snap.get("sources")
+        assert sources is not None
+        assert isinstance(sources, dict)
+        assert sources.get("destinations.webhook.url") == "cli"
 
     monkeypatch.setattr(cli, "run_documents", fake_run_documents)
 
@@ -152,6 +161,11 @@ def test_cli_run_backend_uns_api(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 
         # api_key 必须脱敏
         assert backend["api_key"] in ("***", None)
+        sources = snap.get("sources")
+        assert sources is not None
+        assert isinstance(sources, dict)
+        assert sources.get("backend.kind") == "cli"
+        assert sources.get("backend.api_key") == "cli"
 
     monkeypatch.setattr(cli, "run_documents", fake_run_documents)
 

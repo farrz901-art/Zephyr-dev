@@ -44,6 +44,10 @@ class UnsApiBackendSnapshotV1(TypedDict):
 BackendSnapshotV1: TypeAlias = LocalBackendSnapshotV1 | UnsApiBackendSnapshotV1
 
 
+ConfigValueSource: TypeAlias = Literal["cli", "env", "file", "default"]
+ConfigSourcesV1: TypeAlias = dict[str, ConfigValueSource]
+
+
 class FilesystemDestinationSnapshotV1(TypedDict):
     enabled: bool
 
@@ -83,3 +87,4 @@ class ConfigSnapshotV1(TypedDict):
     retry: RetrySnapshotV1
     backend: BackendSnapshotV1
     destinations: DestinationsSnapshotV1
+    sources: NotRequired[ConfigSourcesV1]

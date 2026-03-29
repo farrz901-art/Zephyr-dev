@@ -40,6 +40,8 @@ from zephyr_ingest.config.snapshot_v1 import (
     CONFIG_SNAPSHOT_SCHEMA_VERSION,
     BackendSnapshotV1,
     ConfigSnapshotV1,
+    ConfigSourcesV1,
+    ConfigValueSource,
     DestinationsSnapshotV1,
 )
 from zephyr_ingest.destinations.base import Destination
@@ -79,6 +81,7 @@ class RunCmd:
     webhook: WebhookConfigV1 | None
     kafka: KafkaConfigV1 | None
     weaviate: WeaviateConfigV1 | None
+    config_sources: ConfigSourcesV1
 
 
 @dataclass(frozen=True, slots=True)
@@ -179,6 +182,22 @@ def _parse_run_cmd(ns: argparse.Namespace, argv: Sequence[str]) -> RunCmd:
     if config_path is not None:
         file_cfg = load_config_file_v1(path=Path(config_path))
 
+    sources: ConfigSourcesV1 = {}
+
+    def _src(flag: str, file_val: object | None) -> ConfigValueSource:
+        if flag in present:
+            return "cli"
+        if file_val is not None:
+            return "file"
+        return "default"
+
+    def _src_bool(flags: tuple[str, ...], file_val: object | None) -> ConfigValueSource:
+        if any_flag_present(present, *flags):
+            return "cli"
+        if file_val is not None:
+            return "file"
+        return "default"
+
     # -------------------------
     # helpers: choose CLI vs FILE vs default
     # -------------------------
@@ -221,87 +240,125 @@ def _parse_run_cmd(ns: argparse.Namespace, argv: Sequence[str]) -> RunCmd:
     # strategy / backend
     # -------------------------
     strategy_str_cli = get_req_str(ns, "strategy")
+    file_strategy = None if run_file is None else run_file.strategy
     strategy_str = _choose_str(
         flag="--strategy",
         cli_val=strategy_str_cli,
-        file_val=None if run_file is None else run_file.strategy,
+        file_val=file_strategy,
     )
-
+    sources["runner.strategy"] = _src("--strategy", file_strategy)
     try:
         strategy = PartitionStrategy(strategy_str)
     except ValueError as e:
         raise ConfigError(f"Invalid --strategy: {strategy_str}") from e
 
     backend_cli = get_req_str(ns, "backend")
+    file_backend = None if run_file is None else run_file.backend
     backend = _choose_str(
         flag="--backend",
         cli_val=backend_cli,
-        file_val=None if run_file is None else run_file.backend,
+        file_val=file_backend,
     )
+    sources["backend.kind"] = _src("--backend", file_backend)
     if backend not in ("local", "uns-api"):
         raise ConfigError(f"Invalid --backend: {backend}")
 
     # -------------------------
     # uns-api fields
     # -------------------------
+    file_uns_api_url = None if run_file is None else run_file.uns_api_url
     uns_api_url = _choose_str(
         flag="--uns-api-url",
         cli_val=get_req_str(ns, "uns_api_url"),
-        file_val=None if run_file is None else run_file.uns_api_url,
+        file_val=file_uns_api_url,
     )
+    file_uns_api_timeout = None if run_file is None else run_file.uns_api_timeout_s
     uns_api_timeout_s = _choose_float(
         flag="--uns-api-timeout-s",
         cli_val=get_float(ns, "uns_api_timeout_s"),
-        file_val=None if run_file is None else run_file.uns_api_timeout_s,
+        file_val=file_uns_api_timeout,
     )
 
     # uns_api_key precedence (secrets): CLI explicit > ENV > FILE > DEFAULT(None)
+    file_uns_api_key = None if run_file is None else run_file.uns_api_key
     uns_api_key_base = _choose_opt_str(
         flag="--uns-api-key",
         cli_val=get_opt_str(ns, "uns_api_key"),
-        file_val=None if run_file is None else run_file.uns_api_key,
+        file_val=file_uns_api_key,
     )
+    uns_api_key_src: ConfigValueSource
     if backend == "uns-api" and "--uns-api-key" not in present:
         env_key = first_env("ZEPHYR_UNS_API_KEY", "UNS_API_KEY", "UNSTRUCTURED_API_KEY")
         if env_key is not None:
             uns_api_key_base = env_key
+            uns_api_key_src = "env"
+        elif file_uns_api_key is not None:
+            uns_api_key_src = "file"
+        else:
+            uns_api_key_src = "default"
+    elif backend == "uns-api" and "--uns-api-key" in present:
+        uns_api_key_src = "cli"
+    else:
+        uns_api_key_src = "default"
     uns_api_key = uns_api_key_base if backend == "uns-api" else None
+    if backend == "uns-api":
+        sources["backend.url"] = _src("--uns-api-url", file_uns_api_url)
+        sources["backend.timeout_s"] = _src("--uns-api-timeout-s", file_uns_api_timeout)
+        sources["backend.api_key"] = uns_api_key_src
+
     # -------------------------
     # runner flags
     # -------------------------
+    file_skip_existing = None if run_file is None else run_file.skip_existing
     skip_existing = _choose_bool(
         flags=("--skip-existing", "--no-skip-existing"),
         cli_val=get_bool(ns, "skip_existing"),
-        file_val=None if run_file is None else run_file.skip_existing,
+        file_val=file_skip_existing,
     )
+    sources["runner.skip_existing"] = _src_bool(
+        ("--skip-existing", "--no-skip-existing"), file_skip_existing
+    )
+
+    file_skip_unsupported = None if run_file is None else run_file.skip_unsupported
     skip_unsupported = _choose_bool(
         flags=("--skip-unsupported",),
         cli_val=get_bool(ns, "skip_unsupported"),
-        file_val=None if run_file is None else run_file.skip_unsupported,
+        file_val=file_skip_unsupported,
     )
+    sources["runner.skip_unsupported"] = _src_bool(("--skip-unsupported",), file_skip_unsupported)
+
+    file_force = None if run_file is None else run_file.force
     force = _choose_bool(
         flags=("--force",),
         cli_val=get_bool(ns, "force"),
-        file_val=None if run_file is None else run_file.force,
+        file_val=file_force,
     )
+    sources["runner.force"] = _src_bool(("--force",), file_force)
+
+    file_unique_ids = None if run_file is None else run_file.unique_element_ids
     unique_element_ids = _choose_bool(
         flags=("--unique-element-ids", "--no-unique-element-ids"),
         cli_val=get_bool(ns, "unique_element_ids"),
-        file_val=None if run_file is None else run_file.unique_element_ids,
+        file_val=file_unique_ids,
     )
+    sources["runner.unique_element_ids"] = _src_bool(
+        ("--unique-element-ids", "--no-unique-element-ids"), file_unique_ids
+    )
+
+    file_workers = None if run_file is None else run_file.workers
     workers = _choose_int(
         flag="--workers",
         cli_val=get_int(ns, "workers"),
-        file_val=None if run_file is None else run_file.workers,
+        file_val=file_workers,
     )
+    sources["runner.workers"] = _src("--workers", file_workers)
+
+    file_stale_lock = None if run_file is None else run_file.stale_lock_ttl_s
+    stale_lock_ttl_cli = get_opt_int(ns, "stale_lock_ttl_s")
     stale_lock_ttl_s = _choose_opt_str(
         flag="--stale-lock-ttl-s",
-        cli_val=None
-        if get_opt_int(ns, "stale_lock_ttl_s") is None
-        else str(get_opt_int(ns, "stale_lock_ttl_s")),
-        file_val=None
-        if run_file is None or run_file.stale_lock_ttl_s is None
-        else str(run_file.stale_lock_ttl_s),
+        cli_val=None if stale_lock_ttl_cli is None else str(stale_lock_ttl_cli),
+        file_val=None if file_stale_lock is None else str(file_stale_lock),
     )
     stale_lock_ttl_s_i: int | None
     if stale_lock_ttl_s is None:
@@ -311,6 +368,7 @@ def _parse_run_cmd(ns: argparse.Namespace, argv: Sequence[str]) -> RunCmd:
             stale_lock_ttl_s_i = int(stale_lock_ttl_s)
         except ValueError as e:
             raise ConfigError("--stale-lock-ttl-s must be int") from e
+    sources["runner.stale_lock_ttl_s"] = _src("--stale-lock-ttl-s", file_stale_lock)
 
     # -------------------------
     # retry (CLI explicit > FILE > DEFAULT)
@@ -318,24 +376,40 @@ def _parse_run_cmd(ns: argparse.Namespace, argv: Sequence[str]) -> RunCmd:
     # -------------------------
     retry_enabled_cli = get_bool(ns, "retry_enabled")
     retry_enabled = retry_enabled_cli
-    if "--no-retry" not in present and retry_file is not None and retry_file.enabled is not None:
-        retry_enabled = retry_file.enabled
+    file_retry_enabled = None if retry_file is None else retry_file.enabled
+    if "--no-retry" not in present and file_retry_enabled is not None:
+        retry_enabled = file_retry_enabled
+    if "--no-retry" in present:
+        sources["retry.enabled"] = "cli"
+    elif file_retry_enabled is not None:
+        sources["retry.enabled"] = "file"
+    else:
+        sources["retry.enabled"] = "default"
 
+    file_max_attempts = None if retry_file is None else retry_file.max_attempts
     max_attempts = _choose_int(
         flag="--max-attempts",
         cli_val=get_int(ns, "max_attempts"),
-        file_val=None if retry_file is None else retry_file.max_attempts,
+        file_val=file_max_attempts,
     )
+    sources["retry.max_attempts"] = _src("--max-attempts", file_max_attempts)
+
+    file_base_backoff = None if retry_file is None else retry_file.base_backoff_ms
     base_backoff_ms = _choose_int(
         flag="--base-backoff-ms",
         cli_val=get_int(ns, "base_backoff_ms"),
-        file_val=None if retry_file is None else retry_file.base_backoff_ms,
+        file_val=file_base_backoff,
     )
+    sources["retry.base_backoff_ms"] = _src("--base-backoff-ms", file_base_backoff)
+
+    file_max_backoff = None if retry_file is None else retry_file.max_backoff_ms
     max_backoff_ms = _choose_int(
         flag="--max-backoff-ms",
         cli_val=get_int(ns, "max_backoff_ms"),
-        file_val=None if retry_file is None else retry_file.max_backoff_ms,
+        file_val=file_max_backoff,
     )
+    sources["retry.max_backoff_ms"] = _src("--max-backoff-ms", file_max_backoff)
+
     retry = RetryConfig(
         enabled=retry_enabled,
         max_attempts=max_attempts,
@@ -347,9 +421,8 @@ def _parse_run_cmd(ns: argparse.Namespace, argv: Sequence[str]) -> RunCmd:
     # destinations: webhook (CLI explicit fields can override FILE-enabled destination)
     # -------------------------
     webhook_url_cli = get_opt_str(ns, "webhook_url")
-    webhook_url_file = (
-        None if dest_file is None or dest_file.webhook is None else dest_file.webhook.url
-    )
+    file_webhook = None if dest_file is None else dest_file.webhook
+    webhook_url_file = None if file_webhook is None else file_webhook.url
     webhook_url = _choose_opt_str(
         flag="--webhook-url", cli_val=webhook_url_cli, file_val=webhook_url_file
     )
@@ -359,15 +432,22 @@ def _parse_run_cmd(ns: argparse.Namespace, argv: Sequence[str]) -> RunCmd:
     if webhook_url is not None:
         if webhook_url.strip() == "":
             raise ConfigError("--webhook-url must not be empty")
-        webhook_timeout_file = (
-            None if dest_file is None or dest_file.webhook is None else dest_file.webhook.timeout_s
-        )
+        webhook_timeout_file = None if file_webhook is None else file_webhook.timeout_s
         webhook_timeout_s = _choose_float(
             flag="--webhook-timeout-s",
             cli_val=get_float(ns, "webhook_timeout_s"),
             file_val=webhook_timeout_file,
         )
         webhook = WebhookConfigV1(url=webhook_url, timeout_s=webhook_timeout_s)
+        # sources
+        sources["destinations.webhook.url"] = (
+            "cli"
+            if "--webhook-url" in present
+            else ("file" if file_webhook is not None else "default")
+        )
+        sources["destinations.webhook.timeout_s"] = _src(
+            "--webhook-timeout-s", webhook_timeout_file
+        )
 
     # -------------------------
     # destinations: kafka
@@ -376,12 +456,9 @@ def _parse_run_cmd(ns: argparse.Namespace, argv: Sequence[str]) -> RunCmd:
     # -------------------------
     kafka_topic_cli = get_opt_str(ns, "kafka_topic")
     kafka_brokers_cli = get_opt_str(ns, "kafka_brokers")
-    kafka_topic_file = (
-        None if dest_file is None or dest_file.kafka is None else dest_file.kafka.topic
-    )
-    kafka_brokers_file = (
-        None if dest_file is None or dest_file.kafka is None else dest_file.kafka.brokers
-    )
+    file_kafka = None if dest_file is None else dest_file.kafka
+    kafka_topic_file = None if file_kafka is None else file_kafka.topic
+    kafka_brokers_file = None if file_kafka is None else file_kafka.brokers
 
     kafka_cli_touched = any_flag_present(present, "--kafka-topic", "--kafka-brokers")
     kafka: KafkaConfigV1 | None = None
@@ -389,11 +466,7 @@ def _parse_run_cmd(ns: argparse.Namespace, argv: Sequence[str]) -> RunCmd:
     if kafka_cli_touched:
         if kafka_topic_cli is None or kafka_brokers_cli is None:
             raise ConfigError("Both --kafka-topic and --kafka-brokers must be specified together")
-        flush_timeout_file = (
-            None
-            if dest_file is None or dest_file.kafka is None
-            else dest_file.kafka.flush_timeout_s
-        )
+        flush_timeout_file = None if file_kafka is None else file_kafka.flush_timeout_s
         flush_timeout_s = _choose_float(
             flag="--kafka-flush-timeout-s",
             cli_val=get_float(ns, "kafka_flush_timeout_s"),
@@ -402,13 +475,14 @@ def _parse_run_cmd(ns: argparse.Namespace, argv: Sequence[str]) -> RunCmd:
         kafka = KafkaConfigV1(
             topic=kafka_topic_cli, brokers=kafka_brokers_cli, flush_timeout_s=flush_timeout_s
         )
+        sources["destinations.kafka.topic"] = "cli"
+        sources["destinations.kafka.brokers"] = "cli"
+        sources["destinations.kafka.flush_timeout_s"] = _src(
+            "--kafka-flush-timeout-s", flush_timeout_file
+        )
     else:
         if kafka_topic_file is not None and kafka_brokers_file is not None:
-            flush_timeout_file = (
-                None
-                if dest_file is None or dest_file.kafka is None
-                else dest_file.kafka.flush_timeout_s
-            )
+            flush_timeout_file = None if file_kafka is None else file_kafka.flush_timeout_s
             flush_timeout_s = _choose_float(
                 flag="--kafka-flush-timeout-s",
                 cli_val=get_float(ns, "kafka_flush_timeout_s"),
@@ -417,15 +491,19 @@ def _parse_run_cmd(ns: argparse.Namespace, argv: Sequence[str]) -> RunCmd:
             kafka = KafkaConfigV1(
                 topic=kafka_topic_file, brokers=kafka_brokers_file, flush_timeout_s=flush_timeout_s
             )
+            sources["destinations.kafka.topic"] = "file"
+            sources["destinations.kafka.brokers"] = "file"
+            sources["destinations.kafka.flush_timeout_s"] = _src(
+                "--kafka-flush-timeout-s", flush_timeout_file
+            )
     # -------------------------
     # destinations: weaviate
     # Enable if collection is provided either by CLI or FILE.
     # Secrets precedence: CLI explicit > ENV > FILE > DEFAULT
     # -------------------------
     weaviate_collection_cli = get_opt_str(ns, "weaviate_collection")
-    weaviate_collection_file = (
-        None if dest_file is None or dest_file.weaviate is None else dest_file.weaviate.collection
-    )
+    file_weaviate = None if dest_file is None else dest_file.weaviate
+    weaviate_collection_file = None if file_weaviate is None else file_weaviate.collection
     weaviate_collection = _choose_opt_str(
         flag="--weaviate-collection",
         cli_val=weaviate_collection_cli,
@@ -435,7 +513,7 @@ def _parse_run_cmd(ns: argparse.Namespace, argv: Sequence[str]) -> RunCmd:
     if weaviate_collection is not None:
         if weaviate_collection.strip() == "":
             raise ConfigError("--weaviate-collection must not be empty")
-        wv_file = None if dest_file is None else dest_file.weaviate
+        wv_file = file_weaviate
         max_batch_errors = _choose_int(
             flag="--weaviate-max-batch-errors",
             cli_val=get_int(ns, "weaviate_max_batch_errors"),
@@ -477,10 +555,18 @@ def _parse_run_cmd(ns: argparse.Namespace, argv: Sequence[str]) -> RunCmd:
             cli_val=get_opt_str(ns, "weaviate_api_key"),
             file_val=None if wv_file is None else wv_file.api_key,
         )
+        weaviate_api_key_src: ConfigValueSource
         if "--weaviate-api-key" not in present:
             env_wv = first_env("ZEPHYR_WEAVIATE_API_KEY", "WEAVIATE_API_KEY")
             if env_wv is not None:
                 api_key_base = env_wv
+                weaviate_api_key_src = "env"
+            elif wv_file is not None and wv_file.api_key is not None:
+                weaviate_api_key_src = "file"
+            else:
+                weaviate_api_key_src = "default"
+        else:
+            weaviate_api_key_src = "cli"
 
         skip_init_checks = _choose_bool(
             flags=("--weaviate-skip-init-checks",),
@@ -499,6 +585,37 @@ def _parse_run_cmd(ns: argparse.Namespace, argv: Sequence[str]) -> RunCmd:
             grpc_secure=grpc_secure,
             api_key=api_key_base,
             skip_init_checks=skip_init_checks,
+        )
+        # sources
+        sources["destinations.weaviate.collection"] = (
+            "cli"
+            if "--weaviate-collection" in present
+            else ("file" if file_weaviate is not None else "default")
+        )
+        sources["destinations.weaviate.max_batch_errors"] = _src(
+            "--weaviate-max-batch-errors", None if wv_file is None else wv_file.max_batch_errors
+        )
+        sources["destinations.weaviate.http_host"] = _src(
+            "--weaviate-http-host", None if wv_file is None else wv_file.http_host
+        )
+        sources["destinations.weaviate.http_port"] = _src(
+            "--weaviate-http-port", None if wv_file is None else wv_file.http_port
+        )
+        sources["destinations.weaviate.http_secure"] = _src_bool(
+            ("--weaviate-http-secure",), None if wv_file is None else wv_file.http_secure
+        )
+        sources["destinations.weaviate.grpc_host"] = _src(
+            "--weaviate-grpc-host", None if wv_file is None else wv_file.grpc_host
+        )
+        sources["destinations.weaviate.grpc_port"] = _src(
+            "--weaviate-grpc-port", None if wv_file is None else wv_file.grpc_port
+        )
+        sources["destinations.weaviate.grpc_secure"] = _src_bool(
+            ("--weaviate-grpc-secure",), None if wv_file is None else wv_file.grpc_secure
+        )
+        sources["destinations.weaviate.api_key"] = weaviate_api_key_src
+        sources["destinations.weaviate.skip_init_checks"] = _src_bool(
+            ("--weaviate-skip-init-checks",), None if wv_file is None else wv_file.skip_init_checks
         )
 
     return RunCmd(
@@ -531,6 +648,7 @@ def _parse_run_cmd(ns: argparse.Namespace, argv: Sequence[str]) -> RunCmd:
         webhook=webhook,
         kafka=kafka,
         weaviate=weaviate,
+        config_sources=sources,
     )
 
 
@@ -640,6 +758,7 @@ def _build_config_snapshot(*, cmd: RunCmd) -> ConfigSnapshotV1:
         },
         "backend": backend,
         "destinations": destinations,
+        "sources": cmd.config_sources,
     }
 
 

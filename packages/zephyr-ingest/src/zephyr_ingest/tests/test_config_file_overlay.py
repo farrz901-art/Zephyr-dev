@@ -71,6 +71,14 @@ timeout_s = 7.0
         assert snap["destinations"]["webhook"]["url"] == "http://test.com/hook"
         assert snap["destinations"]["webhook"]["timeout_s"] == 7.0
 
+        sources = snap.get("sources")
+        assert sources is not None
+        assert isinstance(sources, dict)
+        assert sources.get("backend.kind") == "file"
+        assert sources.get("backend.api_key") == "env"
+        assert sources.get("destinations.webhook.url") == "file"
+        assert sources.get("destinations.webhook.timeout_s") == "file"
+
     monkeypatch.setattr(cli, "run_documents", fake_run_documents)
 
     rc = cli.main(
@@ -117,6 +125,13 @@ timeout_s = 7.0
         # CLI explicitly overrides timeout_s, while url comes from file
         assert snap["destinations"]["webhook"]["timeout_s"] == 9.0
 
+        sources = snap.get("sources")
+        assert sources is not None
+        assert isinstance(sources, dict)
+        assert sources.get("backend.kind") == "default"
+        assert sources.get("destinations.webhook.url") == "file"
+        assert sources.get("destinations.webhook.timeout_s") == "cli"
+
     monkeypatch.setattr(cli, "run_documents", fake_run_documents)
 
     rc = cli.main(
@@ -162,6 +177,12 @@ uns_api_key = "file-key"
         assert cfg.backend is not None
         # CLI explicit --uns-api-key must win over ENV and FILE
         assert getattr(cfg.backend, "api_key") == "cli-key"
+
+        snap = cast(ConfigSnapshotV1, kwargs.get("config_snapshot"))
+        sources = snap.get("sources")
+        assert sources is not None
+        assert isinstance(sources, dict)
+        assert sources.get("backend.api_key") == "cli"
 
     monkeypatch.setattr(cli, "run_documents", fake_run_documents)
 
