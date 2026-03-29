@@ -51,6 +51,8 @@ from zephyr_ingest.destinations.webhook import WebhookDestination
 from zephyr_ingest.replay_delivery import replay_delivery_dlq
 from zephyr_ingest.runner import RetryConfig, RunnerConfig, run_documents
 from zephyr_ingest.sources.local_file import LocalFileSource
+from zephyr_ingest.spec.registry import get_spec, list_spec_ids
+from zephyr_ingest.spec.types import ConnectorSpecV1, SpecFieldTypeV1
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,6 +115,17 @@ class InitConfigCmd:
     """
 
     out: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class SpecListCmd:
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class SpecShowCmd:
+    spec_id: str
+    fmt: str  # "zephyr" | "jsonschema"
 
 
 def _add_runlike_args(*, p: argparse.ArgumentParser, paths_required: bool) -> None:
@@ -217,6 +230,21 @@ def _build_parser() -> argparse.ArgumentParser:
         type=str,
         default=None,
         help="Write generated config to this path (default: stdout)",
+    )
+
+    spec = sub.add_parser("spec", help="Connector spec utilities")
+    spec_sub = spec.add_subparsers(dest="spec_cmd", required=True)
+
+    spec_list = spec_sub.add_parser("list", help="List available spec IDs")
+    _ = spec_list  # no args
+
+    spec_show = spec_sub.add_parser("show", help="Show a spec by ID")
+    spec_show.add_argument("--id", required=True, help="Spec ID (see `spec list`)")
+    spec_show.add_argument(
+        "--format",
+        default="zephyr",
+        choices=["zephyr", "jsonschema"],
+        help="Output format: zephyr (raw) or jsonschema",
     )
 
     return p
@@ -703,7 +731,7 @@ def _parse_run_cmd(ns: argparse.Namespace, argv: Sequence[str]) -> RunCmd:
 
 def _parse_cmd(
     argv: Sequence[str],
-) -> RunCmd | ReplayDeliveryCmd | ResolveConfigCmd | InitConfigCmd:
+) -> RunCmd | ReplayDeliveryCmd | ResolveConfigCmd | InitConfigCmd | SpecListCmd | SpecShowCmd:
     p = _build_parser()
     ns = p.parse_args(list(argv))
 
@@ -724,6 +752,14 @@ def _parse_cmd(
         out = get_opt_str(ns, "out")
         return InitConfigCmd(out=out)
 
+    if ns.cmd == "spec" and ns.spec_cmd == "list":
+        return SpecListCmd()
+
+    if ns.cmd == "spec" and ns.spec_cmd == "show":
+        spec_id = get_req_str(ns, "id")
+        fmt = get_req_str(ns, "format")
+        return SpecShowCmd(spec_id=spec_id, fmt=fmt)
+
     if ns.cmd == "replay-delivery":
         return ReplayDeliveryCmd(
             out=get_req_str(ns, "out"),
@@ -735,6 +771,56 @@ def _parse_cmd(
         )
 
     raise SystemExit("Unsupported command")
+
+
+def _field_type_to_jsonschema_type(t: SpecFieldTypeV1) -> str:
+    if t == "string":
+        return "string"
+    if t == "int":
+        return "integer"
+    if t == "float":
+        return "number"
+    # bool
+    return "boolean"
+
+
+def spec_to_jsonschema(*, spec: ConnectorSpecV1) -> dict[str, object]:
+    """
+    Convert ConnectorSpecV1 to a simple JSONSchema object.
+    Notes:
+    - This is a UI/docs schema, not a runtime validator.
+    - Field `name` is used as the property name (flat dotted key).
+    """
+    props: dict[str, object] = {}
+    required: list[str] = []
+
+    for f in spec["fields"]:
+        p: dict[str, object] = {
+            "type": _field_type_to_jsonschema_type(f["type"]),
+        }
+        if "help" in f:
+            p["description"] = f["help"]
+        if "default" in f:
+            p["default"] = f["default"]
+        if f.get("secret", False):
+            p["writeOnly"] = True
+        if "examples" in f:
+            p["examples"] = f["examples"]
+        props[f["name"]] = p
+        if f["required"]:
+            required.append(f["name"])
+
+    schema: dict[str, object] = {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "title": spec["id"],
+        "description": spec["description"],
+        "properties": props,
+        "additionalProperties": False,
+    }
+    if required:
+        schema["required"] = required
+    return schema
 
 
 def _default_config_toml() -> str:
@@ -985,6 +1071,29 @@ def main(argv: Sequence[str] | None = None) -> int:
         out_path.write_text(text, encoding="utf-8")
         logging.info("wrote config: %s", str(out_path))
         return 0
+
+    if isinstance(cmd, SpecListCmd):
+        ids = list_spec_ids()
+        sys.stdout.write(json.dumps({"spec_ids": ids}, ensure_ascii=False, indent=2))
+        sys.stdout.write("\n")
+        return 0
+
+    if isinstance(cmd, SpecShowCmd):
+        spec = get_spec(spec_id=cmd.spec_id)
+        if spec is None:
+            logging.error("unknown spec id: %s", cmd.spec_id)
+            return 2
+        if cmd.fmt == "zephyr":
+            sys.stdout.write(json.dumps(spec, ensure_ascii=False, indent=2))
+            sys.stdout.write("\n")
+            return 0
+        if cmd.fmt == "jsonschema":
+            js = spec_to_jsonschema(spec=spec)
+            sys.stdout.write(json.dumps(js, ensure_ascii=False, indent=2))
+            sys.stdout.write("\n")
+            return 0
+        logging.error("unsupported format: %s", cmd.fmt)
+        return 2
 
     if isinstance(cmd, ReplayDeliveryCmd):
         stats = replay_delivery_dlq(
