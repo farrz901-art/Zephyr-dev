@@ -227,7 +227,6 @@ def _parse_run_cmd(ns: argparse.Namespace, argv: Sequence[str]) -> RunCmd:
         file_val=None if run_file is None else run_file.strategy,
     )
 
-    strategy_str = get_req_str(ns, "strategy")
     try:
         strategy = PartitionStrategy(strategy_str)
     except ValueError as e:
