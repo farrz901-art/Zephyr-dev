@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from zephyr_ingest.config.constants import UNS_API_KEY_ENV_NAMES, WEAVIATE_API_KEY_ENV_NAMES
 from zephyr_ingest.spec.types import ConnectorSpecV1
 
 _REGISTRY: dict[str, ConnectorSpecV1] = {
@@ -41,7 +42,7 @@ _REGISTRY: dict[str, ConnectorSpecV1] = {
                 "required": False,
                 "secret": True,
                 "cli_flags": ["--uns-api-key"],
-                "env_names": ["ZEPHYR_UNS_API_KEY", "UNS_API_KEY", "UNSTRUCTURED_API_KEY"],
+                "env_names": list(UNS_API_KEY_ENV_NAMES),
                 "help": "Unstructured API key. Prefer ENV injection.",
             },
         ],
@@ -58,7 +59,7 @@ _REGISTRY: dict[str, ConnectorSpecV1] = {
                 "type": "string",
                 "required": True,
                 "cli_flags": ["--webhook-url"],
-                "help": "Webhook URL to POST payload to.",
+                "help": "Webhook URL (enables destination).",
             },
             {
                 "name": "destinations.webhook.timeout_s",
@@ -82,14 +83,14 @@ _REGISTRY: dict[str, ConnectorSpecV1] = {
                 "type": "string",
                 "required": True,
                 "cli_flags": ["--kafka-topic"],
-                "help": "Kafka topic name.",
+                "help": "Kafka topic name (requires --kafka-brokers).",
             },
             {
                 "name": "destinations.kafka.brokers",
                 "type": "string",
                 "required": True,
                 "cli_flags": ["--kafka-brokers"],
-                "help": "Kafka broker addresses (comma-separated).",
+                "help": "Kafka broker addresses, comma-separated (e.g. localhost:9092)",
                 "examples": ["localhost:9092"],
             },
             {
@@ -98,7 +99,7 @@ _REGISTRY: dict[str, ConnectorSpecV1] = {
                 "required": False,
                 "default": 10.0,
                 "cli_flags": ["--kafka-flush-timeout-s"],
-                "help": "Producer flush timeout (seconds).",
+                "help": "Kafka producer flush timeout in seconds.",
             },
         ],
     },
@@ -115,7 +116,7 @@ _REGISTRY: dict[str, ConnectorSpecV1] = {
                 "type": "string",
                 "required": True,
                 "cli_flags": ["--weaviate-collection"],
-                "help": "Weaviate collection name.",
+                "help": "Weaviate collection name (enables destination).",
             },
             {
                 "name": "destinations.weaviate.max_batch_errors",
@@ -123,7 +124,7 @@ _REGISTRY: dict[str, ConnectorSpecV1] = {
                 "required": False,
                 "default": 0,
                 "cli_flags": ["--weaviate-max-batch-errors"],
-                "help": "Max tolerated batch errors before failing delivery.",
+                "help": "Max tolerated batch errors; 0 means any error fails delivery (default: 0)",
             },
             {
                 "name": "destinations.weaviate.http_host",
@@ -180,7 +181,7 @@ _REGISTRY: dict[str, ConnectorSpecV1] = {
                 "required": False,
                 "secret": True,
                 "cli_flags": ["--weaviate-api-key"],
-                "env_names": ["ZEPHYR_WEAVIATE_API_KEY", "WEAVIATE_API_KEY"],
+                "env_names": list(WEAVIATE_API_KEY_ENV_NAMES),
                 "help": "Weaviate API key. Prefer ENV injection.",
             },
         ],

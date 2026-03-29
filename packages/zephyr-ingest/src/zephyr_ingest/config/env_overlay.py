@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from dataclasses import replace
 
+from zephyr_ingest.config.constants import UNS_API_KEY_ENV_NAMES, WEAVIATE_API_KEY_ENV_NAMES
 from zephyr_ingest.config.models import WeaviateConfigV1
 
 
@@ -30,7 +31,7 @@ def overlay_uns_api_key(
     if backend != "uns-api":
         return uns_api_key
 
-    env_key = first_env("ZEPHYR_UNS_API_KEY", "UNS_API_KEY", "UNSTRUCTURED_API_KEY")
+    env_key = first_env(*UNS_API_KEY_ENV_NAMES)
     if env_key is None:
         return uns_api_key
 
@@ -49,7 +50,7 @@ def overlay_weaviate_api_key(
     if weaviate is None:
         return None
 
-    env_key = first_env("ZEPHYR_WEAVIATE_API_KEY", "WEAVIATE_API_KEY")
+    env_key = first_env(*WEAVIATE_API_KEY_ENV_NAMES)
     if env_key is None:
         return weaviate
 

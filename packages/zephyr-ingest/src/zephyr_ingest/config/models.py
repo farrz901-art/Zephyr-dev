@@ -25,12 +25,17 @@ class WebhookConfigV1:
 
     @staticmethod
     def add_cli_args(p: argparse.ArgumentParser) -> None:
-        p.add_argument("--webhook-url", type=str, default=None, help="Optional HTTP Webhook URL")
+        p.add_argument(
+            "--webhook-url",
+            type=str,
+            default=None,
+            help="Webhook URL (enables destination).",
+        )
         p.add_argument(
             "--webhook-timeout-s",
             type=float,
             default=10.0,
-            help="Webhook timeout in seconds",
+            help="Webhook request timeout (seconds).",
         )
 
     @staticmethod
@@ -65,7 +70,7 @@ class KafkaConfigV1:
             "--kafka-topic",
             type=str,
             default=None,
-            help="Kafka topic name (optional; requires --kafka-brokers)",
+            help="Kafka topic name (requires --kafka-brokers).",
         )
         p.add_argument(
             "--kafka-brokers",
@@ -77,7 +82,7 @@ class KafkaConfigV1:
             "--kafka-flush-timeout-s",
             type=float,
             default=10.0,
-            help="Kafka producer flush timeout in seconds",
+            help="Kafka producer flush timeout in seconds.",
         )
 
     @staticmethod
@@ -135,7 +140,7 @@ class WeaviateConfigV1:
             "--weaviate-collection",
             type=str,
             default=None,
-            help="Weaviate collection name (optional; enables WeaviateDestination)",
+            help="Weaviate collection name (enables destination).",
         )
         p.add_argument(
             "--weaviate-max-batch-errors",
@@ -152,7 +157,12 @@ class WeaviateConfigV1:
         p.add_argument("--weaviate-grpc-port", type=int, default=50051)
         p.add_argument("--weaviate-grpc-secure", action="store_true", default=False)
 
-        p.add_argument("--weaviate-api-key", type=str, default=None)
+        p.add_argument(
+            "--weaviate-api-key",
+            type=str,
+            default=None,
+            help="Weaviate API key. Prefer ENV injection.",
+        )
         p.add_argument(
             "--weaviate-skip-init-checks",
             action="store_true",

@@ -158,10 +158,28 @@ def _add_runlike_args(*, p: argparse.ArgumentParser, paths_required: bool) -> No
         choices=["auto", "fast", "hi_res", "ocr_only"],
         help="Partition strategy (mainly for pdf/image)",
     )
-    p.add_argument("--backend", default="local", choices=["local", "uns-api"])
-    p.add_argument("--uns-api-url", default="http://localhost:8001/general/v0/general")
-    p.add_argument("--uns-api-key", default=None)
-    p.add_argument("--uns-api-timeout-s", type=float, default=60.0)
+    p.add_argument(
+        "--backend",
+        default="local",
+        choices=["local", "uns-api"],
+        help="Backend kind: local or uns-api.",
+    )
+    p.add_argument(
+        "--uns-api-url",
+        default="http://localhost:8001/general/v0/general",
+        help="Unstructured API endpoint URL.",
+    )
+    p.add_argument(
+        "--uns-api-key",
+        default=None,
+        help="Unstructured API key. Prefer ENV injection.",
+    )
+    p.add_argument(
+        "--uns-api-timeout-s",
+        type=float,
+        default=60.0,
+        help="Unstructured API request timeout (seconds).",
+    )
 
     p.add_argument("--skip-unsupported", action="store_true", default=True)
     p.add_argument("--skip-existing", action="store_true", default=True)
