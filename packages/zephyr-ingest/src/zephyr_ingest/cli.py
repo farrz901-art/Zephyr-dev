@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import sys
 from dataclasses import dataclass
@@ -94,71 +95,88 @@ class ReplayDeliveryCmd:
     move_done: bool
 
 
-def _build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="zephyr-ingest")
-    sub = p.add_subparsers(dest="cmd", required=True)
+@dataclass(frozen=True, slots=True)
+class ResolveConfigCmd:
+    """
+    Resolve/merge config without running ingest.
+    """
 
-    run = sub.add_parser("run", help="Run ingest pipeline over a local file path")
-    run.add_argument(
-        "--path",
-        nargs="+",
-        dest="paths",
-        required=True,
-        help="One or more file paths",
-    )
-    run.add_argument("--glob", default="**/*", help="Glob pattern when --path is a directory")
-    run.add_argument("--out", default=".cache/out", help="Output root directory")
+    run_cmd: RunCmd
+    config_path: str
+    strict: bool
 
-    run.add_argument(
+
+def _add_runlike_args(*, p: argparse.ArgumentParser, paths_required: bool) -> None:
+    # path: required for "run", optional for "config resolve"
+    if paths_required:
+        p.add_argument(
+            "--path", nargs="+", dest="paths", required=True, help="One or more file paths"
+        )
+    else:
+        p.add_argument(
+            "--path",
+            nargs="*",
+            dest="paths",
+            default=[],
+            help="Optional paths (not required for resolve)",
+        )
+
+    p.add_argument("--glob", default="**/*", help="Glob pattern when --path is a directory")
+    p.add_argument("--out", default=".cache/out", help="Output root directory")
+    p.add_argument(
         "--config",
         type=str,
         default=None,
-        help="Optional TOML config file to overlay defaults (CLI > ENV > FILE > DEFAULT)",
+        help="Optional TOML config file (CLI explicit > ENV secrets > FILE > DEFAULT)",
     )
 
-    run.add_argument(
+    p.add_argument(
         "--strategy",
         default="auto",
         choices=["auto", "fast", "hi_res", "ocr_only"],
         help="Partition strategy (mainly for pdf/image)",
     )
-    run.add_argument("--backend", default="local", choices=["local", "uns-api"])
+    p.add_argument("--backend", default="local", choices=["local", "uns-api"])
+    p.add_argument("--uns-api-url", default="http://localhost:8001/general/v0/general")
+    p.add_argument("--uns-api-key", default=None)
+    p.add_argument("--uns-api-timeout-s", type=float, default=60.0)
 
-    run.add_argument("--uns-api-url", default="http://localhost:8001/general/v0/general")
-    run.add_argument("--uns-api-key", default=None)
-    run.add_argument("--uns-api-timeout-s", type=float, default=60.0)
+    p.add_argument("--skip-unsupported", action="store_true", default=True)
+    p.add_argument("--skip-existing", action="store_true", default=True)
+    p.add_argument("--no-skip-existing", dest="skip_existing", action="store_false")
+    p.add_argument("--force", action="store_true", default=False)
+    p.add_argument("--unique-element-ids", action="store_true", default=True)
+    p.add_argument("--no-unique-element-ids", dest="unique_element_ids", action="store_false")
 
-    run.add_argument("--skip-unsupported", action="store_true", default=True)
-    run.add_argument("--skip-existing", action="store_true", default=True)
-    run.add_argument("--no-skip-existing", dest="skip_existing", action="store_false")
-    run.add_argument("--force", action="store_true", default=False)
+    p.add_argument("--pipeline-version", default=None, help="Override pipeline version")
+    p.add_argument("--run-id", default=None, help="Override run ID (UUID)")
+    p.add_argument("--timestamp-utc", default=None, help="Override timestamp (ISO 8601)")
 
-    run.add_argument("--unique-element-ids", action="store_true", default=True)
-    run.add_argument("--no-unique-element-ids", dest="unique_element_ids", action="store_false")
+    p.add_argument("--no-retry", dest="retry_enabled", action="store_false", default=True)
+    p.add_argument("--max-attempts", type=int, default=3)
+    p.add_argument("--base-backoff-ms", type=int, default=200)
+    p.add_argument("--max-backoff-ms", type=int, default=5000)
 
-    # RunContext overrides (optional)
-    run.add_argument("--pipeline-version", default=None, help="Override pipeline version")
-    run.add_argument("--run-id", default=None, help="Override run ID (UUID)")
-    run.add_argument("--timestamp-utc", default=None, help="Override timestamp (ISO 8601)")
-
-    # Retry config
-    run.add_argument("--no-retry", dest="retry_enabled", action="store_false", default=True)
-    run.add_argument("--max-attempts", type=int, default=3)
-    run.add_argument("--base-backoff-ms", type=int, default=200)
-    run.add_argument("--max-backoff-ms", type=int, default=5000)
-
-    run.add_argument("--workers", type=int, default=1, help="Number of concurrent workers")
-    run.add_argument(
+    p.add_argument("--workers", type=int, default=1, help="Number of concurrent workers")
+    p.add_argument(
         "--stale-lock-ttl-s",
         type=int,
         default=None,
         help="TTL in seconds to break stale file locks (default: None, disabled)",
     )
 
-    # Destinations (config-model driven)
-    WebhookConfigV1.add_cli_args(run)
-    KafkaConfigV1.add_cli_args(run)
-    WeaviateConfigV1.add_cli_args(run)
+    # Destination configs
+    WebhookConfigV1.add_cli_args(p)
+    KafkaConfigV1.add_cli_args(p)
+    WeaviateConfigV1.add_cli_args(p)
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(prog="zephyr-ingest")
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    run = sub.add_parser("run", help="Run ingest pipeline over a local file path")
+    _add_runlike_args(p=run, paths_required=True)
 
     replay = sub.add_parser("replay-delivery", help="Replay failed delivery DLQ records")
     replay.add_argument(
@@ -169,6 +187,20 @@ def _build_parser() -> argparse.ArgumentParser:
     replay.add_argument("--limit", type=int, default=None)
     replay.add_argument("--dry-run", action="store_true", default=False)
     replay.add_argument("--no-move-done", dest="move_done", action="store_false", default=True)
+
+    cfg = sub.add_parser("config", help="Config utilities")
+    cfg_sub = cfg.add_subparsers(dest="config_cmd", required=True)
+
+    resolve = cfg_sub.add_parser("resolve", help="Resolve config file + overlays and print JSON")
+    _add_runlike_args(p=resolve, paths_required=False)
+    resolve.add_argument(
+        "--strict",
+        action="store_true",
+        default=False,
+        help="Fail if config file does not declare schema_version",
+    )
+    # For resolve, --config should be required in practice.
+    # We enforce it in parsing to keep error handling consistent (ConfigError -> exit 2).
 
     return p
 
@@ -652,12 +684,22 @@ def _parse_run_cmd(ns: argparse.Namespace, argv: Sequence[str]) -> RunCmd:
     )
 
 
-def _parse_cmd(argv: Sequence[str]) -> RunCmd | ReplayDeliveryCmd:
+def _parse_cmd(argv: Sequence[str]) -> RunCmd | ReplayDeliveryCmd | ResolveConfigCmd:
     p = _build_parser()
     ns = p.parse_args(list(argv))
 
     if ns.cmd == "run":
         return _parse_run_cmd(ns, argv)
+
+    if ns.cmd == "config" and ns.config_cmd == "resolve":
+        config_path = get_opt_str(ns, "config")
+        if config_path is None:
+            raise ConfigError("--config is required for `config resolve`")
+
+        # Parse using the same resolver as run. This will load/merge the config file.
+        run_cmd = _parse_run_cmd(ns, argv)
+        strict = get_bool(ns, "strict")
+        return ResolveConfigCmd(run_cmd=run_cmd, config_path=config_path, strict=strict)
 
     if ns.cmd == "replay-delivery":
         return ReplayDeliveryCmd(
@@ -835,6 +877,25 @@ def main(argv: Sequence[str] | None = None) -> int:
     except ConfigError as e:
         logging.error("config error: %s", e)
         return 2
+
+    if isinstance(cmd, ResolveConfigCmd):
+        # Enforce schema_version presence in strict mode.
+        file_cfg = load_config_file_v1(path=Path(cmd.config_path))
+        if cmd.strict and not file_cfg.schema_version_present:
+            logging.error("config strict mode: root.schema_version is required")
+            return 2
+        snap = _build_config_snapshot(cmd=cmd.run_cmd)
+        out_obj = {
+            "config_file": {
+                "path": cmd.config_path,
+                "schema_version": file_cfg.schema_version,
+                "schema_version_source": "file" if file_cfg.schema_version_present else "default",
+            },
+            "config_snapshot": snap,
+        }
+        sys.stdout.write(json.dumps(out_obj, ensure_ascii=False, indent=2))
+        sys.stdout.write("\n")
+        return 0
 
     if isinstance(cmd, ReplayDeliveryCmd):
         stats = replay_delivery_dlq(

@@ -7,6 +7,8 @@ from typing import Any, cast
 
 from zephyr_ingest.config.errors import ConfigError
 
+DEFAULT_FILE_SCHEMA_VERSION = 1
+
 
 def _as_table(x: object, path: str) -> dict[str, object]:
     if not isinstance(x, dict):
@@ -130,6 +132,8 @@ class DestinationsFileV1:
 
 @dataclass(frozen=True, slots=True)
 class ConfigFileV1:
+    schema_version: int
+    schema_version_present: bool
     run: RunFileV1
     retry: RetryFileV1
     destinations: DestinationsFileV1
@@ -138,7 +142,18 @@ class ConfigFileV1:
 def load_config_file_v1(*, path: Path) -> ConfigFileV1:
     raw = tomllib.loads(path.read_text(encoding="utf-8"))
     top = _as_table(raw, "root")
-    _unknown_keys(top, {"run", "retry", "destinations"}, "root")
+    _unknown_keys(top, {"schema_version", "run", "retry", "destinations"}, "root")
+
+    schema_version_present = "schema_version" in top
+    schema_version = DEFAULT_FILE_SCHEMA_VERSION
+
+    if schema_version_present:
+        v = top.get("schema_version")
+        if isinstance(v, bool) or not isinstance(v, int):
+            raise ConfigError("root.schema_version must be an int")
+        schema_version = v
+    if schema_version != 1:
+        raise ConfigError(f"Unsupported config schema_version: {schema_version} (expected 1)")
 
     run_tbl = _as_table(top.get("run", {}), "run")
     retry_tbl = _as_table(top.get("retry", {}), "retry")
@@ -235,6 +250,8 @@ def load_config_file_v1(*, path: Path) -> ConfigFileV1:
         )
 
     return ConfigFileV1(
+        schema_version=schema_version,
+        schema_version_present=schema_version_present,
         run=RunFileV1(
             strategy=_opt_str(run_tbl, "strategy", "run"),
             backend=_opt_str(run_tbl, "backend", "run"),
