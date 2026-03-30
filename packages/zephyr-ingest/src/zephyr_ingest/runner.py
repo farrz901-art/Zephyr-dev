@@ -29,6 +29,7 @@ from zephyr_ingest._internal.delivery_dlq import write_delivery_dlq
 from zephyr_ingest.config.snapshot_v1 import ConfigSnapshotV1
 from zephyr_ingest.destinations.base import DeliveryReceipt, Destination
 from zephyr_ingest.destinations.filesystem import FilesystemDestination
+from zephyr_ingest.obs.events import log_event
 
 logger = logging.getLogger(__name__)
 
@@ -166,6 +167,18 @@ def _process_one(
 ) -> DocProcessResult:
     p = Path(doc.uri)
     sha = sha256_file(p)
+
+    log_event(
+        logger,
+        level=logging.INFO,
+        event="doc_start",
+        run_id=ctx.run_id,
+        pipeline_version=ctx.pipeline_version,
+        sha256=sha,
+        uri=doc.uri,
+        extension=doc.extension,
+    )
+
     ext = doc.extension or p.suffix.lower()
 
     out_dir = out_root / sha
@@ -291,6 +304,17 @@ def _process_one(
                     error=None,
                 )
 
+                log_event(
+                    logger,
+                    level=logging.INFO,
+                    event="delivery_start",
+                    run_id=ctx.run_id,
+                    pipeline_version=ctx.pipeline_version,
+                    sha256=sha,
+                    destination=getattr(destination, "name", "unknown"),
+                    outcome=None if meta.outcome is None else str(meta.outcome),
+                )
+
                 try:
                     receipt = destination(out_root=out_root, sha256=sha, meta=meta, result=res)
                 except Exception as de:
@@ -300,17 +324,67 @@ def _process_one(
                         details={"exc_type": type(de).__name__, "exc": str(de)},
                     )
 
+                log_event(
+                    logger,
+                    level=logging.INFO,
+                    event="delivery_done",
+                    run_id=ctx.run_id,
+                    pipeline_version=ctx.pipeline_version,
+                    sha256=sha,
+                    destination=receipt.destination,
+                    ok=receipt.ok,
+                )
+
                 _write_delivery_receipt(out_dir, receipt)
 
                 dlq_written = False
                 if not receipt.ok:
+                    retryable = None
+                    if isinstance(receipt.details, dict):
+                        r = receipt.details.get("retryable")
+                        if isinstance(r, bool):
+                            retryable = r
+
+                    log_event(
+                        logger,
+                        level=logging.WARNING,
+                        event="delivery_failed",
+                        run_id=ctx.run_id,
+                        pipeline_version=ctx.pipeline_version,
+                        sha256=sha,
+                        destination=receipt.destination,
+                        retryable=retryable,
+                    )
+
                     try:
-                        write_delivery_dlq(
+                        dlq_path = write_delivery_dlq(
                             out_root=out_root, sha256=sha, meta=meta, receipt=receipt
                         )
                         dlq_written = True
+
+                        log_event(
+                            logger,
+                            level=logging.WARNING,
+                            event="dlq_written",
+                            run_id=ctx.run_id,
+                            pipeline_version=ctx.pipeline_version,
+                            sha256=sha,
+                            destination=receipt.destination,
+                            dlq_path=dlq_path,
+                        )
+
                     except Exception as dlqe:
                         logger.warning("delivery_dlq_write_failed sha=%s exc=%s", sha, str(dlqe))
+
+                log_event(
+                    logger,
+                    level=logging.INFO,
+                    event="doc_done",
+                    run_id=ctx.run_id,
+                    pipeline_version=ctx.pipeline_version,
+                    sha256=sha,
+                    outcome=None if meta.outcome is None else str(meta.outcome),
+                )
 
                 # artifacts_writer(out_root=out_root, sha256=sha, meta=meta, result=res)
                 # destination(out_root=out_root, sha256=sha, meta=meta, result=res)
@@ -347,6 +421,17 @@ def _process_one(
                     outcome = RunOutcome.SKIPPED_UNSUPPORTED
                 else:
                     outcome = RunOutcome.FAILED
+
+                log_event(
+                    logger,
+                    level=logging.WARNING,
+                    event="delivery_start",
+                    run_id=ctx.run_id,
+                    sha256=sha,
+                    destination=getattr(destination, "name", "unknown"),
+                    outcome=str(outcome),  # 告知系统这是在处理失败件的交付
+                )
+
                 meta = RunMetaV1(
                     run_id=ctx.run_id,
                     pipeline_version=ctx.pipeline_version,
@@ -366,6 +451,16 @@ def _process_one(
                         details={"exc_type": type(de).__name__, "exc": str(de)},
                     )
 
+                log_event(
+                    logger,
+                    level=logging.WARNING,
+                    event="delivery_done",
+                    run_id=ctx.run_id,
+                    sha256=sha,
+                    destination=receipt.destination,
+                    ok=receipt.ok,
+                )
+
                 _write_delivery_receipt(out_dir, receipt)
 
                 dlq_written = False
@@ -377,6 +472,15 @@ def _process_one(
                         dlq_written = True
                     except Exception as dlqe:
                         logger.warning("delivery_dlq_write_failed sha=%s exc=%s", sha, str(dlqe))
+
+                log_event(
+                    logger,
+                    level=logging.INFO,
+                    event="doc_done",
+                    run_id=ctx.run_id,
+                    sha256=sha,
+                    outcome=str(outcome),
+                )
 
                 # artifacts_writer(out_root=out_root, sha256=sha, meta=meta, result=None)
                 # destination(out_root=out_root, sha256=sha, meta=meta, result=None)
@@ -411,6 +515,16 @@ def run_documents(
 
     out_root = cfg.out_root.expanduser().resolve()
     out_root.mkdir(parents=True, exist_ok=True)
+
+    log_event(
+        logger,
+        level=logging.INFO,
+        event="run_start",
+        run_id=ctx.run_id,
+        pipeline_version=ctx.pipeline_version,
+        out_root=out_root,
+        workers=cfg.workers,
+    )
 
     total, success, failed, skipped_unsupported, skipped_existing = 0, 0, 0, 0, 0
 
@@ -598,6 +712,22 @@ def run_documents(
     (out_root / "batch_report.json").write_text(
         json.dumps(batch_report, ensure_ascii=False, indent=2),
         encoding="utf-8",
+    )
+
+    log_event(
+        logger,
+        level=logging.INFO,
+        event="run_done",
+        run_id=ctx.run_id,
+        pipeline_version=ctx.pipeline_version,
+        out_root=out_root,
+        docs_total=total,
+        docs_ok=success,
+        docs_failed=failed,
+        docs_skipped=skipped_unsupported + skipped_existing,
+        delivery_ok=delivery_ok,
+        delivery_failed=delivery_failed,
+        dlq_written_total=delivery_dlq_written_total,
     )
 
     return stats
