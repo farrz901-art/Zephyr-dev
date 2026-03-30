@@ -117,6 +117,7 @@ class InitConfigCmd:
     """
 
     out: str | None
+    only: list[str]
 
 
 @dataclass(frozen=True, slots=True)
@@ -243,6 +244,13 @@ def _build_parser() -> argparse.ArgumentParser:
         type=str,
         default=None,
         help="Write generated config to this path (default: stdout)",
+    )
+    init.add_argument(
+        "--only",
+        action="append",
+        default=[],
+        choices=["all", "webhook", "kafka", "weaviate", "uns-api"],
+        help="Limit output to selected blocks (repeatable). Default: all.",
     )
 
     spec = sub.add_parser("spec", help="Connector spec utilities")
@@ -773,7 +781,8 @@ def _parse_cmd(
 
     if ns.cmd == "config" and ns.config_cmd == "init":
         out = get_opt_str(ns, "out")
-        return InitConfigCmd(out=out)
+        only = get_str_list(ns, "only")
+        return InitConfigCmd(out=out, only=only)
 
     if ns.cmd == "spec" and ns.spec_cmd == "list":
         return SpecListCmd()
@@ -848,12 +857,12 @@ def spec_to_jsonschema(*, spec: ConnectorSpecV1) -> dict[str, object]:
     return schema
 
 
-def _default_config_toml() -> str:
-    """
-    Generate default config TOML from spec registry.
-    This ensures the template stays in sync with spec definitions.
-    """
-    return render_config_init_toml_v1()
+# def _default_config_toml() -> str:
+#     """
+#     Generate default config TOML from spec registry.
+#     This ensures the template stays in sync with spec definitions.
+#     """
+#     return render_config_init_toml_v1()
 
 
 def _make_kafka_producer_or_exit(brokers: str):
@@ -1040,7 +1049,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     if isinstance(cmd, InitConfigCmd):
-        text = _default_config_toml()
+        only_set = None if not cmd.only or "all" in cmd.only else set(cmd.only)
+
+        text = render_config_init_toml_v1(only=only_set)
         if cmd.out is None:
             sys.stdout.write(text)
             return 0

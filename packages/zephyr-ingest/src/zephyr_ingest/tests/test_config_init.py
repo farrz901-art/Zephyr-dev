@@ -35,6 +35,32 @@ def test_config_init_refuses_overwrite(tmp_path: Path) -> None:
     assert rc == 2
 
 
+def test_config_init_only_weaviate_limits_blocks(capsys: pytest.CaptureFixture[str]) -> None:
+    rc = cli.main(["config", "init", "--only", "weaviate"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "# [destinations.weaviate]" in out
+    assert "# [destinations.kafka]" not in out
+    assert "# [destinations.webhook]" not in out
+
+
+def test_config_init_only_excludes_uns_api_hint(capsys: pytest.CaptureFixture[str]) -> None:
+    rc = cli.main(["config", "init", "--only", "kafka"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    # uns-api hint header should be absent unless --only uns-api (or default all)
+    assert 'When backend = "uns-api", configure the following:' not in out
+
+
+def test_config_init_only_includes_uns_api_hint_when_requested(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    rc = cli.main(["config", "init", "--only", "uns-api"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert 'When backend = "uns-api", configure the following:' in out
+
+
 def test_config_init_contains_spec_driven_fields() -> None:
     """
     Verify the generated template includes fields from spec registry.

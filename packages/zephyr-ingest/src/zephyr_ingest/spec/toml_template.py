@@ -159,7 +159,7 @@ def _render_field_line(
     return lines
 
 
-def _render_run_section() -> list[str]:
+def _render_run_section(*, include_uns_api_hint: bool) -> list[str]:
     """
     Render the [run] section.
     - backend.kind from spec (default: local)
@@ -181,14 +181,15 @@ def _render_run_section() -> list[str]:
     lines.append('strategy = "auto"  # auto/fast/hi_res/ocr_only')
     lines.append("")
 
-    # uns-api fields as comments
-    lines.append('# When backend = "uns-api", configure the following:')
-    if uns_spec:
-        for f in uns_spec["fields"]:
-            if f["name"] == "backend.kind":
-                continue  # already handled
-            field_lines = _render_field_line(field=f, commented=True)
-            lines.extend(field_lines)
+    # uns-api fields as comments (optional)
+    if include_uns_api_hint:
+        lines.append('# When backend = "uns-api", configure the following:')
+        if uns_spec:
+            for f in uns_spec["fields"]:
+                if f["name"] == "backend.kind":
+                    continue  # already handled
+                field_lines = _render_field_line(field=f, commented=True)
+                lines.extend(field_lines)
 
     return lines
 
@@ -231,7 +232,7 @@ def _render_destination_section(*, spec: ConnectorSpecV1, table_name: str) -> li
     return lines
 
 
-def render_config_init_toml_v1() -> str:
+def render_config_init_toml_v1(*, only: set[str] | None = None) -> str:
     """
     Render a complete config init TOML template from spec registry.
 
@@ -245,6 +246,15 @@ def render_config_init_toml_v1() -> str:
     """
     lines: list[str] = []
 
+    target_only: set[str] = only if only is not None else set()
+
+    include_all = not target_only or "all" in target_only
+    # include_all = only is None or len(only) == 0 or "all" in only
+    include_uns_api_hint = include_all or ("uns-api" in target_only)
+    include_webhook = include_all or ("webhook" in target_only)
+    include_kafka = include_all or ("kafka" in target_only)
+    include_weaviate = include_all or ("weaviate" in target_only)
+
     # Header
     lines.append("# Zephyr Ingest Configuration (auto-generated from spec)")
     lines.append("# See: zephyr-ingest config resolve --config <this-file>")
@@ -253,35 +263,40 @@ def render_config_init_toml_v1() -> str:
     lines.append("")
 
     # [run]
-    lines.extend(_render_run_section())
+    lines.extend(_render_run_section(include_uns_api_hint=include_uns_api_hint))
 
     # [retry]
     lines.extend(_render_retry_section())
 
-    # Destinations header
-    lines.append("")
-    lines.append("# " + "=" * 50)
-    lines.append("# Destinations (uncomment to enable)")
-    lines.append("# " + "=" * 50)
+    if include_webhook or include_kafka or include_weaviate:
+        lines.append("")
+        lines.append("# " + "=" * 50)
+        lines.append("# Destinations (uncomment to enable)")
+        lines.append("# " + "=" * 50)
 
     # Webhook
-    webhook_spec = get_spec(spec_id="destination.webhook.v1")
-    if webhook_spec:
-        lines.extend(
-            _render_destination_section(spec=webhook_spec, table_name="destinations.webhook")
-        )
+    if include_webhook:
+        webhook_spec = get_spec(spec_id="destination.webhook.v1")
+        if webhook_spec:
+            lines.extend(
+                _render_destination_section(spec=webhook_spec, table_name="destinations.webhook")
+            )
 
     # Kafka
-    kafka_spec = get_spec(spec_id="destination.kafka.v1")
-    if kafka_spec:
-        lines.extend(_render_destination_section(spec=kafka_spec, table_name="destinations.kafka"))
+    if include_kafka:
+        kafka_spec = get_spec(spec_id="destination.kafka.v1")
+        if kafka_spec:
+            lines.extend(
+                _render_destination_section(spec=kafka_spec, table_name="destinations.kafka")
+            )
 
     # Weaviate
-    weaviate_spec = get_spec(spec_id="destination.weaviate.v1")
-    if weaviate_spec:
-        lines.extend(
-            _render_destination_section(spec=weaviate_spec, table_name="destinations.weaviate")
-        )
+    if include_weaviate:
+        weaviate_spec = get_spec(spec_id="destination.weaviate.v1")
+        if weaviate_spec:
+            lines.extend(
+                _render_destination_section(spec=weaviate_spec, table_name="destinations.weaviate")
+            )
 
     lines.append("")
     return "\n".join(lines)
