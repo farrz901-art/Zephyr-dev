@@ -53,6 +53,7 @@ from zephyr_ingest.runner import RetryConfig, RunnerConfig, run_documents
 from zephyr_ingest.sources.local_file import LocalFileSource
 from zephyr_ingest.spec.argparse_render import add_specs_to_parser
 from zephyr_ingest.spec.registry import get_spec, list_spec_ids
+from zephyr_ingest.spec.toml_template import render_config_init_toml_v1
 from zephyr_ingest.spec.types import ConnectorSpecV1, SpecFieldTypeV1
 
 
@@ -848,54 +849,11 @@ def spec_to_jsonschema(*, spec: ConnectorSpecV1) -> dict[str, object]:
 
 
 def _default_config_toml() -> str:
-    # Keep this TOML valid by default:
-    # - Only include tables/keys that our parser accepts without required destination fields.
-    # - Provide optional destinations as commented examples.
-    return """\
-schema_version = 1
-
-[run]
-# backend = "local"  # or "uns-api"
-backend = "local"
-strategy = "auto"   # auto/fast/hi_res/ocr_only
-
-# If backend="uns-api", you typically also set:
-# uns_api_url = "http://localhost:8001/general/v0/general"
-# uns_api_timeout_s = 60.0
-# uns_api_key = "..."  # Prefer ENV injection (ZEPHYR_UNS_API_KEY)
-
-[retry]
-enabled = true
-max_attempts = 3
-base_backoff_ms = 200
-max_backoff_ms = 5000
-
-# -------------------------------
-# Optional destinations (examples)
-# Uncomment a block to enable it.
-# -------------------------------
-
-# [destinations.webhook]
-# url = "http://localhost:9000/ingest"
-# timeout_s = 10.0
-
-# [destinations.kafka]
-# topic = "zephyr.delivery"
-# brokers = "localhost:9092"
-# flush_timeout_s = 10.0
-
-# [destinations.weaviate]
-# collection = "ZephyrDoc"
-# max_batch_errors = 0
-# http_host = "localhost"
-# http_port = 8080
-# http_secure = false
-# grpc_host = "localhost"
-# grpc_port = 50051
-# grpc_secure = false
-# skip_init_checks = true
-# api_key = "..."  # Prefer ENV injection (ZEPHYR_WEAVIATE_API_KEY)
-"""
+    """
+    Generate default config TOML from spec registry.
+    This ensures the template stays in sync with spec definitions.
+    """
+    return render_config_init_toml_v1()
 
 
 def _make_kafka_producer_or_exit(brokers: str):

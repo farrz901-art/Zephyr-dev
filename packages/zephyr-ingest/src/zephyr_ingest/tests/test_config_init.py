@@ -5,6 +5,9 @@ from pathlib import Path
 import pytest
 
 from zephyr_ingest import cli
+from zephyr_ingest.config.constants import UNS_API_KEY_ENV_NAMES, WEAVIATE_API_KEY_ENV_NAMES
+from zephyr_ingest.spec.registry import get_spec
+from zephyr_ingest.spec.toml_template import render_config_init_toml_v1
 
 
 def test_config_init_stdout(capsys: pytest.CaptureFixture[str]) -> None:
@@ -30,3 +33,76 @@ def test_config_init_refuses_overwrite(tmp_path: Path) -> None:
     out_path.write_text("x", encoding="utf-8")
     rc = cli.main(["config", "init", "--out", str(out_path)])
     assert rc == 2
+
+
+def test_config_init_contains_spec_driven_fields() -> None:
+    """
+    Verify the generated template includes fields from spec registry.
+    """
+    toml = render_config_init_toml_v1()
+
+    # schema_version
+    assert "schema_version = 1" in toml
+
+    # [run] section
+    assert "[run]" in toml
+    assert 'backend = "local"' in toml
+    assert "strategy" in toml
+
+    # [retry] section
+    assert "[retry]" in toml
+    assert "enabled = true" in toml
+    assert "max_attempts = 3" in toml
+
+    # destinations as commented blocks
+    assert "# [destinations.webhook]" in toml
+    assert "# [destinations.kafka]" in toml
+    assert "# [destinations.weaviate]" in toml
+
+
+def test_config_init_includes_env_hints_for_secrets() -> None:
+    """
+    Verify that secret fields include ENV injection hints.
+    """
+    toml = render_config_init_toml_v1()
+
+    # UNS API key env hint
+    for env in UNS_API_KEY_ENV_NAMES:
+        assert env in toml, f"Expected {env} in template"
+
+    # Weaviate API key env hint
+    for env in WEAVIATE_API_KEY_ENV_NAMES:
+        assert env in toml, f"Expected {env} in template"
+
+
+def test_config_init_includes_spec_defaults() -> None:
+    """
+    Verify that spec default values appear in the template.
+    """
+    toml = render_config_init_toml_v1()
+
+    # Check uns-api defaults
+    uns_spec = get_spec(spec_id="backend.uns_api.v1")
+    assert uns_spec is not None
+    for f in uns_spec["fields"]:
+        if "default" in f and f["name"] != "backend.kind":
+            default = f["default"]
+            if isinstance(default, str):
+                assert default in toml or f'"{default}"' in toml
+
+    # Check webhook defaults
+    webhook_spec = get_spec(spec_id="destination.webhook.v1")
+    assert webhook_spec is not None
+    for f in webhook_spec["fields"]:
+        if "default" in f:
+            default = f["default"]
+            assert str(default) in toml
+
+
+def test_config_init_weaviate_fields_present() -> None:
+    """Verify weaviate-specific fields are in template."""
+    toml = render_config_init_toml_v1()
+    assert "collection" in toml
+    assert "http_host" in toml
+    assert "grpc_port" in toml
+    assert "skip_init_checks" in toml
