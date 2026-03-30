@@ -37,7 +37,7 @@ def _flag_to_action(p: argparse.ArgumentParser) -> dict[str, argparse.Action]:
 
 
 def test_spec_cli_flags_exist_in_run_parser() -> None:
-    root = cli._build_parser()  # pyright: ignore[reportPrivateUsage] # noqa: SLF001
+    root = cli.build_parser()  # noqa: SLF001
     run_p = _get_subparser(root=root, dest="cmd", name="run")
     flag_map = _flag_to_action(run_p)
 
@@ -62,7 +62,7 @@ def test_spec_env_names_match_constants() -> None:
 
 
 def test_spec_defaults_match_argparse_defaults() -> None:
-    root = cli._build_parser()  # pyright: ignore[reportPrivateUsage] # noqa: SLF001
+    root = cli.build_parser()  # noqa: SLF001
     run_p = _get_subparser(root=root, dest="cmd", name="run")
     flag_map = _flag_to_action(run_p)
 
@@ -83,7 +83,7 @@ def test_spec_defaults_match_argparse_defaults() -> None:
 
 
 def test_spec_choices_match_argparse_choices_when_provided() -> None:
-    root = cli._build_parser()  # pyright: ignore[reportPrivateUsage]  # noqa: SLF001
+    root = cli.build_parser()  # noqa: SLF001
     run_p = _get_subparser(root=root, dest="cmd", name="run")
     flag_map = _flag_to_action(run_p)
 

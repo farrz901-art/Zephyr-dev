@@ -262,6 +262,16 @@ def _build_parser() -> argparse.ArgumentParser:
     return p
 
 
+def build_parser() -> argparse.ArgumentParser:
+    """
+    Build the CLI argparse parser.
+
+    This is a public API to allow internal tooling/tests to introspect CLI flags
+    without relying on private underscore-prefixed functions.
+    """
+    return _build_parser()
+
+
 def _parse_run_cmd(ns: argparse.Namespace, argv: Sequence[str]) -> RunCmd:
     present = collect_present_flags(argv)
 
@@ -744,7 +754,7 @@ def _parse_run_cmd(ns: argparse.Namespace, argv: Sequence[str]) -> RunCmd:
 def _parse_cmd(
     argv: Sequence[str],
 ) -> RunCmd | ReplayDeliveryCmd | ResolveConfigCmd | InitConfigCmd | SpecListCmd | SpecShowCmd:
-    p = _build_parser()
+    p = build_parser()
     ns = p.parse_args(list(argv))
 
     if ns.cmd == "run":
