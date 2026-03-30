@@ -57,10 +57,25 @@ def add_spec_to_parser(*, p: argparse.ArgumentParser, spec: ConnectorSpecV1) -> 
         if help_text is not None:
             kwargs["help"] = help_text
 
+        # if "choices" in field:
+        #     kwargs["choices"] = field["choices"]
+        #
+        # p.add_argument(*flags, **kwargs)
         if "choices" in field:
-            kwargs["choices"] = field["choices"]
-
-        p.add_argument(*flags, **kwargs)
+            p.add_argument(
+                *flags,
+                default=default,
+                type=arg_type,
+                choices=field["choices"],
+                help=help_text,
+            )
+        else:
+            p.add_argument(
+                *flags,
+                default=default,
+                type=arg_type,
+                help=help_text,
+            )
 
 
 def add_specs_to_parser(*, p: argparse.ArgumentParser, specs: list[ConnectorSpecV1]) -> None:

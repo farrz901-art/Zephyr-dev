@@ -83,7 +83,7 @@ def test_spec_defaults_match_argparse_defaults() -> None:
 
 
 def test_spec_choices_match_argparse_choices_when_provided() -> None:
-    root = cli._build_parser()  # noqa: SLF001
+    root = cli._build_parser()  # pyright: ignore[reportPrivateUsage]  # noqa: SLF001
     run_p = _get_subparser(root=root, dest="cmd", name="run")
     flag_map = _flag_to_action(run_p)
 
