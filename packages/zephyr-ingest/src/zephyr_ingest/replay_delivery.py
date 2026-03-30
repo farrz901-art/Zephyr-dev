@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
@@ -12,6 +13,9 @@ from zephyr_ingest._internal.delivery_payload import (
     build_delivery_payload_v1_from_run_meta_dict,
 )
 from zephyr_ingest.destinations.webhook import WebhookDestination
+from zephyr_ingest.obs.events import log_event
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,6 +56,18 @@ def replay_delivery_dlq(
     if limit is not None:
         files = files[:limit]
 
+    log_event(
+        logger,
+        level=logging.INFO,
+        event="replay_start",
+        out_root=out_root,
+        destination="webhook",
+        total=len(files),
+        limit=limit,
+        dry_run=dry_run,
+        move_done=move_done,
+    )
+
     done_dir = out_root / "_dlq" / "delivery_done"
     if move_done:
         done_dir.mkdir(parents=True, exist_ok=True)
@@ -74,21 +90,29 @@ def replay_delivery_dlq(
             or not isinstance(run_meta_raw, dict)
         ):
             # invalid record, keep it (treat as failed)
+            log_event(
+                logger,
+                level=logging.WARNING,
+                event="replay_result",
+                destination="webhook",
+                dlq_file=fp.name,
+                ok=False,
+                invalid_record=True,
+            )
             failed += 1
             continue
 
         run_meta = cast("dict[str, Any]", run_meta_raw)
 
-        # payload: dict[str, Any] = {
-        #     "sha256": sha256,
-        #     "run_meta": run_meta,
-        #     "artifacts": {
-        #         "out_dir": str((out_root / sha256).resolve()),
-        #         "run_meta_path": str((out_root / sha256 / "run_meta.json").resolve()),
-        #         "elements_path": str((out_root / sha256 / "elements.json").resolve()),
-        #         "normalized_path": str((out_root / sha256 / "normalized.txt").resolve()),
-        #     },
-        # }
+        log_event(
+            logger,
+            level=logging.INFO,
+            event="replay_attempt",
+            destination="webhook",
+            dlq_file=fp.name,
+            sha256=sha256,
+            run_id=run_id,
+        )
 
         payload: DeliveryPayloadV1 = build_delivery_payload_v1_from_run_meta_dict(
             out_root=out_root,
@@ -97,6 +121,17 @@ def replay_delivery_dlq(
         )
 
         if dry_run:
+            log_event(
+                logger,
+                level=logging.INFO,
+                event="replay_result",
+                destination="webhook",
+                dlq_file=fp.name,
+                sha256=sha256,
+                run_id=run_id,
+                dry_run=True,
+                ok=None,
+            )
             continue
 
         receipt = dest.post_payload(payload=payload, idempotency_key=f"{sha256}:{run_id}")
@@ -107,8 +142,49 @@ def replay_delivery_dlq(
                 target = done_dir / fp.name
                 fp.replace(target)
                 moved += 1
+
+            log_event(
+                logger,
+                level=logging.INFO,
+                event="replay_result",
+                destination="webhook",
+                dlq_file=fp.name,
+                sha256=sha256,
+                run_id=run_id,
+                ok=True,
+                moved=move_done,
+            )
         else:
             failed += 1
+            retryable = None
+            if isinstance(receipt.details, dict):
+                r = receipt.details.get("retryable")
+                if isinstance(r, bool):
+                    retryable = r
+            log_event(
+                logger,
+                level=logging.WARNING,
+                event="replay_result",
+                destination="webhook",
+                dlq_file=fp.name,
+                sha256=sha256,
+                run_id=run_id,
+                ok=False,
+                retryable=retryable,
+            )
+
+    log_event(
+        logger,
+        level=logging.INFO,
+        event="replay_done",
+        out_root=out_root,
+        destination="webhook",
+        total=len(files),
+        attempted=attempted,
+        succeeded=succeeded,
+        failed=failed,
+        moved_to_done=moved,
+    )
 
     return ReplayStats(
         total=len(files),
