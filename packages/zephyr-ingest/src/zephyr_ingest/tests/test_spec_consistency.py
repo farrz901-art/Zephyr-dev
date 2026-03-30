@@ -82,6 +82,28 @@ def test_spec_defaults_match_argparse_defaults() -> None:
             )
 
 
+def test_spec_choices_match_argparse_choices_when_provided() -> None:
+    root = cli._build_parser()  # noqa: SLF001
+    run_p = _get_subparser(root=root, dest="cmd", name="run")
+    flag_map = _flag_to_action(run_p)
+
+    for spec_id in list_spec_ids():
+        spec = get_spec(spec_id=spec_id)
+        assert spec is not None
+        for f in spec["fields"]:
+            if "choices" not in f:
+                continue
+            cli_flags = f.get("cli_flags", [])
+            if not cli_flags:
+                continue
+            flag = cli_flags[0]
+            act = flag_map[flag]
+            assert act.choices is not None, (
+                f"choices missing for {flag} (spec {spec_id}:{f['name']})"
+            )
+            assert list(act.choices) == f["choices"], f"choices drift for {flag}"
+
+
 def test_spec_help_matches_argparse_help_for_documented_fields() -> None:
     """
     Enforce help consistency only when the spec provides `help`

@@ -17,6 +17,7 @@ _REGISTRY: dict[str, ConnectorSpecV1] = {
                 "required": True,
                 "default": "local",
                 "cli_flags": ["--backend"],
+                "choices": ["local", "uns-api"],
                 "help": "Backend kind: local or uns-api.",
                 "examples": ["uns-api"],
             },

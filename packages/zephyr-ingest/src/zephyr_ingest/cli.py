@@ -51,6 +51,7 @@ from zephyr_ingest.destinations.webhook import WebhookDestination
 from zephyr_ingest.replay_delivery import replay_delivery_dlq
 from zephyr_ingest.runner import RetryConfig, RunnerConfig, run_documents
 from zephyr_ingest.sources.local_file import LocalFileSource
+from zephyr_ingest.spec.argparse_render import add_specs_to_parser
 from zephyr_ingest.spec.registry import get_spec, list_spec_ids
 from zephyr_ingest.spec.types import ConnectorSpecV1, SpecFieldTypeV1
 
@@ -158,28 +159,20 @@ def _add_runlike_args(*, p: argparse.ArgumentParser, paths_required: bool) -> No
         choices=["auto", "fast", "hi_res", "ocr_only"],
         help="Partition strategy (mainly for pdf/image)",
     )
-    p.add_argument(
-        "--backend",
-        default="local",
-        choices=["local", "uns-api"],
-        help="Backend kind: local or uns-api.",
-    )
-    p.add_argument(
-        "--uns-api-url",
-        default="http://localhost:8001/general/v0/general",
-        help="Unstructured API endpoint URL.",
-    )
-    p.add_argument(
-        "--uns-api-key",
-        default=None,
-        help="Unstructured API key. Prefer ENV injection.",
-    )
-    p.add_argument(
-        "--uns-api-timeout-s",
-        type=float,
-        default=60.0,
-        help="Unstructured API request timeout (seconds).",
-    )
+    # Spec-driven args (SSOT): backend.uns_api + destinations
+    spec_ids = [
+        "backend.uns_api.v1",
+        "destination.webhook.v1",
+        "destination.kafka.v1",
+        "destination.weaviate.v1",
+    ]
+    specs: list[ConnectorSpecV1] = []
+    for spec_id in spec_ids:
+        s = get_spec(spec_id=spec_id)
+        if s is None:
+            raise RuntimeError(f"missing spec: {spec_id}")
+        specs.append(s)
+    add_specs_to_parser(p=p, specs=specs)
 
     p.add_argument("--skip-unsupported", action="store_true", default=True)
     p.add_argument("--skip-existing", action="store_true", default=True)
@@ -206,9 +199,10 @@ def _add_runlike_args(*, p: argparse.ArgumentParser, paths_required: bool) -> No
     )
 
     # Destination configs
-    WebhookConfigV1.add_cli_args(p)
-    KafkaConfigV1.add_cli_args(p)
-    WeaviateConfigV1.add_cli_args(p)
+    # WebhookConfigV1.add_cli_args(p)
+    # KafkaConfigV1.add_cli_args(p)
+    # WeaviateConfigV1.add_cli_args(p)
+    # Destination configs are spec-driven (see above).
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -820,6 +814,8 @@ def spec_to_jsonschema(*, spec: ConnectorSpecV1) -> dict[str, object]:
             p["description"] = f["help"]
         if "default" in f:
             p["default"] = f["default"]
+        if "choices" in f:
+            p["enum"] = f["choices"]
         if f.get("secret", False):
             p["writeOnly"] = True
         if "examples" in f:

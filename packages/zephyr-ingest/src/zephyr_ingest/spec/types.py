@@ -25,6 +25,7 @@ class SpecFieldV1(TypedDict):
     secret: NotRequired[bool]
     cli_flags: NotRequired[list[str]]
     env_names: NotRequired[list[str]]
+    choices: NotRequired[list[str]]
     help: NotRequired[str]
     examples: NotRequired[list[str]]
 
