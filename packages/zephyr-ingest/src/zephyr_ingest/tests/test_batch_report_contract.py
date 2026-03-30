@@ -1,0 +1,31 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import cast
+
+from zephyr_core import RunContext
+from zephyr_ingest.obs.batch_report_v1 import BATCH_REPORT_SCHEMA_VERSION, BatchReportV1
+from zephyr_ingest.runner import RunnerConfig, run_documents
+
+
+def test_batch_report_has_schema_version(tmp_path: Path) -> None:
+    ctx = RunContext.new()
+    cfg = RunnerConfig(out_root=tmp_path / "out")
+
+    run_documents(docs=[], cfg=cfg, ctx=ctx)
+
+    report_path = (cfg.out_root / "batch_report.json").resolve()
+    obj = json.loads(report_path.read_text(encoding="utf-8"))
+    report = cast(BatchReportV1, obj)
+
+    assert report["schema_version"] == BATCH_REPORT_SCHEMA_VERSION
+    assert report["run_id"] == ctx.run_id
+    assert report["pipeline_version"] == ctx.pipeline_version
+    assert report["executor"] in ("serial", "thread")
+
+    # stable sections
+    assert "counts" in report
+    assert "delivery" in report
+    assert "retry" in report
+    assert "durations_ms" in report

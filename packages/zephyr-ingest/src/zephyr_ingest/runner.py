@@ -29,6 +29,12 @@ from zephyr_ingest._internal.delivery_dlq import write_delivery_dlq
 from zephyr_ingest.config.snapshot_v1 import ConfigSnapshotV1
 from zephyr_ingest.destinations.base import DeliveryReceipt, Destination
 from zephyr_ingest.destinations.filesystem import FilesystemDestination
+from zephyr_ingest.obs.batch_report_v1 import (
+    BATCH_REPORT_SCHEMA_VERSION,
+    BatchReportV1,
+    DeliveryCountersV1,
+    DurationStatsV1,
+)
 from zephyr_ingest.obs.events import log_event
 
 logger = logging.getLogger(__name__)
@@ -117,15 +123,16 @@ def _write_delivery_receipt(out_dir: Path, receipt: DeliveryReceipt) -> None:
 
 
 def _bump_delivery_counter(
-    counters: dict[str, dict[str, int]],
+    counters: dict[str, DeliveryCountersV1],
     *,
     destination: str,
     ok: bool,
 ) -> None:
     bucket = counters.get(destination)
     if bucket is None:
-        bucket = {"total": 0, "ok": 0, "failed": 0}
-        counters[destination] = bucket
+        new_bucket: DeliveryCountersV1 = {"total": 0, "ok": 0, "failed": 0}
+        counters[destination] = new_bucket
+        bucket = new_bucket
     bucket["total"] += 1
     if ok:
         bucket["ok"] += 1
@@ -144,7 +151,7 @@ def _p95_int(values: list[int]) -> int | None:
     return vals[idx]
 
 
-def _duration_stats(values: list[int]) -> dict[str, int | None]:
+def _duration_stats(values: list[int]) -> DurationStatsV1:
     if not values:
         return {"min": None, "max": None, "avg": None, "p95": None}
     return {
@@ -529,8 +536,8 @@ def run_documents(
     total, success, failed, skipped_unsupported, skipped_existing = 0, 0, 0, 0, 0
 
     delivery_total, delivery_ok, delivery_failed = 0, 0, 0
-    delivery_by_destination: dict[str, dict[str, int]] = {}
-    fanout_children_by_destination: dict[str, dict[str, int]] = {}
+    delivery_by_destination: dict[str, DeliveryCountersV1] = {}
+    fanout_children_by_destination: dict[str, DeliveryCountersV1] = {}
 
     counts_by_extension: dict[str, int] = {}
     counts_by_error_code: dict[str, int] = {}
@@ -669,7 +676,8 @@ def run_documents(
         skipped_existing=skipped_existing,
     )
 
-    batch_report: dict[str, Any] = {
+    batch_report: BatchReportV1 = {
+        "schema_version": BATCH_REPORT_SCHEMA_VERSION,
         "run_id": ctx.run_id,
         "pipeline_version": ctx.pipeline_version,
         "timestamp_utc": ctx.timestamp_utc,
