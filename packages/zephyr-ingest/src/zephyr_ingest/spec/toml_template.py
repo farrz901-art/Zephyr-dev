@@ -15,6 +15,26 @@ def _format_value(val: str | int | float | bool | None) -> str:
     return str(val)
 
 
+def _placeholder_for_type(field: SpecFieldV1) -> str:
+    t = field["type"]
+    if t == "bool":
+        return "false"
+    if t in ("int", "float"):
+        return "0"
+    return '"..."'
+
+
+def _backend_field_to_run_key(name: str) -> str | None:
+    # Spec keys -> config file [run] keys
+    mapping: dict[str, str] = {
+        "backend.kind": "backend",
+        "backend.url": "uns_api_url",
+        "backend.timeout_s": "uns_api_timeout_s",
+        "backend.api_key": "uns_api_key",
+    }
+    return mapping.get(name)
+
+
 def _field_to_toml_key(field: SpecFieldV1) -> str:
     """
     Extract the last part of the dotted field name as TOML key.
@@ -24,6 +44,83 @@ def _field_to_toml_key(field: SpecFieldV1) -> str:
     name = field["name"]
     parts = name.split(".")
     return parts[-1]
+
+
+def render_spec_toml_snippet_v1(*, spec: ConnectorSpecV1) -> str:
+    """
+    Render a pasteable TOML snippet for a single spec.
+
+    - destination.* specs -> render `[destinations.<name>]` section
+    - backend.uns_api.v1 -> render lines intended for `[run]` table (no table header)
+    """
+    lines: list[str] = []
+    lines.append(f"# Spec: {spec['id']}")
+    lines.append(f"# {spec['description']}")
+    lines.append("")
+
+    if spec["kind"] == "destination":
+        # spec.id: destination.<name>.v1
+        parts = spec["id"].split(".")
+        if len(parts) < 3:
+            raise ValueError(f"invalid spec id: {spec['id']}")
+        dest_name = parts[1]
+        table = f"destinations.{dest_name}"
+        lines.append(f"[{table}]")
+
+        for f in spec["fields"]:
+            # field names are flat dotted keys;
+            # destination fields start with destinations.<dest_name>.
+            prefix = f"destinations.{dest_name}."
+            if not f["name"].startswith(prefix):
+                continue
+
+            help_text = f.get("help")
+            if help_text is not None:
+                lines.append(f"# {help_text}")
+
+            if f.get("secret", False):
+                envs = f.get("env_names", [])
+                if envs:
+                    lines.append("# Prefer ENV injection: " + ", ".join(envs))
+
+            key = f["name"].split(".")[-1]
+            v = _format_value(f["default"]) if "default" in f else _placeholder_for_type(f)
+            lines.append(f"{key} = {v}")
+
+        lines.append("")
+        return "\n".join(lines)
+
+    # backend spec
+    if spec["id"] == "backend.uns_api.v1":
+        lines.append("# Paste these into your [run] table:")
+        for f in spec["fields"]:
+            run_key = _backend_field_to_run_key(f["name"])
+            if run_key is None:
+                continue
+
+            help_text = f.get("help")
+            if help_text is not None:
+                lines.append(f"# {help_text}")
+
+            if f["name"] == "backend.kind":
+                # when using this backend, it should be uns-api
+                lines.append('backend = "uns-api"')
+                continue
+
+            if f.get("secret", False):
+                envs = f.get("env_names", [])
+                if envs:
+                    lines.append("# Prefer ENV injection: " + ", ".join(envs))
+                lines.append(f'{run_key} = "..."')
+                continue
+
+            v = _format_value(f["default"]) if "default" in f else _placeholder_for_type(f)
+            lines.append(f"{run_key} = {v}")
+
+        lines.append("")
+        return "\n".join(lines)
+
+    raise ValueError(f"unsupported backend spec for toml snippet: {spec['id']}")
 
 
 def _render_field_line(

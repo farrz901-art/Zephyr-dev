@@ -53,7 +53,7 @@ from zephyr_ingest.runner import RetryConfig, RunnerConfig, run_documents
 from zephyr_ingest.sources.local_file import LocalFileSource
 from zephyr_ingest.spec.argparse_render import add_specs_to_parser
 from zephyr_ingest.spec.registry import get_spec, list_spec_ids
-from zephyr_ingest.spec.toml_template import render_config_init_toml_v1
+from zephyr_ingest.spec.toml_template import render_config_init_toml_v1, render_spec_toml_snippet_v1
 from zephyr_ingest.spec.types import ConnectorSpecV1, SpecFieldTypeV1
 
 
@@ -256,7 +256,7 @@ def _build_parser() -> argparse.ArgumentParser:
     spec_show.add_argument(
         "--format",
         default="zephyr",
-        choices=["zephyr", "jsonschema"],
+        choices=["zephyr", "jsonschema", "toml"],
         help="Output format: zephyr (raw) or jsonschema",
     )
 
@@ -1073,6 +1073,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             js = spec_to_jsonschema(spec=spec)
             sys.stdout.write(json.dumps(js, ensure_ascii=False, indent=2))
             sys.stdout.write("\n")
+            return 0
+        if cmd.fmt == "toml":
+            text = render_spec_toml_snippet_v1(spec=spec)
+            sys.stdout.write(text)
+            if not text.endswith("\n"):
+                sys.stdout.write("\n")
             return 0
         logging.error("unsupported format: %s", cmd.fmt)
         return 2
