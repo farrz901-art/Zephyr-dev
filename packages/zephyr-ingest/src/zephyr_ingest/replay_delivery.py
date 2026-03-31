@@ -100,8 +100,10 @@ class WeaviateReplaySink:
             )
 
         try:
-            raw = cast(list[Any], json.loads(elements_path.read_text(encoding="utf-8")))
-            elements_count = len(raw)
+            raw_obj = json.loads(elements_path.read_text(encoding="utf-8"))
+            if not isinstance(raw_obj, list):
+                raise ValueError("elements.json is not a list")
+            elements_count = len(cast(list[Any], raw_obj))
         except FileNotFoundError:
             return DeliveryReceipt(
                 destination="weaviate",

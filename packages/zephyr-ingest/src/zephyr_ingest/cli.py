@@ -33,6 +33,7 @@ from zephyr_ingest.config.argparse_extract import (
 from zephyr_ingest.config.cli_presence import any_flag_present, collect_present_flags
 from zephyr_ingest.config.env_overlay import (
     first_env,
+    overlay_weaviate_api_key,
 )
 from zephyr_ingest.config.errors import ConfigError
 from zephyr_ingest.config.file_toml_v1 import ConfigFileV1, load_config_file_v1
@@ -244,7 +245,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--dest",
         default="webhook",
         choices=["webhook", "kafka", "weaviate", "all"],
-        help="Replay destination: webhook, kafka, or all",
+        help="Replay destination: webhook, kafka, weaviate, or all",
     )
     # Spec-driven destination flags for replay (webhook + kafka)
     replay_specs: list[ConnectorSpecV1] = []
@@ -908,6 +909,8 @@ def _parse_cmd(
         webhook = WebhookConfigV1.from_namespace(ns)
         kafka = KafkaConfigV1.from_namespace(ns)
         weaviate = WeaviateConfigV1.from_namespace(ns)
+        # Apply ENV overlay for secrets (CLI explicit still wins because overlay only fills missing)
+        weaviate = overlay_weaviate_api_key(weaviate=weaviate)
         if dest in ("webhook", "all") and webhook is None:
             raise ConfigError("--webhook-url is required when --dest includes webhook")
         if dest in ("kafka", "all") and kafka is None:
