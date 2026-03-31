@@ -80,8 +80,14 @@ zephyr-ingest config init --out ./cfg.toml
 This writes a valid v1 TOML file with optional destination blocks commented out.
 
 ## 3.2) DLQ operations (replay / prune)
-See docs/DLQ.md for: +- replay (replay-delivery)
+See docs/DLQ.md for:
+- replay (replay-delivery)
 - retention / disk governance (dlq prune)
+
+## 3.3) Benchmarking / performance baseline
+See `docs/BENCH.md` for:
+- `zephyr-ingest bench` usage
+- how bench reads `batch_report.json.metrics` and produces summary stats
 
 ## 4) `config_snapshot.sources` key naming convention
 
