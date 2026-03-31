@@ -79,6 +79,10 @@ zephyr-ingest config init --out ./cfg.toml
 
 This writes a valid v1 TOML file with optional destination blocks commented out.
 
+## 3.2) DLQ operations (replay / prune)
+See docs/DLQ.md for: +- replay (replay-delivery)
+- retention / disk governance (dlq prune)
+
 ## 4) `config_snapshot.sources` key naming convention
 
 `sources` uses **flat dotted keys**. Examples:
