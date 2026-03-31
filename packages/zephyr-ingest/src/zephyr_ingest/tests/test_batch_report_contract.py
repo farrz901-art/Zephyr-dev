@@ -36,4 +36,17 @@ def test_batch_report_has_schema_version(tmp_path: Path) -> None:
     assert metrics["docs_total"] == report["counts"]["total"]
     assert metrics["delivery_total"] == report["delivery"]["total"]
     assert metrics["dlq_written_total"] == report["delivery"]["dlq_written_total"]
+
+    # delivery retryable breakdown exists and sums to delivery_failed_total
+    assert report["delivery"]["failed"] == (
+        report["delivery"]["failed_retryable"]
+        + report["delivery"]["failed_non_retryable"]
+        + report["delivery"]["failed_unknown"]
+    )
+    assert metrics["delivery_failed_total"] == (
+        metrics["delivery_failed_retryable_total"]
+        + metrics["delivery_failed_non_retryable_total"]
+        + metrics["delivery_failed_unknown_total"]
+    )
+
     assert (metrics["docs_per_min"] is None) or isinstance(metrics["docs_per_min"], float)

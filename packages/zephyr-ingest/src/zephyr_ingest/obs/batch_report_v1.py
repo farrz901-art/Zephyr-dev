@@ -35,6 +35,9 @@ class DeliveryV1(TypedDict):
     total: int
     ok: int
     failed: int
+    failed_retryable: int
+    failed_non_retryable: int
+    failed_unknown: int
     dlq_written_total: int
     dlq_dir: str
     by_destination: DeliveryByDestinationV1
@@ -66,6 +69,9 @@ class MetricsV1(TypedDict):
     delivery_total: int
     delivery_ok_total: int
     delivery_failed_total: int
+    delivery_failed_retryable_total: int
+    delivery_failed_non_retryable_total: int
+    delivery_failed_unknown_total: int
     dlq_written_total: int
 
 

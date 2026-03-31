@@ -105,6 +105,7 @@ class DocProcessResult:
     error_code: str | None
     skipped_existing: bool
     delivery_receipt: DeliveryReceipt | None
+    delivery_retryable: bool | None
     dlq_written: bool
 
 
@@ -205,6 +206,7 @@ def _process_one(
             error_code=None,
             skipped_existing=True,
             delivery_receipt=None,
+            delivery_retryable=None,
             dlq_written=False,
         )
 
@@ -276,6 +278,7 @@ def _process_one(
                     error_code=None,
                     skipped_existing=True,
                     delivery_receipt=None,
+                    delivery_retryable=None,
                     dlq_written=False,
                 )
         t0 = time.perf_counter()
@@ -348,12 +351,14 @@ def _process_one(
                 _write_delivery_receipt(out_dir, receipt)
 
                 dlq_written = False
+                delivery_retryable: bool | None = None
                 if not receipt.ok:
                     retryable = None
                     if isinstance(receipt.details, dict):
                         r = receipt.details.get("retryable")
                         if isinstance(r, bool):
                             retryable = r
+                    delivery_retryable = retryable
 
                     log_event(
                         logger,
@@ -408,6 +413,7 @@ def _process_one(
                     error_code=None,
                     skipped_existing=False,
                     delivery_receipt=receipt,
+                    delivery_retryable=delivery_retryable,
                     dlq_written=dlq_written,
                 )
             except ZephyrError as e:
@@ -474,6 +480,13 @@ def _process_one(
                 _write_delivery_receipt(out_dir, receipt)
 
                 dlq_written = False
+
+                delivery_retryable2: bool | None = None
+                if not receipt.ok and isinstance(receipt.details, dict):
+                    r2 = receipt.details.get("retryable")
+                    if isinstance(r2, bool):
+                        delivery_retryable2 = r2
+
                 if not receipt.ok:
                     try:
                         write_delivery_dlq(
@@ -504,6 +517,7 @@ def _process_one(
                     error_code=e_code,
                     skipped_existing=False,
                     delivery_receipt=receipt,
+                    delivery_retryable=delivery_retryable2,
                     dlq_written=dlq_written,
                 )
     finally:
@@ -541,6 +555,11 @@ def run_documents(
     total, success, failed, skipped_unsupported, skipped_existing = 0, 0, 0, 0, 0
 
     delivery_total, delivery_ok, delivery_failed = 0, 0, 0
+
+    delivery_failed_retryable = 0
+    delivery_failed_non_retryable = 0
+    delivery_failed_unknown = 0
+
     delivery_by_destination: dict[str, DeliveryCountersV1] = {}
     fanout_children_by_destination: dict[str, DeliveryCountersV1] = {}
 
@@ -560,6 +579,7 @@ def run_documents(
         nonlocal retry_attempts_total, retried_success, retryable_failed
         nonlocal delivery_total, delivery_ok, delivery_failed
         nonlocal delivery_dlq_written_total
+        nonlocal delivery_failed_retryable, delivery_failed_non_retryable, delivery_failed_unknown
 
         if r.outcome == RunOutcome.SUCCESS:
             success += 1
@@ -600,6 +620,12 @@ def run_documents(
             delivery_ok += 1
         else:
             delivery_failed += 1
+            if r.delivery_retryable is True:
+                delivery_failed_retryable += 1
+            elif r.delivery_retryable is False:
+                delivery_failed_non_retryable += 1
+            else:
+                delivery_failed_unknown += 1
 
         _bump_delivery_counter(
             delivery_by_destination,
@@ -698,6 +724,9 @@ def run_documents(
             "total": delivery_total,
             "ok": delivery_ok,
             "failed": delivery_failed,
+            "failed_retryable": delivery_failed_retryable,
+            "failed_non_retryable": delivery_failed_non_retryable,
+            "failed_unknown": delivery_failed_unknown,
             "dlq_written_total": delivery_dlq_written_total,
             "dlq_dir": str((out_root / "_dlq" / "delivery").resolve()),
             "by_destination": delivery_by_destination,
@@ -735,6 +764,9 @@ def run_documents(
         "delivery_total": delivery_total,
         "delivery_ok_total": delivery_ok,
         "delivery_failed_total": delivery_failed,
+        "delivery_failed_retryable_total": delivery_failed_retryable,
+        "delivery_failed_non_retryable_total": delivery_failed_non_retryable,
+        "delivery_failed_unknown_total": delivery_failed_unknown,
         "dlq_written_total": delivery_dlq_written_total,
     }
     batch_report["metrics"] = metrics
