@@ -48,6 +48,7 @@ from zephyr_ingest.config.snapshot_v1 import (
 from zephyr_ingest.destinations.base import Destination
 from zephyr_ingest.destinations.filesystem import FilesystemDestination
 from zephyr_ingest.destinations.webhook import WebhookDestination
+from zephyr_ingest.dlq_prune import prune_delivery_dlq
 from zephyr_ingest.replay_delivery import replay_delivery_dlq
 from zephyr_ingest.runner import RetryConfig, RunnerConfig, run_documents
 from zephyr_ingest.sources.local_file import LocalFileSource
@@ -129,6 +130,16 @@ class SpecListCmd:
 class SpecShowCmd:
     spec_id: str
     fmt: str  # "zephyr" | "jsonschema"
+
+
+@dataclass(frozen=True, slots=True)
+class DlqPruneCmd:
+    out: str
+    older_than_days: int
+    include_pending: bool
+    include_done: bool
+    apply: bool
+    move_to: str
 
 
 def _add_runlike_args(*, p: argparse.ArgumentParser, paths_required: bool) -> None:
@@ -266,6 +277,43 @@ def _build_parser() -> argparse.ArgumentParser:
         default="zephyr",
         choices=["zephyr", "jsonschema", "toml"],
         help="Output format: zephyr (raw) or jsonschema",
+    )
+
+    dlq = sub.add_parser("dlq", help="DLQ utilities")
+    dlq_sub = dlq.add_subparsers(dest="dlq_cmd", required=True)
+
+    prune = dlq_sub.add_parser("prune", help="Prune (move) delivery DLQ records older than N days")
+    prune.add_argument("--out", default=".cache/out", help="Output root directory containing _dlq/")
+    prune.add_argument(
+        "--older-than-days",
+        type=int,
+        required=True,
+        help="Select DLQ records older than N days (required)",
+    )
+    prune.add_argument(
+        "--include-pending",
+        action="store_true",
+        default=False,
+        help="Also prune _dlq/delivery/ (default: only delivery_done/)",
+    )
+    prune.add_argument(
+        "--no-include-done",
+        dest="include_done",
+        action="store_false",
+        default=True,
+        help="Do not prune _dlq/delivery_done/ (default: prunes done)",
+    )
+    prune.add_argument(
+        "--apply",
+        action="store_true",
+        default=False,
+        help="Apply changes (default: dry-run)",
+    )
+    prune.add_argument(
+        "--move-to",
+        type=str,
+        default="_dlq/delivery_pruned",
+        help="Destination directory (relative to out_root unless absolute)",
     )
 
     return p
@@ -762,7 +810,15 @@ def _parse_run_cmd(ns: argparse.Namespace, argv: Sequence[str]) -> RunCmd:
 
 def _parse_cmd(
     argv: Sequence[str],
-) -> RunCmd | ReplayDeliveryCmd | ResolveConfigCmd | InitConfigCmd | SpecListCmd | SpecShowCmd:
+) -> (
+    RunCmd
+    | ReplayDeliveryCmd
+    | ResolveConfigCmd
+    | InitConfigCmd
+    | SpecListCmd
+    | SpecShowCmd
+    | DlqPruneCmd
+):
     p = build_parser()
     ns = p.parse_args(list(argv))
 
@@ -791,6 +847,16 @@ def _parse_cmd(
         spec_id = get_req_str(ns, "id")
         fmt = get_req_str(ns, "format")
         return SpecShowCmd(spec_id=spec_id, fmt=fmt)
+
+    if ns.cmd == "dlq" and ns.dlq_cmd == "prune":
+        return DlqPruneCmd(
+            out=get_req_str(ns, "out"),
+            older_than_days=get_int(ns, "older_than_days"),
+            include_pending=get_bool(ns, "include_pending"),
+            include_done=get_bool(ns, "include_done"),
+            apply=get_bool(ns, "apply"),
+            move_to=get_req_str(ns, "move_to"),
+        )
 
     if ns.cmd == "replay-delivery":
         return ReplayDeliveryCmd(
@@ -1094,8 +1160,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         logging.error("unsupported format: %s", cmd.fmt)
         return 2
 
+    if isinstance(cmd, DlqPruneCmd):
+        prune_stats = prune_delivery_dlq(
+            out_root=Path(cmd.out),
+            older_than_days=cmd.older_than_days,
+            include_pending=cmd.include_pending,
+            include_done=cmd.include_done,
+            apply=cmd.apply,
+            move_to=Path(cmd.move_to),
+        )
+        sys.stdout.write(json.dumps(prune_stats.to_dict(), ensure_ascii=False, indent=2))
+        sys.stdout.write("\n")
+        return 0
+
     if isinstance(cmd, ReplayDeliveryCmd):
-        stats = replay_delivery_dlq(
+        replay_stats = replay_delivery_dlq(
             out_root=Path(cmd.out),
             webhook_url=cmd.webhook_url,
             timeout_s=cmd.webhook_timeout_s,
@@ -1103,7 +1182,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             dry_run=cmd.dry_run,
             move_done=cmd.move_done,
         )
-        logging.info("replay stats: %s", stats)
+        logging.info("replay stats: %s", replay_stats)
         return 0
 
     # RunCmd
