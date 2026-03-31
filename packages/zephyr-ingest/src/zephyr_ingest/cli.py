@@ -140,6 +140,9 @@ class DlqPruneCmd:
     include_done: bool
     apply: bool
     move_to: str
+    max_total_mb: int | None
+    keep_last: int | None
+    keep_last_per_destination: bool
 
 
 def _add_runlike_args(*, p: argparse.ArgumentParser, paths_required: bool) -> None:
@@ -314,6 +317,25 @@ def _build_parser() -> argparse.ArgumentParser:
         type=str,
         default="_dlq/delivery_pruned",
         help="Destination directory (relative to out_root unless absolute)",
+    )
+    prune.add_argument(
+        "--max-total-mb",
+        type=int,
+        default=None,
+        help="If set, prune oldest records "
+        "(excluding protected) until total size <= N MB (may prune newer records).",
+    )
+    prune.add_argument(
+        "--keep-last",
+        type=int,
+        default=None,
+        help="Protect newest N records from pruning (global unless --keep-last-per-destination).",
+    )
+    prune.add_argument(
+        "--keep-last-per-destination",
+        action="store_true",
+        default=False,
+        help="When used with --keep-last, protect newest N records per destination.",
     )
 
     return p
@@ -856,6 +878,9 @@ def _parse_cmd(
             include_done=get_bool(ns, "include_done"),
             apply=get_bool(ns, "apply"),
             move_to=get_req_str(ns, "move_to"),
+            max_total_mb=get_opt_int(ns, "max_total_mb"),
+            keep_last=get_opt_int(ns, "keep_last"),
+            keep_last_per_destination=get_bool(ns, "keep_last_per_destination"),
         )
 
     if ns.cmd == "replay-delivery":
@@ -1168,6 +1193,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             include_done=cmd.include_done,
             apply=cmd.apply,
             move_to=Path(cmd.move_to),
+            max_total_mb=cmd.max_total_mb,
+            keep_last=cmd.keep_last,
+            keep_last_per_destination=cmd.keep_last_per_destination,
         )
         sys.stdout.write(json.dumps(prune_stats.to_dict(), ensure_ascii=False, indent=2))
         sys.stdout.write("\n")
