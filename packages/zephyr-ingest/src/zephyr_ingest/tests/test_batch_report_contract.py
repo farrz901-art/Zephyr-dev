@@ -29,3 +29,11 @@ def test_batch_report_has_schema_version(tmp_path: Path) -> None:
     assert "delivery" in report
     assert "retry" in report
     assert "durations_ms" in report
+    assert "metrics" in report
+
+    metrics = report["metrics"]
+    assert isinstance(metrics["run_wall_ms"], int)
+    assert metrics["docs_total"] == report["counts"]["total"]
+    assert metrics["delivery_total"] == report["delivery"]["total"]
+    assert metrics["dlq_written_total"] == report["delivery"]["dlq_written_total"]
+    assert (metrics["docs_per_min"] is None) or isinstance(metrics["docs_per_min"], float)

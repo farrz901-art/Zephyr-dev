@@ -35,6 +35,9 @@ from zephyr_ingest.obs.batch_report_v1 import (
     DeliveryCountersV1,
     DurationStatsV1,
 )
+from zephyr_ingest.obs.batch_report_v1 import (
+    MetricsV1 as BatchMetricsV1,
+)
 from zephyr_ingest.obs.events import log_event
 
 logger = logging.getLogger(__name__)
@@ -523,6 +526,8 @@ def run_documents(
     out_root = cfg.out_root.expanduser().resolve()
     out_root.mkdir(parents=True, exist_ok=True)
 
+    wall_start = time.perf_counter()
+
     log_event(
         logger,
         level=logging.INFO,
@@ -714,6 +719,26 @@ def run_documents(
         "workers": cfg.workers,
         "executor": "serial" if cfg.workers <= 1 else "thread",
     }
+
+    wall_ms = int((time.perf_counter() - wall_start) * 1000)
+    docs_per_min: float | None = None
+    if wall_ms > 0:
+        docs_per_min = (float(total) / float(wall_ms)) * 60000.0
+
+    metrics: BatchMetricsV1 = {
+        "run_wall_ms": wall_ms,
+        "docs_per_min": docs_per_min,
+        "docs_total": total,
+        "docs_success_total": success,
+        "docs_failed_total": failed,
+        "docs_skipped_total": skipped_existing + skipped_unsupported,
+        "delivery_total": delivery_total,
+        "delivery_ok_total": delivery_ok,
+        "delivery_failed_total": delivery_failed,
+        "dlq_written_total": delivery_dlq_written_total,
+    }
+    batch_report["metrics"] = metrics
+
     if config_snapshot is not None:
         batch_report["config_snapshot"] = config_snapshot
 

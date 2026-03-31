@@ -51,6 +51,24 @@ class RetryV1(TypedDict):
     retryable_failed: int
 
 
+class MetricsV1(TypedDict):
+    # Wall-clock runtime of run_documents (ms)
+    run_wall_ms: int
+    # Derived throughput (docs/min). None when wall time is 0.
+    docs_per_min: float | None
+
+    # Prometheus-like totals (redundant but stable for ops)
+    docs_total: int
+    docs_success_total: int
+    docs_failed_total: int
+    docs_skipped_total: int
+
+    delivery_total: int
+    delivery_ok_total: int
+    delivery_failed_total: int
+    dlq_written_total: int
+
+
 class BatchReportV1(TypedDict):
     schema_version: Literal[1]
     run_id: str
@@ -70,3 +88,4 @@ class BatchReportV1(TypedDict):
     executor: Literal["serial", "thread"]
 
     config_snapshot: NotRequired[ConfigSnapshotV1]
+    metrics: NotRequired[MetricsV1]
