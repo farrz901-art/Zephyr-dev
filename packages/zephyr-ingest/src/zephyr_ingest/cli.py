@@ -52,6 +52,7 @@ from zephyr_ingest.dlq_prune import prune_delivery_dlq
 from zephyr_ingest.replay_delivery import (
     FanoutReplaySink,
     KafkaReplaySink,
+    WeaviateReplaySink,
     WebhookReplaySink,
     replay_delivery_dlq,
 )
@@ -98,9 +99,10 @@ class RunCmd:
 @dataclass(frozen=True, slots=True)
 class ReplayDeliveryCmd:
     out: str
-    dest: str  # webhook|kafka|all
+    dest: str  # webhook|kafka|weaviate|all
     webhook: WebhookConfigV1 | None
     kafka: KafkaConfigV1 | None
+    weaviate: WeaviateConfigV1 | None
     limit: int | None
     dry_run: bool
     move_done: bool
@@ -241,12 +243,12 @@ def _build_parser() -> argparse.ArgumentParser:
     replay.add_argument(
         "--dest",
         default="webhook",
-        choices=["webhook", "kafka", "all"],
+        choices=["webhook", "kafka", "weaviate", "all"],
         help="Replay destination: webhook, kafka, or all",
     )
     # Spec-driven destination flags for replay (webhook + kafka)
     replay_specs: list[ConnectorSpecV1] = []
-    for spec_id in ["destination.webhook.v1", "destination.kafka.v1"]:
+    for spec_id in ["destination.webhook.v1", "destination.kafka.v1", "destination.weaviate.v1"]:
         s = get_spec(spec_id=spec_id)
         if s is None:
             raise RuntimeError(f"missing spec: {spec_id}")
@@ -905,17 +907,21 @@ def _parse_cmd(
         dest = get_req_str(ns, "dest")
         webhook = WebhookConfigV1.from_namespace(ns)
         kafka = KafkaConfigV1.from_namespace(ns)
+        weaviate = WeaviateConfigV1.from_namespace(ns)
         if dest in ("webhook", "all") and webhook is None:
             raise ConfigError("--webhook-url is required when --dest includes webhook")
         if dest in ("kafka", "all") and kafka is None:
             raise ConfigError(
                 "--kafka-topic and --kafka-brokers are required when --dest includes kafka"
             )
+        if dest in ("weaviate", "all") and weaviate is None:
+            raise ConfigError("--weaviate-collection is required when --dest includes weaviate")
         return ReplayDeliveryCmd(
             out=get_req_str(ns, "out"),
             dest=dest,
             webhook=webhook,
             kafka=kafka,
+            weaviate=weaviate,
             limit=get_opt_int(ns, "limit"),
             dry_run=get_bool(ns, "dry_run"),
             move_done=get_bool(ns, "move_done"),
@@ -1142,6 +1148,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     argv2 = sys.argv[1:] if argv is None else argv
 
+    weaviate_client: WeaviateClientProtocol | None = None
+
     try:
         cmd = _parse_cmd(argv2)
     except ConfigError as e:
@@ -1247,19 +1255,46 @@ def main(argv: Sequence[str] | None = None) -> int:
                 )
             )
 
-        sink = sinks[0] if len(sinks) == 1 else FanoutReplaySink(sinks=tuple(sinks))  # type: ignore[arg-type]
-        stats = replay_delivery_dlq(
-            out_root=Path(cmd.out),
-            sink=sink,  # type: ignore[arg-type]
-            limit=cmd.limit,
-            dry_run=cmd.dry_run,
-            move_done=cmd.move_done,
-        )
-        logging.info("replay stats: %s", stats)
-        return 0
+        if cmd.dest in ("weaviate", "all"):
+            assert cmd.weaviate is not None
+            params = WeaviateConnectParams(
+                http_host=cmd.weaviate.http_host,
+                http_port=cmd.weaviate.http_port,
+                http_secure=cmd.weaviate.http_secure,
+                grpc_host=cmd.weaviate.grpc_host,
+                grpc_port=cmd.weaviate.grpc_port,
+                grpc_secure=cmd.weaviate.grpc_secure,
+                api_key=cmd.weaviate.api_key,
+                skip_init_checks=cmd.weaviate.skip_init_checks,
+            )
+            weaviate_client, collection = connect_weaviate_and_get_collection(
+                params=params,
+                collection_name=cmd.weaviate.collection,
+            )
+            sinks.append(
+                WeaviateReplaySink(
+                    collection_name=cmd.weaviate.collection,
+                    collection=collection,
+                    max_batch_errors=cmd.weaviate.max_batch_errors,
+                )
+            )
+
+        try:
+            sink = sinks[0] if len(sinks) == 1 else FanoutReplaySink(sinks=tuple(sinks))  # type: ignore[arg-type]
+            stats = replay_delivery_dlq(
+                out_root=Path(cmd.out),
+                sink=sink,  # type: ignore[arg-type]
+                limit=cmd.limit,
+                dry_run=cmd.dry_run,
+                move_done=cmd.move_done,
+            )
+            logging.info("replay stats: %s", stats)
+            return 0
+        finally:
+            if weaviate_client is not None:
+                weaviate_client.close()
 
     # RunCmd
-    weaviate_client: WeaviateClientProtocol | None = None
     try:
         destination, weaviate_client = _build_destinations(cmd=cmd)
         backend_obj = _build_backend(cmd=cmd)

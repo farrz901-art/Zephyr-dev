@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol, cast
@@ -14,6 +15,7 @@ from zephyr_ingest._internal.delivery_payload import (
 )
 from zephyr_ingest.destinations.base import DeliveryReceipt
 from zephyr_ingest.destinations.kafka import ProducerProtocol, send_delivery_payload_v1_to_kafka
+from zephyr_ingest.destinations.weaviate import WeaviateCollectionProtocol
 from zephyr_ingest.destinations.webhook import WebhookDestination
 from zephyr_ingest.obs.events import log_event
 
@@ -60,6 +62,115 @@ class KafkaReplaySink:
             key_str=idempotency_key,
             flush_timeout_s=self.flush_timeout_s,
         )
+
+
+def _uuid_for_sha256(*, sha256: str) -> str:
+    return str(uuid.uuid5(uuid.NAMESPACE_DNS, sha256))
+
+
+@dataclass(frozen=True, slots=True)
+class WeaviateReplaySink:
+    collection_name: str
+    collection: WeaviateCollectionProtocol
+    max_batch_errors: int = 0
+
+    @property
+    def name(self) -> str:
+        return "weaviate"
+
+    def send(self, *, payload: DeliveryPayloadV1, idempotency_key: str) -> DeliveryReceipt:
+        sha256 = payload["sha256"]
+        obj_uuid = _uuid_for_sha256(sha256=sha256)
+
+        artifacts = payload["artifacts"]
+        normalized_path = Path(artifacts["normalized_path"])
+        elements_path = Path(artifacts["elements_path"])
+
+        try:
+            normalized_text = normalized_path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            return DeliveryReceipt(
+                destination="weaviate",
+                ok=False,
+                details={
+                    "retryable": False,
+                    "reason": "missing_normalized_txt",
+                    "normalized_path": str(normalized_path),
+                },
+            )
+
+        try:
+            raw = cast(list[Any], json.loads(elements_path.read_text(encoding="utf-8")))
+            elements_count = len(raw)
+        except FileNotFoundError:
+            return DeliveryReceipt(
+                destination="weaviate",
+                ok=False,
+                details={
+                    "retryable": False,
+                    "reason": "missing_elements_json",
+                    "elements_path": str(elements_path),
+                },
+            )
+        except Exception as exc:
+            return DeliveryReceipt(
+                destination="weaviate",
+                ok=False,
+                details={
+                    "retryable": False,
+                    "reason": "invalid_elements_json",
+                    "elements_path": str(elements_path),
+                    "exc_type": type(exc).__name__,
+                    "exc": str(exc),
+                },
+            )
+
+        run_meta = payload.get("run_meta") or {}
+        run_id = run_meta.get("run_id")
+        pipeline_version = run_meta.get("pipeline_version")
+        timestamp_utc = run_meta.get("timestamp_utc")
+
+        props: dict[str, Any] = {
+            "sha256": sha256,
+            "uuid": obj_uuid,
+            "normalized_text": normalized_text,
+            "elements_count": elements_count,
+        }
+        if isinstance(run_id, str):
+            props["run_id"] = run_id
+        if isinstance(pipeline_version, str):
+            props["pipeline_version"] = pipeline_version
+        if isinstance(timestamp_utc, str):
+            props["timestamp_utc"] = timestamp_utc
+
+        details: dict[str, Any] = {
+            "collection": self.collection_name,
+            "uuid": obj_uuid,
+            "attempts": 1,
+        }
+
+        try:
+            with self.collection.batch.dynamic() as batch:
+                batch.add_object(properties=props, uuid=obj_uuid)
+                batch_errors = batch.number_errors
+
+            failed_objects = self.collection.batch.failed_objects
+            failed_count = len(failed_objects)
+
+            details["batch_errors"] = batch_errors
+            details["failed_objects"] = failed_count
+
+            retryable = (batch_errors > self.max_batch_errors) or (failed_count > 0)
+            details["retryable"] = retryable
+
+            if retryable:
+                return DeliveryReceipt(destination="weaviate", ok=False, details=details)
+            return DeliveryReceipt(destination="weaviate", ok=True, details=details)
+        except Exception as exc:
+            details["exc_type"] = type(exc).__name__
+            details["exc"] = str(exc)
+            details["retryable"] = True
+            return DeliveryReceipt(destination="weaviate", ok=False, details=details)
 
 
 @dataclass(frozen=True, slots=True)
