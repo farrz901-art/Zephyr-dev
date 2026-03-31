@@ -4,9 +4,10 @@ import argparse
 import json
 import logging
 import sys
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Sequence
+from typing import TYPE_CHECKING, Any, Sequence, cast
 
 from uns_stream.backends.http_uns_api import HttpUnsApiBackend
 from zephyr_core import RunContext
@@ -152,6 +153,14 @@ class DlqPruneCmd:
     max_total_mb: int | None
     keep_last: int | None
     keep_last_per_destination: bool
+
+
+@dataclass(frozen=True, slots=True)
+class BenchCmd:
+    run_cmd: RunCmd
+    iterations: int
+    warmup: int
+    bench_out: str
 
 
 def _add_runlike_args(*, p: argparse.ArgumentParser, paths_required: bool) -> None:
@@ -357,6 +366,20 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         default=False,
         help="When used with --keep-last, protect newest N records per destination.",
+    )
+    bench = sub.add_parser("bench", help="Run a local benchmark (multiple iterations, prints JSON)")
+    _add_runlike_args(p=bench, paths_required=True)
+    bench.add_argument(
+        "--iterations", type=int, default=5, help="Number of measured iterations (default: 5)"
+    )
+    bench.add_argument(
+        "--warmup", type=int, default=1, help="Number of warmup iterations (default: 1)"
+    )
+    bench.add_argument(
+        "--bench-out",
+        type=str,
+        default=".cache/bench",
+        help="Benchmark output root (default: .cache/bench)",
     )
 
     return p
@@ -861,6 +884,7 @@ def _parse_cmd(
     | SpecListCmd
     | SpecShowCmd
     | DlqPruneCmd
+    | BenchCmd
 ):
     p = build_parser()
     ns = p.parse_args(list(argv))
@@ -904,6 +928,17 @@ def _parse_cmd(
             keep_last_per_destination=get_bool(ns, "keep_last_per_destination"),
         )
 
+    if ns.cmd == "bench":
+        iters = get_int(ns, "iterations")
+        warm = get_int(ns, "warmup")
+        if iters <= 0:
+            raise ConfigError("--iterations must be > 0")
+        if warm < 0:
+            raise ConfigError("--warmup must be >= 0")
+        run_cmd = _parse_run_cmd(ns, argv)
+        bench_out = get_req_str(ns, "bench_out")
+        return BenchCmd(run_cmd=run_cmd, iterations=iters, warmup=warm, bench_out=bench_out)
+
     if ns.cmd == "replay-delivery":
         dest = get_req_str(ns, "dest")
         webhook = WebhookConfigV1.from_namespace(ns)
@@ -931,6 +966,58 @@ def _parse_cmd(
         )
 
     raise SystemExit("Unsupported command")
+
+
+def _load_batch_report_metrics(*, out_root: Path) -> tuple[int, float | None]:
+    """
+    Return (run_wall_ms, docs_per_min) from batch_report.json.
+    Raises ConfigError on malformed report.
+    """
+    report_path = (out_root / "batch_report.json").resolve()
+    try:
+        obj = json.loads(report_path.read_text(encoding="utf-8"))
+    except FileNotFoundError as e:
+        raise ConfigError(f"missing batch_report.json at {report_path}") from e
+    except Exception as e:
+        raise ConfigError(f"invalid batch_report.json at {report_path}: {e}") from e
+
+    if not isinstance(obj, dict):
+        raise ConfigError("batch_report.json is not an object")
+
+    report = cast(dict[str, Any], obj)
+
+    metrics = report.get("metrics")
+    if not isinstance(metrics, dict):
+        raise ConfigError("batch_report.json.metrics missing or not an object")
+
+    typed_metrics = cast(dict[str, Any], metrics)
+
+    # wall = metrics.get("run_wall_ms")
+    # dpm = metrics.get("docs_per_min")
+    wall = typed_metrics.get("run_wall_ms")
+    dpm = typed_metrics.get("docs_per_min")
+
+    if not isinstance(wall, int):
+        raise ConfigError("batch_report.json.metrics.run_wall_ms must be int")
+    if dpm is not None and not isinstance(dpm, (int, float)):
+        raise ConfigError("batch_report.json.metrics.docs_per_min must be float|null")
+
+    # return wall, None if dpm is None else float(dpm)
+    final_dpm: float | None = float(dpm) if isinstance(dpm, (int, float)) else None
+    return wall, final_dpm
+
+
+def _percentile_int(values: list[int], p: float) -> int | None:
+    if not values:
+        return None
+    xs = sorted(values)
+    # nearest-rank method
+    k = int((p / 100.0) * (len(xs) - 1))
+    if k < 0:
+        k = 0
+    if k >= len(xs):
+        k = len(xs) - 1
+    return xs[k]
 
 
 def _field_type_to_jsonschema_type(t: SpecFieldTypeV1) -> str:
@@ -1237,6 +1324,104 @@ def main(argv: Sequence[str] | None = None) -> int:
             keep_last_per_destination=cmd.keep_last_per_destination,
         )
         sys.stdout.write(json.dumps(prune_stats.to_dict(), ensure_ascii=False, indent=2))
+        sys.stdout.write("\n")
+        return 0
+
+    if isinstance(cmd, BenchCmd):
+        base = cmd.run_cmd
+        bench_root = Path(cmd.bench_out).expanduser().resolve()
+        bench_root.mkdir(parents=True, exist_ok=True)
+
+        # create a unique session dir to avoid collisions
+        session = f"bench_{int(time.time())}"
+        session_dir = (bench_root / session).resolve()
+        session_dir.mkdir(parents=True, exist_ok=False)
+
+        results: list[dict[str, object]] = []
+        measured_wall: list[int] = []
+        measured_dpm: list[float] = []
+
+        total_runs = cmd.warmup + cmd.iterations
+
+        for i in range(total_runs):
+            is_warmup = i < cmd.warmup
+            iter_out = (session_dir / f"iter_{i}").resolve()
+
+            iter_cmd = replace(base, out=str(iter_out))
+
+            try:
+                destination, weaviate_client = _build_destinations(cmd=iter_cmd)
+                backend_obj = _build_backend(cmd=iter_cmd)
+                ctx = RunContext.new(
+                    pipeline_version=iter_cmd.pipeline_version or PIPELINE_VERSION,
+                    run_id=iter_cmd.run_id,
+                    timestamp_utc=iter_cmd.timestamp_utc,
+                )
+                docs = _collect_documents(cmd=iter_cmd)
+                cfg = RunnerConfig(
+                    out_root=Path(iter_cmd.out),
+                    strategy=iter_cmd.strategy,
+                    unique_element_ids=iter_cmd.unique_element_ids,
+                    skip_unsupported=iter_cmd.skip_unsupported,
+                    skip_existing=iter_cmd.skip_existing,
+                    force=iter_cmd.force,
+                    retry=iter_cmd.retry,
+                    workers=iter_cmd.workers,
+                    stale_lock_ttl_s=iter_cmd.stale_lock_ttl_s,
+                    destination=destination,
+                    backend=backend_obj,
+                )
+
+                config_snapshot = _build_config_snapshot(cmd=iter_cmd)
+                run_documents(
+                    docs=docs,
+                    cfg=cfg,
+                    ctx=ctx,
+                    destination=destination,
+                    config_snapshot=config_snapshot,
+                )
+            finally:
+                if weaviate_client is not None:
+                    weaviate_client.close()
+
+            wall_ms, dpm = _load_batch_report_metrics(out_root=Path(iter_cmd.out))
+            results.append(
+                {
+                    "iteration": i,
+                    "warmup": is_warmup,
+                    "out_root": str(iter_out),
+                    "run_wall_ms": wall_ms,
+                    "docs_per_min": dpm,
+                }
+            )
+            if not is_warmup:
+                measured_wall.append(wall_ms)
+                if dpm is not None:
+                    measured_dpm.append(dpm)
+
+        summary: dict[str, object] = {
+            "iterations": cmd.iterations,
+            "warmup": cmd.warmup,
+            "measured_count": len(measured_wall),
+            "run_wall_ms": {
+                "min": min(measured_wall) if measured_wall else None,
+                "avg": (sum(measured_wall) / len(measured_wall)) if measured_wall else None,
+                "p50": _percentile_int(measured_wall, 50),
+                "p95": _percentile_int(measured_wall, 95),
+            },
+            "docs_per_min": {
+                "min": min(measured_dpm) if measured_dpm else None,
+                "avg": (sum(measured_dpm) / len(measured_dpm)) if measured_dpm else None,
+            },
+        }
+
+        bench_result: dict[str, Any] = {
+            "bench_root": str(bench_root),
+            "session_dir": str(session_dir),
+            "results": results,
+            "summary": summary,
+        }
+        sys.stdout.write(json.dumps(bench_result, ensure_ascii=False, indent=2))
         sys.stdout.write("\n")
         return 0
 
