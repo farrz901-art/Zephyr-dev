@@ -4,7 +4,7 @@ import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Protocol, cast
 
 import httpx
 
@@ -12,10 +12,75 @@ from zephyr_ingest._internal.delivery_payload import (
     DeliveryPayloadV1,
     build_delivery_payload_v1_from_run_meta_dict,
 )
+from zephyr_ingest.destinations.base import DeliveryReceipt
+from zephyr_ingest.destinations.kafka import ProducerProtocol, send_delivery_payload_v1_to_kafka
 from zephyr_ingest.destinations.webhook import WebhookDestination
 from zephyr_ingest.obs.events import log_event
 
 logger = logging.getLogger(__name__)
+
+
+class ReplaySink(Protocol):
+    @property
+    def name(self) -> str: ...
+
+    def send(self, *, payload: DeliveryPayloadV1, idempotency_key: str) -> DeliveryReceipt: ...
+
+
+@dataclass(frozen=True, slots=True)
+class WebhookReplaySink:
+    url: str
+    timeout_s: float = 10.0
+    transport: httpx.BaseTransport | None = None
+
+    @property
+    def name(self) -> str:
+        return "webhook"
+
+    def send(self, *, payload: DeliveryPayloadV1, idempotency_key: str) -> DeliveryReceipt:
+        dest = WebhookDestination(url=self.url, timeout_s=self.timeout_s, transport=self.transport)
+        return dest.post_payload(payload=payload, idempotency_key=idempotency_key)
+
+
+@dataclass(frozen=True, slots=True)
+class KafkaReplaySink:
+    topic: str
+    producer: ProducerProtocol
+    flush_timeout_s: float = 10.0
+
+    @property
+    def name(self) -> str:
+        return "kafka"
+
+    def send(self, *, payload: DeliveryPayloadV1, idempotency_key: str) -> DeliveryReceipt:
+        return send_delivery_payload_v1_to_kafka(
+            producer=self.producer,
+            topic=self.topic,
+            payload=payload,
+            key_str=idempotency_key,
+            flush_timeout_s=self.flush_timeout_s,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class FanoutReplaySink:
+    sinks: tuple[ReplaySink, ...]
+
+    @property
+    def name(self) -> str:
+        children = ",".join(s.name for s in self.sinks)
+        return f"fanout({children})"
+
+    def send(self, *, payload: DeliveryPayloadV1, idempotency_key: str) -> DeliveryReceipt:
+        details: dict[str, Any] = {"children": []}
+        ok = True
+        for s in self.sinks:
+            r = s.send(payload=payload, idempotency_key=idempotency_key)
+            details["children"].append(
+                {"destination": r.destination, "ok": r.ok, "details": r.details}
+            )
+            ok = ok and r.ok
+        return DeliveryReceipt(destination="fanout", ok=ok, details=details)
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,9 +109,10 @@ def _load_json(path: Path) -> dict[str, Any]:
 def replay_delivery_dlq(
     *,
     out_root: Path,
-    webhook_url: str,
+    webhook_url: str | None = None,
     timeout_s: float = 10.0,
     transport: httpx.BaseTransport | None = None,
+    sink: ReplaySink | None = None,
     limit: int | None = None,
     dry_run: bool = False,
     move_done: bool = True,
@@ -56,12 +122,17 @@ def replay_delivery_dlq(
     if limit is not None:
         files = files[:limit]
 
+    if sink is None:
+        if webhook_url is None:
+            raise ValueError("Either sink or webhook_url must be provided")
+        sink = WebhookReplaySink(url=webhook_url, timeout_s=timeout_s, transport=transport)
+
     log_event(
         logger,
         level=logging.INFO,
         event="replay_start",
         out_root=out_root,
-        destination="webhook",
+        destination=sink.name,
         total=len(files),
         limit=limit,
         dry_run=dry_run,
@@ -71,8 +142,6 @@ def replay_delivery_dlq(
     done_dir = out_root / "_dlq" / "delivery_done"
     if move_done:
         done_dir.mkdir(parents=True, exist_ok=True)
-
-    dest = WebhookDestination(url=webhook_url, timeout_s=timeout_s, transport=transport)
 
     attempted = succeeded = failed = moved = 0
 
@@ -94,7 +163,7 @@ def replay_delivery_dlq(
                 logger,
                 level=logging.WARNING,
                 event="replay_result",
-                destination="webhook",
+                destination=sink.name,
                 dlq_file=fp.name,
                 ok=False,
                 invalid_record=True,
@@ -108,7 +177,7 @@ def replay_delivery_dlq(
             logger,
             level=logging.INFO,
             event="replay_attempt",
-            destination="webhook",
+            destination=sink.name,
             dlq_file=fp.name,
             sha256=sha256,
             run_id=run_id,
@@ -125,7 +194,7 @@ def replay_delivery_dlq(
                 logger,
                 level=logging.INFO,
                 event="replay_result",
-                destination="webhook",
+                destination=sink.name,
                 dlq_file=fp.name,
                 sha256=sha256,
                 run_id=run_id,
@@ -134,7 +203,8 @@ def replay_delivery_dlq(
             )
             continue
 
-        receipt = dest.post_payload(payload=payload, idempotency_key=f"{sha256}:{run_id}")
+        idem = f"{sha256}:{run_id}"
+        receipt = sink.send(payload=payload, idempotency_key=idem)
 
         if receipt.ok:
             succeeded += 1
@@ -147,7 +217,7 @@ def replay_delivery_dlq(
                 logger,
                 level=logging.INFO,
                 event="replay_result",
-                destination="webhook",
+                destination=sink.name,
                 dlq_file=fp.name,
                 sha256=sha256,
                 run_id=run_id,
@@ -165,7 +235,7 @@ def replay_delivery_dlq(
                 logger,
                 level=logging.WARNING,
                 event="replay_result",
-                destination="webhook",
+                destination=sink.name,
                 dlq_file=fp.name,
                 sha256=sha256,
                 run_id=run_id,
@@ -178,7 +248,7 @@ def replay_delivery_dlq(
         level=logging.INFO,
         event="replay_done",
         out_root=out_root,
-        destination="webhook",
+        destination=sink.name,
         total=len(files),
         attempted=attempted,
         succeeded=succeeded,

@@ -49,7 +49,12 @@ from zephyr_ingest.destinations.base import Destination
 from zephyr_ingest.destinations.filesystem import FilesystemDestination
 from zephyr_ingest.destinations.webhook import WebhookDestination
 from zephyr_ingest.dlq_prune import prune_delivery_dlq
-from zephyr_ingest.replay_delivery import replay_delivery_dlq
+from zephyr_ingest.replay_delivery import (
+    FanoutReplaySink,
+    KafkaReplaySink,
+    WebhookReplaySink,
+    replay_delivery_dlq,
+)
 from zephyr_ingest.runner import RetryConfig, RunnerConfig, run_documents
 from zephyr_ingest.sources.local_file import LocalFileSource
 from zephyr_ingest.spec.argparse_render import add_specs_to_parser
@@ -93,8 +98,9 @@ class RunCmd:
 @dataclass(frozen=True, slots=True)
 class ReplayDeliveryCmd:
     out: str
-    webhook_url: str
-    webhook_timeout_s: float
+    dest: str  # webhook|kafka|all
+    webhook: WebhookConfigV1 | None
+    kafka: KafkaConfigV1 | None
     limit: int | None
     dry_run: bool
     move_done: bool
@@ -232,8 +238,20 @@ def _build_parser() -> argparse.ArgumentParser:
     replay.add_argument(
         "--out", default=".cache/out", help="Output root directory containing _dlq/"
     )
-    replay.add_argument("--webhook-url", required=True, help="Webhook URL to resend payloads to")
-    replay.add_argument("--webhook-timeout-s", type=float, default=10.0)
+    replay.add_argument(
+        "--dest",
+        default="webhook",
+        choices=["webhook", "kafka", "all"],
+        help="Replay destination: webhook, kafka, or all",
+    )
+    # Spec-driven destination flags for replay (webhook + kafka)
+    replay_specs: list[ConnectorSpecV1] = []
+    for spec_id in ["destination.webhook.v1", "destination.kafka.v1"]:
+        s = get_spec(spec_id=spec_id)
+        if s is None:
+            raise RuntimeError(f"missing spec: {spec_id}")
+        replay_specs.append(s)
+    add_specs_to_parser(p=replay, specs=replay_specs)
     replay.add_argument("--limit", type=int, default=None)
     replay.add_argument("--dry-run", action="store_true", default=False)
     replay.add_argument("--no-move-done", dest="move_done", action="store_false", default=True)
@@ -884,10 +902,20 @@ def _parse_cmd(
         )
 
     if ns.cmd == "replay-delivery":
+        dest = get_req_str(ns, "dest")
+        webhook = WebhookConfigV1.from_namespace(ns)
+        kafka = KafkaConfigV1.from_namespace(ns)
+        if dest in ("webhook", "all") and webhook is None:
+            raise ConfigError("--webhook-url is required when --dest includes webhook")
+        if dest in ("kafka", "all") and kafka is None:
+            raise ConfigError(
+                "--kafka-topic and --kafka-brokers are required when --dest includes kafka"
+            )
         return ReplayDeliveryCmd(
             out=get_req_str(ns, "out"),
-            webhook_url=get_req_str(ns, "webhook_url"),
-            webhook_timeout_s=get_float(ns, "webhook_timeout_s"),
+            dest=dest,
+            webhook=webhook,
+            kafka=kafka,
             limit=get_opt_int(ns, "limit"),
             dry_run=get_bool(ns, "dry_run"),
             move_done=get_bool(ns, "move_done"),
@@ -1202,15 +1230,32 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     if isinstance(cmd, ReplayDeliveryCmd):
-        replay_stats = replay_delivery_dlq(
+        sinks: list[object] = []
+        if cmd.dest in ("webhook", "all"):
+            assert cmd.webhook is not None
+            sinks.append(WebhookReplaySink(url=cmd.webhook.url, timeout_s=cmd.webhook.timeout_s))
+        if cmd.dest in ("kafka", "all"):
+            assert cmd.kafka is not None
+            from zephyr_ingest._internal.kafka_producer import make_kafka_producer
+
+            producer = make_kafka_producer(brokers=cmd.kafka.brokers)
+            sinks.append(
+                KafkaReplaySink(
+                    topic=cmd.kafka.topic,
+                    producer=producer,
+                    flush_timeout_s=cmd.kafka.flush_timeout_s,
+                )
+            )
+
+        sink = sinks[0] if len(sinks) == 1 else FanoutReplaySink(sinks=tuple(sinks))  # type: ignore[arg-type]
+        stats = replay_delivery_dlq(
             out_root=Path(cmd.out),
-            webhook_url=cmd.webhook_url,
-            timeout_s=cmd.webhook_timeout_s,
+            sink=sink,  # type: ignore[arg-type]
             limit=cmd.limit,
             dry_run=cmd.dry_run,
             move_done=cmd.move_done,
         )
-        logging.info("replay stats: %s", replay_stats)
+        logging.info("replay stats: %s", stats)
         return 0
 
     # RunCmd

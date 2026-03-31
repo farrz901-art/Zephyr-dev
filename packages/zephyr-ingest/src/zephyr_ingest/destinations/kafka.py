@@ -37,6 +37,48 @@ class ProducerProtocol(Protocol):
         ...
 
 
+def send_delivery_payload_v1_to_kafka(
+    *,
+    producer: ProducerProtocol,
+    topic: str,
+    payload: DeliveryPayloadV1,
+    key_str: str,
+    flush_timeout_s: float,
+) -> DeliveryReceipt:
+    """
+    Shared Kafka send helper used by both KafkaDestination and replay-delivery.
+    Keeps serialization + receipt details stable.
+    """
+    key_bytes = key_str.encode("utf-8")
+    payload_str = json.dumps(payload, ensure_ascii=False)
+    value_bytes = payload_str.encode("utf-8")
+
+    details: dict[str, Any] = {
+        "topic": topic,
+        "key_len": len(key_bytes),
+        "value_len": len(value_bytes),
+        "flush_timeout_s": flush_timeout_s,
+    }
+
+    try:
+        producer.produce(topic=topic, key=key_bytes, value=value_bytes)
+        unflushed = producer.flush(timeout=flush_timeout_s)
+
+        if unflushed > 0:
+            logger.warning("kafka_flush_incomplete topic=%s unflushed=%d", topic, unflushed)
+            details["unflushed"] = unflushed
+            details["retryable"] = True
+            return DeliveryReceipt(destination="kafka", ok=False, details=details)
+
+        return DeliveryReceipt(destination="kafka", ok=True, details=details)
+    except Exception as exc:
+        details["exc_type"] = type(exc).__name__
+        details["exc"] = str(exc)
+        details["retryable"] = True
+        logger.exception("kafka_delivery_failed topic=%s exc_type=%s", topic, details["exc_type"])
+        return DeliveryReceipt(destination="kafka", ok=False, details=details)
+
+
 @dataclass(slots=True, kw_only=True)
 class KafkaDestination:
     """
@@ -76,53 +118,15 @@ class KafkaDestination:
 
         # Idempotency key (same semantics as webhook)
         key_str = f"{sha256}:{meta.run_id}"
-        key_bytes = key_str.encode("utf-8")
-
-        # Value: JSON-encoded payload
-        payload_str = json.dumps(payload, ensure_ascii=False)
-        value_bytes = payload_str.encode("utf-8")
-
-        details: dict[str, Any] = {
-            "topic": self.topic,
-            "key_len": len(key_bytes),
-            "value_len": len(value_bytes),
-            "flush_timeout_s": self.flush_timeout_s,
-        }
-
-        try:
-            self.producer.produce(topic=self.topic, key=key_bytes, value=value_bytes)
-            unflushed = self.producer.flush(timeout=self.flush_timeout_s)
-
-            if unflushed > 0:
-                logger.warning(
-                    "kafka_flush_incomplete topic=%s unflushed=%d", self.topic, unflushed
-                )
-                details["unflushed"] = unflushed
-                details["retryable"] = True
-                return DeliveryReceipt(
-                    destination="kafka",
-                    ok=False,
-                    details=details,
-                )
-
+        receipt = send_delivery_payload_v1_to_kafka(
+            producer=self.producer,
+            topic=self.topic,
+            payload=payload,
+            key_str=key_str,
+            flush_timeout_s=self.flush_timeout_s,
+        )
+        if receipt.ok:
             logger.info(
-                "kafka_delivered topic=%s sha256=%s run_id=%s",
-                self.topic,
-                sha256,
-                meta.run_id,
+                "kafka_delivered topic=%s sha256=%s run_id=%s", self.topic, sha256, meta.run_id
             )
-            return DeliveryReceipt(destination="kafka", ok=True, details=details)
-
-        except Exception as exc:
-            exc_type = type(exc).__name__
-            logger.exception(
-                "kafka_delivery_failed topic=%s sha256=%s exc_type=%s",
-                self.topic,
-                sha256,
-                exc_type,
-            )
-            details["exc_type"] = exc_type
-            details["exc"] = str(exc)
-            # Conservative: mark retryable unless proven config error
-            details["retryable"] = True
-            return DeliveryReceipt(destination="kafka", ok=False, details=details)
+        return receipt
