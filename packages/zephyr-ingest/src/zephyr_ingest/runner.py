@@ -643,6 +643,10 @@ def run_documents(
         )
 
         details_obj: object = r.delivery_receipt.details
+        if isinstance(details_obj, dict):
+            ec = details_obj.get("error_code")
+            if isinstance(ec, str) and ec:
+                counts_by_error_code[ec] = counts_by_error_code.get(ec, 0) + 1
 
         # 深入统计 fanout 内部情况
         if r.delivery_receipt.destination == "fanout" and isinstance(details_obj, dict):

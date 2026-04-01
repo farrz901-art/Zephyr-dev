@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
-from zephyr_core import PartitionResult, RunMetaV1
+from zephyr_core import ErrorCode, PartitionResult, RunMetaV1
 from zephyr_ingest.destinations.base import DeliveryReceipt
 
 logger = logging.getLogger(__name__)
@@ -118,6 +118,7 @@ class WeaviateDestination:
             details["retryable"] = retryable
 
             if retryable:
+                details["error_code"] = str(ErrorCode.DELIVERY_WEAVIATE_FAILED)
                 return DeliveryReceipt(destination=self.name, ok=False, details=details)
 
             return DeliveryReceipt(destination=self.name, ok=True, details=details)
@@ -126,5 +127,6 @@ class WeaviateDestination:
             details["exc_type"] = type(exc).__name__
             details["exc"] = str(exc)
             details["retryable"] = True
+            details["error_code"] = str(ErrorCode.DELIVERY_WEAVIATE_FAILED)
             logger.exception("weaviate_delivery_failed collection=%s", self.collection_name)
             return DeliveryReceipt(destination=self.name, ok=False, details=details)

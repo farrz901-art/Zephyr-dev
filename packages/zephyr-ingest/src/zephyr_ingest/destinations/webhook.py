@@ -8,7 +8,7 @@ from typing import Any, Mapping
 
 import httpx
 
-from zephyr_core import PartitionResult, RunMetaV1
+from zephyr_core import ErrorCode, PartitionResult, RunMetaV1
 from zephyr_ingest._internal.delivery_payload import build_delivery_payload_v1
 from zephyr_ingest.destinations.base import DeliveryReceipt
 
@@ -148,6 +148,7 @@ class WebhookDestination:
                             "status_code": resp.status_code,
                             "response_text": last_text,
                             "retryable": retryable,
+                            "error_code": str(ErrorCode.DELIVERY_HTTP_FAILED),
                         },
                     )
 
@@ -170,6 +171,7 @@ class WebhookDestination:
                             "exc_type": last_exc_type,
                             "exc": last_exc,
                             "retryable": False,
+                            "error_code": str(ErrorCode.DELIVERY_HTTP_FAILED),
                         },
                     )
         finally:

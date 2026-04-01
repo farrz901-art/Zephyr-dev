@@ -9,6 +9,7 @@ from typing import Any, Protocol, cast
 
 import httpx
 
+from zephyr_core import ErrorCode
 from zephyr_ingest._internal.delivery_payload import (
     DeliveryPayloadV1,
     build_delivery_payload_v1_from_run_meta_dict,
@@ -96,6 +97,7 @@ class WeaviateReplaySink:
                     "retryable": False,
                     "reason": "missing_normalized_txt",
                     "normalized_path": str(normalized_path),
+                    "error_code": str(ErrorCode.DELIVERY_INVALID_PAYLOAD),
                 },
             )
 
@@ -112,6 +114,7 @@ class WeaviateReplaySink:
                     "retryable": False,
                     "reason": "missing_elements_json",
                     "elements_path": str(elements_path),
+                    "error_code": str(ErrorCode.DELIVERY_INVALID_PAYLOAD),
                 },
             )
         except Exception as exc:
@@ -124,6 +127,7 @@ class WeaviateReplaySink:
                     "elements_path": str(elements_path),
                     "exc_type": type(exc).__name__,
                     "exc": str(exc),
+                    "error_code": str(ErrorCode.DELIVERY_INVALID_PAYLOAD),
                 },
             )
 
@@ -172,6 +176,7 @@ class WeaviateReplaySink:
             details["exc_type"] = type(exc).__name__
             details["exc"] = str(exc)
             details["retryable"] = True
+            details["error_code"] = str(ErrorCode.DELIVERY_WEAVIATE_FAILED)
             return DeliveryReceipt(destination="weaviate", ok=False, details=details)
 
 

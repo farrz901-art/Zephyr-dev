@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
-from zephyr_core import RunMetaV1
+from zephyr_core import ErrorCode, RunMetaV1
 from zephyr_core.contracts.v1.models import PartitionResult
 from zephyr_ingest._internal.delivery_payload import (
     DeliveryPayloadV1,
@@ -68,6 +68,7 @@ def send_delivery_payload_v1_to_kafka(
             logger.warning("kafka_flush_incomplete topic=%s unflushed=%d", topic, unflushed)
             details["unflushed"] = unflushed
             details["retryable"] = True
+            details["error_code"] = str(ErrorCode.DELIVERY_KAFKA_FAILED)
             return DeliveryReceipt(destination="kafka", ok=False, details=details)
 
         return DeliveryReceipt(destination="kafka", ok=True, details=details)
@@ -75,6 +76,7 @@ def send_delivery_payload_v1_to_kafka(
         details["exc_type"] = type(exc).__name__
         details["exc"] = str(exc)
         details["retryable"] = True
+        details["error_code"] = str(ErrorCode.DELIVERY_KAFKA_FAILED)
         logger.exception("kafka_delivery_failed topic=%s exc_type=%s", topic, details["exc_type"])
         return DeliveryReceipt(destination="kafka", ok=False, details=details)
 
