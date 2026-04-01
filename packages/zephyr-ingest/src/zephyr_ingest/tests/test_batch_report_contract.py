@@ -30,6 +30,12 @@ def test_batch_report_has_schema_version(tmp_path: Path) -> None:
     assert "retry" in report
     assert "durations_ms" in report
     assert "metrics" in report
+    assert "stage_durations_ms" in report
+
+    sd = report["stage_durations_ms"]
+    assert "hash_ms" in sd
+    assert "partition_ms" in sd
+    assert "delivery_ms" in sd
 
     metrics = report["metrics"]
     assert isinstance(metrics["run_wall_ms"], int)

@@ -14,6 +14,17 @@ class DurationStatsV1(TypedDict):
     p95: int | None
 
 
+class StageDurationsV1(TypedDict):
+    """
+    Stage-level timing breakdown (ms).
+    These are derived from per-doc measurements in runner._process_one.
+    """
+
+    hash_ms: DurationStatsV1
+    partition_ms: DurationStatsV1
+    delivery_ms: DurationStatsV1
+
+
 class CountsV1(TypedDict):
     total: int
     success: int
@@ -88,6 +99,7 @@ class BatchReportV1(TypedDict):
     counts_by_error_code: dict[str, int]
     retry: RetryV1
     durations_ms: DurationStatsV1
+    stage_durations_ms: NotRequired[StageDurationsV1]
 
     generated_at_utc: str
     workers: int

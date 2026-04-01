@@ -34,6 +34,7 @@ from zephyr_ingest.obs.batch_report_v1 import (
     BatchReportV1,
     DeliveryCountersV1,
     DurationStatsV1,
+    StageDurationsV1,
 )
 from zephyr_ingest.obs.batch_report_v1 import (
     MetricsV1 as BatchMetricsV1,
@@ -112,6 +113,10 @@ class DocProcessResult:
     delivery_receipt: DeliveryReceipt | None
     delivery_retryable: bool | None
     dlq_written: bool
+    # stage timings (ms); None means stage not executed (e.g. skipped)
+    hash_ms: int | None
+    partition_ms: int | None
+    delivery_ms: int | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -182,7 +187,9 @@ def _process_one(
     destination: Destination,
 ) -> DocProcessResult:
     p = Path(doc.uri)
+    t_hash0 = time.perf_counter()
     sha = sha256_file(p)
+    hash_ms = int((time.perf_counter() - t_hash0) * 1000)
 
     log_event(
         logger,
@@ -213,6 +220,9 @@ def _process_one(
             delivery_receipt=None,
             delivery_retryable=None,
             dlq_written=False,
+            hash_ms=hash_ms,
+            partition_ms=None,
+            delivery_ms=None,
         )
 
     # 并发竞争锁 (Write-only)
@@ -285,13 +295,20 @@ def _process_one(
                     delivery_receipt=None,
                     delivery_retryable=None,
                     dlq_written=False,
+                    hash_ms=hash_ms,
+                    partition_ms=None,
+                    delivery_ms=None,
                 )
         t0 = time.perf_counter()
         attempts = 0
+        partition_ms_total = 0
+        delivery_ms: int | None = None
+        t_part0 = time.perf_counter()
 
         while True:
             attempts += 1
             try:
+                t_part0 = time.perf_counter()
                 res = partition_fn(
                     filename=str(p),
                     strategy=cfg.strategy,
@@ -302,6 +319,7 @@ def _process_one(
                     sha256=sha,
                     size_bytes=doc.size_bytes,
                 )
+                partition_ms_total += int((time.perf_counter() - t_part0) * 1000)
                 duration_ms = int((time.perf_counter() - t0) * 1000)
                 meta = RunMetaV1(
                     run_id=ctx.run_id,
@@ -337,6 +355,7 @@ def _process_one(
                     outcome=None if meta.outcome is None else str(meta.outcome),
                 )
 
+                t_del0 = time.perf_counter()
                 try:
                     receipt = destination(out_root=out_root, sha256=sha, meta=meta, result=res)
                 except Exception as de:
@@ -345,6 +364,7 @@ def _process_one(
                         ok=False,
                         details={"exc_type": type(de).__name__, "exc": str(de)},
                     )
+                delivery_ms = int((time.perf_counter() - t_del0) * 1000)
 
                 log_event(
                     logger,
@@ -408,6 +428,9 @@ def _process_one(
                     pipeline_version=ctx.pipeline_version,
                     sha256=sha,
                     outcome=None if meta.outcome is None else str(meta.outcome),
+                    hash_ms=hash_ms,
+                    partition_ms=partition_ms_total,
+                    delivery_ms=delivery_ms,
                 )
 
                 # artifacts_writer(out_root=out_root, sha256=sha, meta=meta, result=res)
@@ -424,9 +447,13 @@ def _process_one(
                     delivery_receipt=receipt,
                     delivery_retryable=delivery_retryable,
                     dlq_written=dlq_written,
+                    hash_ms=hash_ms,
+                    partition_ms=partition_ms_total,
+                    delivery_ms=delivery_ms,
                 )
             except ZephyrError as e:
                 duration_ms = int((time.perf_counter() - t0) * 1000)
+                partition_ms_total += int((time.perf_counter() - t_part0) * 1000)
                 retryable = is_retryable_exception(e)
                 if cfg.retry.enabled and retryable and attempts < cfg.retry.max_attempts:
                     backoff_ms = min(
@@ -467,6 +494,7 @@ def _process_one(
                     error=ErrorInfoV1(code=e_code, message=e.message, details=merged_details),
                 )
 
+                t_del_fail0 = time.perf_counter()
                 try:
                     receipt = destination(out_root=out_root, sha256=sha, meta=meta, result=None)
                 except Exception as de:
@@ -476,6 +504,7 @@ def _process_one(
                         details={"exc_type": type(de).__name__, "exc": str(de)},
                     )
 
+                delivery_ms = int((time.perf_counter() - t_del_fail0) * 1000)
                 log_event(
                     logger,
                     level=logging.WARNING,
@@ -528,6 +557,9 @@ def _process_one(
                     delivery_receipt=receipt,
                     delivery_retryable=delivery_retryable2,
                     dlq_written=dlq_written,
+                    hash_ms=hash_ms,
+                    partition_ms=partition_ms_total,
+                    delivery_ms=delivery_ms,
                 )
     finally:
         if lock_acquired:
@@ -576,6 +608,9 @@ def run_documents(
     counts_by_error_code: dict[str, int] = {}
 
     durations_ms_list: list[int] = []
+    hash_durations_ms: list[int] = []
+    partition_durations_ms: list[int] = []
+    delivery_durations_ms: list[int] = []
 
     retry_attempts_total: int = 0
     retried_success: int = 0
@@ -594,6 +629,12 @@ def run_documents(
             success += 1
             if r.duration_ms is not None:
                 durations_ms_list.append(r.duration_ms)
+            if r.hash_ms is not None:
+                hash_durations_ms.append(r.hash_ms)
+            if r.partition_ms is not None:
+                partition_durations_ms.append(r.partition_ms)
+            if r.delivery_ms is not None:
+                delivery_durations_ms.append(r.delivery_ms)
             if r.attempts > 1:
                 retry_attempts_total += r.attempts - 1
                 retried_success += 1
@@ -761,6 +802,13 @@ def run_documents(
         "workers": cfg.workers,
         "executor": "serial" if cfg.workers <= 1 else "thread",
     }
+
+    stage_durations: StageDurationsV1 = {
+        "hash_ms": _duration_stats(hash_durations_ms),
+        "partition_ms": _duration_stats(partition_durations_ms),
+        "delivery_ms": _duration_stats(delivery_durations_ms),
+    }
+    batch_report["stage_durations_ms"] = stage_durations
 
     wall_ms = int((time.perf_counter() - wall_start) * 1000)
     docs_per_min: float | None = None
