@@ -52,6 +52,11 @@ class PartitionFn(Protocol):
         strategy: PartitionStrategy = PartitionStrategy.AUTO,
         unique_element_ids: bool = True,
         backend: Any | None = None,
+        # Optional run context passthrough (for observability + avoiding re-hash)
+        run_id: str | None = None,
+        pipeline_version: str | None = None,
+        sha256: str | None = None,
+        size_bytes: int | None = None,
     ) -> PartitionResult: ...
 
 
@@ -292,6 +297,10 @@ def _process_one(
                     strategy=cfg.strategy,
                     unique_element_ids=cfg.unique_element_ids,
                     backend=cfg.backend,
+                    run_id=ctx.run_id,
+                    pipeline_version=ctx.pipeline_version,
+                    sha256=sha,
+                    size_bytes=doc.size_bytes,
                 )
                 duration_ms = int((time.perf_counter() - t0) * 1000)
                 meta = RunMetaV1(
