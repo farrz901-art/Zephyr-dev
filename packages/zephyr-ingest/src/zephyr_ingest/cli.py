@@ -51,6 +51,11 @@ from zephyr_ingest.destinations.base import Destination
 from zephyr_ingest.destinations.filesystem import FilesystemDestination
 from zephyr_ingest.destinations.webhook import WebhookDestination
 from zephyr_ingest.dlq_prune import prune_delivery_dlq
+from zephyr_ingest.obs.prom_export import (
+    build_prom_families,
+    load_batch_report_v1,
+    render_prometheus_text,
+)
 from zephyr_ingest.replay_delivery import (
     FanoutReplaySink,
     KafkaReplaySink,
@@ -161,6 +166,12 @@ class BenchCmd:
     iterations: int
     warmup: int
     bench_out: str
+
+
+@dataclass(frozen=True, slots=True)
+class MetricsExportPromCmd:
+    out: str
+    textfile: str | None
 
 
 def _add_runlike_args(*, p: argparse.ArgumentParser, paths_required: bool) -> None:
@@ -380,6 +391,22 @@ def _build_parser() -> argparse.ArgumentParser:
         type=str,
         default=".cache/bench",
         help="Benchmark output root (default: .cache/bench)",
+    )
+
+    metrics = sub.add_parser("metrics", help="Metrics utilities")
+    metrics_sub = metrics.add_subparsers(dest="metrics_cmd", required=True)
+    exp = metrics_sub.add_parser(
+        "export-prom", help="Export batch_report.json as Prometheus text format"
+    )
+    exp.add_argument(
+        "--out", default=".cache/out", help="Output root directory containing batch_report.json"
+    )
+    exp.add_argument(
+        "--textfile",
+        type=str,
+        default=None,
+        help="If set, write exposition to this file "
+        "(recommended extension: .prom). Default: stdout",
     )
 
     return p
@@ -885,6 +912,7 @@ def _parse_cmd(
     | SpecShowCmd
     | DlqPruneCmd
     | BenchCmd
+    | MetricsExportPromCmd
 ):
     p = build_parser()
     ns = p.parse_args(list(argv))
@@ -938,6 +966,12 @@ def _parse_cmd(
         run_cmd = _parse_run_cmd(ns, argv)
         bench_out = get_req_str(ns, "bench_out")
         return BenchCmd(run_cmd=run_cmd, iterations=iters, warmup=warm, bench_out=bench_out)
+
+    if ns.cmd == "metrics" and ns.metrics_cmd == "export-prom":
+        return MetricsExportPromCmd(
+            out=get_req_str(ns, "out"),
+            textfile=get_opt_str(ns, "textfile"),
+        )
 
     if ns.cmd == "replay-delivery":
         dest = get_req_str(ns, "dest")
@@ -1423,6 +1457,22 @@ def main(argv: Sequence[str] | None = None) -> int:
         }
         sys.stdout.write(json.dumps(bench_result, ensure_ascii=False, indent=2))
         sys.stdout.write("\n")
+        return 0
+
+    if isinstance(cmd, MetricsExportPromCmd):
+        report = load_batch_report_v1(out_root=Path(cmd.out))
+        fams = build_prom_families(report=report)
+        text = render_prometheus_text(families=fams)
+        if cmd.textfile is None:
+            sys.stdout.write(text)
+            return 0
+
+        # atomic-ish write: temp then replace
+        out_path = Path(cmd.textfile).expanduser().resolve()
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = out_path.with_suffix(out_path.suffix + ".tmp")
+        tmp.write_text(text, encoding="utf-8")
+        tmp.replace(out_path)
         return 0
 
     if isinstance(cmd, ReplayDeliveryCmd):
