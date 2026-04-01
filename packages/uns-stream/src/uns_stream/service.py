@@ -30,28 +30,33 @@ def partition_file(
     strategy: PartitionStrategy = PartitionStrategy.AUTO,
     unique_element_ids: bool = True,
     backend: PartitionBackend | None = None,
+    run_id: str | None = None,
+    pipeline_version: str | None = None,
+    sha256: str | None = None,
+    size_bytes: int | None = None,
     **partition_kwargs: object,
 ) -> PartitionResult:
     t0 = time.perf_counter()
     p = Path(filename)
 
     # IO metadata (log/audit-friendly)
-    size_bytes = p.stat().st_size
-    # sha = _sha256_file(p)
-    sha = sha256_file(p)
+    size_bytes2 = size_bytes if size_bytes is not None else p.stat().st_size
+    sha = sha256 if sha256 is not None else sha256_file(p)
 
     # === only construct backend once ===
     b: PartitionBackend = backend or LocalUnstructuredBackend()
 
     logger.info(
-        "partition_start file=%s kind=%s strategy=%s "
+        "partition_start run_id=%s pipeline_version=%s file=%s kind=%s strategy=%s "
         "engine=%s backend=%s bytes=%s sha256=%s kwargs=%s",
+        run_id,
+        pipeline_version,
         p.name,
         kind,
         str(strategy),
         b.name,
         b.backend,
-        size_bytes,
+        size_bytes2,
         sha,
         sorted(partition_kwargs.keys()),
     )
@@ -90,10 +95,14 @@ def partition_file(
         code_str = f"{raw_code}"
 
         logger.warning(
-            "partition_error file=%s kind=%s strategy=%s ms=%s code=%s retryable=%s",
+            "partition_error run_id=%s pipeline_version=%s file=%s kind=%s "
+            "strategy=%s sha256=%s ms=%s code=%s retryable=%s",
+            run_id,
+            pipeline_version,
             p.name,
             kind,
             str(strategy),
+            sha,
             duration_ms,
             code_str,
             retryable,
@@ -127,11 +136,14 @@ def partition_file(
         )
 
         logger.error(
-            "partition_failed file=%s kind=%s strategy=%s"
+            "partition_failed run_id=%s pipeline_version=%s file=%s kind=%s strategy=%s sha256=%s "
             "engine=%s backend=%s ms=%s exc_type=%s retryable=%s",
+            run_id,
+            pipeline_version,
             p.name,
             kind,
             str(strategy),
+            sha,
             b.name,
             b.backend,
             duration_ms,
@@ -144,11 +156,15 @@ def partition_file(
 
     duration_ms = int((time.perf_counter() - t0) * 1000)
     logger.info(
-        "partition_done file=%s kind=%s strategy=%s engine=%s "
+        "partition_done run_id=%s pipeline_version=%s file=%s "
+        "kind=%s strategy=%s sha256=%s engine=%s "
         "backend=%s ms=%s elements=%s text_len=%s",
+        run_id,
+        pipeline_version,
         p.name,
         kind,
         str(strategy),
+        sha,
         b.name,
         b.backend,
         duration_ms,
@@ -160,7 +176,7 @@ def partition_file(
         filename=p.name,
         mime_type=None,
         sha256=sha,
-        size_bytes=size_bytes,
+        size_bytes=size_bytes2,
         created_at_utc=datetime.now(timezone.utc).isoformat(),
     )
 
