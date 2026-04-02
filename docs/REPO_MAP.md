@@ -43,6 +43,16 @@ Key files:
 - `zephyr_core/errors/*`
   - `ErrorCode`, `ZephyrError` (typed attrs: code/message/details)
 
+Platform-level typed contracts (SSOT):
+  * `zephyr_core/contracts/v2/delivery_payload.py`
+    * `DeliveryPayloadV1`, `ArtifactsPathsV1`
+  * `zephyr_core/contracts/v2/batch_report.py`
+    * `BatchReportV1` (+ metrics, stage durations)
+  * `zephyr_core/contracts/v2/config_snapshot.py`
+    * `ConfigSnapshotV1` (+ sources)
+  * `zephyr_core/contracts/v2/spec.py`
+    * `ConnectorSpecV1`, `SpecFieldV1`
+
 ---
 
 ## packages/uns-stream (Document partition engine adapter)
@@ -82,7 +92,12 @@ source → partition → artifacts → destinations → reports
 Key files:
 - `zephyr_ingest/cli.py`
   - `zephyr-ingest run ...`
-  - `zephyr-ingest replay-delivery ...`
+  -`zephyr-ingest replay-delivery ...` (webhook/kafka/weaviate/all)
+  -`zephyr-ingest dlq prune ...`
+  -`zephyr-ingest config resolve/init ...`
+  -`zephyr-ingest spec list/show ...`
+  -`zephyr-ingest metrics export-prom ...`
+  -`zephyr-ingest bench ...`
 - `zephyr_ingest/runner.py`
   - `_process_one(...)` processes a single `DocumentRef`
   - `run_documents(...)` orchestrates serial/thread workers + report aggregation
@@ -98,11 +113,17 @@ Key files:
 - `zephyr_ingest/destinations/fanout.py`
   - fan-out to (filesystem, webhook, ...)
 - `zephyr_ingest/_internal/delivery_payload.py`
-  - `DeliveryPayloadV1`, builder
+  -builder + compat wrapper (SSOT types live in `zephyr_core/contracts/v2/delivery_payload.py`)
+- `zephyr_ingest/obs/batch_report_v1.py`
+  -compat wrapper (SSOT types live in `zephyr_core/contracts/v2/batch_report.py`)
+- `zephyr_ingest/config/snapshot_v1.py`
+  -compat wrapper (SSOT types live in `zephyr_core/contracts/v2/config_snapshot.py`)
+- `zephyr_ingest/spec/types.py`
+  -compat wrapper (SSOT types live in `zephyr_core/contracts/v2/spec.py`)
 - `zephyr_ingest/_internal/delivery_dlq.py`
   - write DLQ records on delivery failures
 - `zephyr_ingest/replay_delivery.py`
-  - replay DLQ delivery records to webhook
+  - replay DLQ delivery records to webhook/kafka/weaviate (fanout supported)
 
 Outputs:
 - per-document: `<out_root>/<sha256>/*`
