@@ -221,7 +221,7 @@ def build_prom_families(*, report: BatchReportV1) -> list[PromMetricFamily]:
 
             if ok_samples:
                 add_gauge_family(
-                    "zephyr_ingest_run_delivery_ok_total",
+                    "zephyr_ingest_run_delivery_ok_by_destination_total",
                     "Deliveries succeeded in the latest run (by destination).",
                     ok_samples,
                 )
