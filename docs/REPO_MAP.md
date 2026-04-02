@@ -18,6 +18,7 @@ Latest stable reference SHA (update as needed): 49ffa9bec0c785c0dfc31c82ddf6319c
   - starts `uns-api` (Unstructured API service) on localhost:8001
 - `docs/`
   - project charter, invariants, repo map, contract index
+  - ops-ready index: `docs/OPS_READY.md`
 - `tools/`
   - `partition_dump.py` (CLI dump of artifacts via zephyr-ingest/uns-stream)
   - `uns_api_smoke.py` (connectivity helper)

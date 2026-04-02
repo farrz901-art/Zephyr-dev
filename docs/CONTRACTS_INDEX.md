@@ -166,3 +166,33 @@ Record MUST contain:
 - Reads delivery DLQ records
 - Re-sends to one or more destinations (webhook/kafka/weaviate) via replay sinks
 - Moves to delivery_done when ok and move_done=True
+
+
+* * *
+## 8) Logging contract (ops-ready)
+
+SSOT:
+* `zephyr_ingest/obs/events.py` (run/doc/delivery/replay lifecycle events)
+* `uns_stream/service.py` (partition lifecycle events)
+
+See also: `docs/OPS_READY.md`
+
+* * *
+## 9) Prometheus export contract (ops-ready)
+
+SSOT:
+* `zephyr_ingest/obs/prom_export.py`
+
+Command:
+* `zephyr-ingest metrics export-prom --out <out_root> [--textfile <path.prom>]`
+
+See also: `docs/OPS_READY.md`
+
+* * *
+## 10) Bench contract (ops-ready)
+
+SSOT:
+* `zephyr_ingest/cli.py` (`bench` command)
+* `docs/BENCH.md`
+
+See also: `docs/OPS_READY.md`

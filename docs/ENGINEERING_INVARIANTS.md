@@ -201,3 +201,15 @@ Before pushing:
 5.  If adding new destination/backend, ensure:
     -   it returns DeliveryReceipt
     -   it uses DeliveryPayloadV1 (for destinations)
+
+
+---
+(Appendix) Observability invariants (Non-negotiable)
+
+Operational observability contracts are treated as engineering invariants.
+See: `docs/OBSERVABILITY_INVARIANTS.md`
+
+Key SSOT locations:
+- log events: `zephyr_ingest/obs/events.py`, `uns_stream/service.py`
+- prom export: `zephyr_ingest/obs/prom_export.py`
+- config snapshot sources keys: `zephyr_core/contracts/v2/config_snapshot.py`

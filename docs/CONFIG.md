@@ -89,6 +89,26 @@ See `docs/BENCH.md` for:
 - `zephyr-ingest bench` usage
 - how bench reads `batch_report.json.metrics` and produces summary stats
 
+## 3.4) Metrics export (Prometheus text format)
+
+Use:
+
+```bash
+zephyr-ingest metrics export-prom --out .cache/out
+```
+
+or write a textfile for node_exporter textfile collector:
+
+```bash
+zephyr-ingest metrics export-prom --out .cache/out --textfile /var/lib/node_exporter/textfile_collector/zephyr_ingest.prom
+```
+
+SSOT emitter: `packages/zephyr-ingest/src/zephyr_ingest/obs/prom_export.py`.
+
+## 3.5) Ops-ready index
+
+See `docs/OPS_READY.md` for the ops-ready contract index (logs / batch report / DLQ / prom export / bench).
+
 ## 4) `config_snapshot.sources` key naming convention
 
 `sources` uses **flat dotted keys**. Examples:
