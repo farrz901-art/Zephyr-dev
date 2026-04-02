@@ -1,16 +1,14 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Any
 
 from zephyr_core.contracts.v1.run_meta import RunMetaV1
-
-
-class ArtifactsPathsV1(TypedDict):
-    out_dir: str
-    run_meta_path: str
-    elements_path: str
-    normalized_path: str
+from zephyr_core.contracts.v2.delivery_payload import (
+    DELIVERY_PAYLOAD_SCHEMA_VERSION,
+    ArtifactsPathsV1,
+    DeliveryPayloadV1,
+)
 
 
 def build_artifacts_paths_v1(*, out_root: Path, sha256: str) -> ArtifactsPathsV1:
@@ -21,16 +19,6 @@ def build_artifacts_paths_v1(*, out_root: Path, sha256: str) -> ArtifactsPathsV1
         "elements_path": str((out_dir / "elements.json").resolve()),
         "normalized_path": str((out_dir / "normalized.txt").resolve()),
     }
-
-
-class DeliveryPayloadV1(TypedDict):
-    schema_version: int
-    sha256: str
-    run_meta: dict[str, Any]
-    artifacts: ArtifactsPathsV1
-
-
-DELIVERY_PAYLOAD_SCHEMA_VERSION = 1
 
 
 def build_delivery_payload_v1(

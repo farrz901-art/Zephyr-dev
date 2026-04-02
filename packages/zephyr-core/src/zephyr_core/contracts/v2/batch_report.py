@@ -29,6 +29,7 @@ class CountsV1(TypedDict):
 
 
 class DeliveryCountersV1(TypedDict):
+    total: int
     ok: int
     failed: int
 
