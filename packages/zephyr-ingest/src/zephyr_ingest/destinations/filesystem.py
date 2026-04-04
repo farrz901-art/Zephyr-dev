@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from uns_stream._internal.artifacts import dump_partition_artifacts
 from zephyr_core import PartitionResult, RunMetaV1
+from zephyr_ingest._internal.artifacts import dump_partition_artifacts
 from zephyr_ingest.destinations.base import DeliveryReceipt
 
 

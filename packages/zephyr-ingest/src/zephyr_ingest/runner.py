@@ -8,16 +8,11 @@ from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable, Protocol, cast
+from typing import Any, Iterable, cast
 
-# from uns_stream._internal.artifacts import dump_partition_artifacts
-from uns_stream._internal.retry_policy import is_retryable_exception
-from uns_stream._internal.utils import sha256_file
-from uns_stream.partition.auto import partition as auto_partition
 from zephyr_core import (
     DocumentRef,
     ErrorCode,
-    PartitionResult,
     PartitionStrategy,
     RunContext,
     RunMetaV1,
@@ -26,9 +21,19 @@ from zephyr_core import (
 from zephyr_core.contracts.v1.enums import RunOutcome
 from zephyr_core.contracts.v1.run_meta import EngineMetaV1, ErrorInfoV1, MetricsV1
 from zephyr_ingest._internal.delivery_dlq import write_delivery_dlq
+from zephyr_ingest._internal.retry_policy import is_retryable_exception
+from zephyr_ingest._internal.utils import sha256_file
 from zephyr_ingest.config.snapshot_v1 import ConfigSnapshotV1
 from zephyr_ingest.destinations.base import DeliveryReceipt, Destination
 from zephyr_ingest.destinations.filesystem import FilesystemDestination
+from zephyr_ingest.flow_processor import (
+    DEFAULT_FLOW_KIND,
+    CallableFlowProcessor,
+    FlowKind,
+    FlowProcessor,
+    PartitionFn,
+    build_processor_for_flow_kind,
+)
 from zephyr_ingest.obs.batch_report_v1 import (
     BATCH_REPORT_SCHEMA_VERSION,
     BatchReportV1,
@@ -42,23 +47,6 @@ from zephyr_ingest.obs.batch_report_v1 import (
 from zephyr_ingest.obs.events import log_event
 
 logger = logging.getLogger(__name__)
-
-
-# 1. 严格匹配 auto_partition 的签名
-class PartitionFn(Protocol):
-    def __call__(
-        self,
-        *,
-        filename: str,
-        strategy: PartitionStrategy = PartitionStrategy.AUTO,
-        unique_element_ids: bool = True,
-        backend: Any | None = None,
-        # Optional run context passthrough (for observability + avoiding re-hash)
-        run_id: str | None = None,
-        pipeline_version: str | None = None,
-        sha256: str | None = None,
-        size_bytes: int | None = None,
-    ) -> PartitionResult: ...
 
 
 # class ArtifactsWriter(Protocol):
@@ -128,6 +116,24 @@ class RunStats:
     skipped_existing: int = 0
 
 
+def _resolve_flow_processor(
+    *,
+    flow_kind: FlowKind | str,
+    processor: FlowProcessor | None,
+    partition_fn: PartitionFn | None,
+    backend: object | None,
+) -> FlowProcessor:
+    # `processor` is the primary orchestration boundary.
+    if processor is not None:
+        return processor
+
+    # `partition_fn` remains supported only as a legacy compatibility adapter path.
+    if partition_fn is not None:
+        return CallableFlowProcessor(partition_fn=partition_fn, backend=backend)
+
+    return build_processor_for_flow_kind(flow_kind=flow_kind, backend=backend)
+
+
 def _write_delivery_receipt(out_dir: Path, receipt: DeliveryReceipt) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "delivery_receipt.json").write_text(
@@ -182,7 +188,7 @@ def _process_one(
     cfg: RunnerConfig,
     ctx: RunContext,
     out_root: Path,
-    partition_fn: PartitionFn,
+    processor: FlowProcessor,
     # artifacts_writer: ArtifactsWriter,
     destination: Destination,
 ) -> DocProcessResult:
@@ -309,15 +315,13 @@ def _process_one(
             attempts += 1
             try:
                 t_part0 = time.perf_counter()
-                res = partition_fn(
-                    filename=str(p),
+                res = processor.process(
+                    doc=doc,
                     strategy=cfg.strategy,
                     unique_element_ids=cfg.unique_element_ids,
-                    backend=cfg.backend,
                     run_id=ctx.run_id,
                     pipeline_version=ctx.pipeline_version,
                     sha256=sha,
-                    size_bytes=doc.size_bytes,
                 )
                 partition_ms_total += int((time.perf_counter() - t_part0) * 1000)
                 duration_ms = int((time.perf_counter() - t0) * 1000)
@@ -571,12 +575,22 @@ def run_documents(
     docs: Iterable[DocumentRef],
     cfg: RunnerConfig,
     ctx: RunContext,
-    partition_fn: PartitionFn = auto_partition,
+    flow_kind: FlowKind | str = DEFAULT_FLOW_KIND,
+    processor: FlowProcessor | None = None,
+    partition_fn: PartitionFn | None = None,
     # artifacts_writer: ArtifactsWriter = dump_partition_artifacts,
     destination: Destination | None = None,
     config_snapshot: ConfigSnapshotV1 | None = None,
 ) -> RunStats:
+    """Run documents through the primary processor path or the legacy partition_fn adapter."""
+
     destination = destination or cfg.destination or FilesystemDestination()
+    active_processor = _resolve_flow_processor(
+        flow_kind=flow_kind,
+        processor=processor,
+        partition_fn=partition_fn,
+        backend=cfg.backend,
+    )
 
     out_root = cfg.out_root.expanduser().resolve()
     out_root.mkdir(parents=True, exist_ok=True)
@@ -727,7 +741,7 @@ def run_documents(
                 cfg=cfg,
                 ctx=ctx,
                 out_root=out_root,
-                partition_fn=partition_fn,
+                processor=active_processor,
                 destination=destination,
             )
             consume_result(res)
@@ -745,7 +759,7 @@ def run_documents(
                         cfg=cfg,
                         ctx=ctx,
                         out_root=out_root,
-                        partition_fn=partition_fn,
+                        processor=active_processor,
                         destination=destination,
                     )
                 )

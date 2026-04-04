@@ -213,6 +213,7 @@ P2‑M6‑04（可选）：Delivery 统计扩展（你已经有 P2‑M4‑04）
 batch_report 增加 destination 的延迟统计（delivery_duration_ms）
 将 DLQ/replay 也扩展到 Kafka/Weaviate（可先只扩 webhook）
 
+P2-M6
 
 
-## 目前阶段  P2-M6-02（待做）
+## 目前阶段  P2完成，P3待做

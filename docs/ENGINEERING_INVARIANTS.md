@@ -204,6 +204,9 @@ Before pushing:
 
 
 ---
+
+## 10. Observability invariants (Non-negotiable)
+
 (Appendix) Observability invariants (Non-negotiable)
 
 Operational observability contracts are treated as engineering invariants.

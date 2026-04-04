@@ -14,3 +14,10 @@ packages/uns-stream/src/uns_stream/tests/fixtures/*
 .cache/
 
 .env
+
+.uv-cache/
+
+.tmp/
+.pytest_tmp_artifacts/
+.pytest_tmp_artifacts2/
+.artifact_smoke/
