@@ -40,6 +40,34 @@ def _make_uns_task(
     )
 
 
+def _make_it_task(
+    *,
+    task_id: str,
+    pipeline_version: str,
+    sha256: str,
+    uri: str,
+) -> TaskV1:
+    return TaskV1(
+        task_id=task_id,
+        kind="it",
+        inputs=TaskInputsV1(
+            document=TaskDocumentInputV1(
+                uri=uri,
+                source="airbyte",
+                discovered_at_utc="2026-04-05T00:00:00Z",
+                filename="records.json",
+                extension=".json",
+                size_bytes=64,
+            )
+        ),
+        execution=TaskExecutionV1(),
+        identity=TaskIdentityV1(
+            pipeline_version=pipeline_version,
+            sha256=sha256,
+        ),
+    )
+
+
 def test_uns_task_idempotency_normalization_is_deterministic() -> None:
     task = _make_uns_task(
         task_id="task-001",
@@ -117,7 +145,22 @@ def test_uns_task_normalization_requires_identity() -> None:
         normalize_task_idempotency_key(task)
 
 
-def test_it_task_normalization_is_explicitly_unimplemented() -> None:
+def test_it_task_idempotency_normalization_is_deterministic() -> None:
+    task = _make_it_task(
+        task_id="task-it-001",
+        pipeline_version="p-it",
+        sha256="xyz789",
+        uri="s3://bucket/object.json",
+    )
+
+    first = normalize_task_idempotency_key(task)
+    second = normalize_task_idempotency_key(task)
+
+    assert first == second
+    assert first == '{"kind":"it","pipeline_version":"p-it","sha256":"xyz789"}'
+
+
+def test_it_task_normalization_requires_identity() -> None:
     task = TaskV1(
         task_id="task-it-001",
         kind="it",
@@ -132,11 +175,7 @@ def test_it_task_normalization_is_explicitly_unimplemented() -> None:
             )
         ),
         execution=TaskExecutionV1(),
-        identity=TaskIdentityV1(
-            pipeline_version="p-it",
-            sha256="xyz789",
-        ),
     )
 
-    with pytest.raises(NotImplementedError, match="Task kind 'it' idempotency normalization"):
+    with pytest.raises(ValueError, match="IT task identity is required"):
         normalize_task_idempotency_key(task)

@@ -73,3 +73,52 @@ def test_replay_to_weaviate_sink(tmp_path: Path) -> None:
     assert props["sha256"] == sha
     assert props["normalized_text"] == "hello"
     assert props["elements_count"] == 1
+
+
+def test_replay_to_weaviate_sink_falls_back_to_it_records_jsonl(tmp_path: Path) -> None:
+    out_root = tmp_path / "out"
+    sha = "abc-it"
+    run_id = "r-it"
+
+    doc_dir = out_root / sha
+    doc_dir.mkdir(parents=True, exist_ok=True)
+    (doc_dir / "records.jsonl").write_text(
+        "\n".join(
+            [
+                '{"data":{"id":1,"name":"Ada"},"emitted_at":null,"record_index":0,"stream":"customers"}',
+                '{"data":{"id":2,"name":"Linus"},"emitted_at":null,"record_index":1,"stream":"customers"}',
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    dlq_dir = out_root / "_dlq" / "delivery"
+    dlq_dir.mkdir(parents=True, exist_ok=True)
+    (dlq_dir / "one.json").write_text(
+        json.dumps(
+            {
+                "sha256": sha,
+                "run_id": run_id,
+                "run_meta": {
+                    "run_id": run_id,
+                    "pipeline_version": "p-it",
+                    "engine": {"name": "it-stream"},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    fake_batch = FakeBatch()
+    coll = FakeCollection(batch=FakeBatchManager(batch=fake_batch))
+    sink = WeaviateReplaySink(collection_name="ZephyrDoc", collection=coll)
+
+    stats = replay_delivery_dlq(out_root=out_root, sink=sink, dry_run=False, move_done=False)
+
+    assert stats.total == 1
+    assert stats.succeeded == 1
+    assert len(fake_batch.added) == 1
+    props = fake_batch.added[0]["properties"]
+    assert props["sha256"] == sha
+    assert props["normalized_text"] == '{"id": 1, "name": "Ada"}\n{"id": 2, "name": "Linus"}'
+    assert props["elements_count"] == 2

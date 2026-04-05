@@ -52,7 +52,6 @@ from zephyr_ingest.destinations.base import Destination
 from zephyr_ingest.destinations.filesystem import FilesystemDestination
 from zephyr_ingest.destinations.webhook import WebhookDestination
 from zephyr_ingest.dlq_prune import prune_delivery_dlq
-from zephyr_ingest.flow_processor import UnsFlowProcessor
 from zephyr_ingest.obs.prom_export import (
     build_prom_families,
     load_batch_report_v1,
@@ -1598,7 +1597,6 @@ def main(argv: Sequence[str] | None = None) -> int:
                     docs=docs,
                     cfg=cfg,
                     ctx=ctx,
-                    processor=UnsFlowProcessor(backend=backend_obj),
                     destination=destination,
                     config_snapshot=config_snapshot,
                 )
@@ -1751,7 +1749,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             docs=docs,
             cfg=cfg,
             ctx=ctx,
-            processor=UnsFlowProcessor(backend=backend_obj),
             destination=destination,
             config_snapshot=config_snapshot,
         )

@@ -32,6 +32,7 @@ members = ["packages/*"]
 
 [tool.uv.sources]
 # 告诉 uv，这些包就在本地 packages 文件夹里
+it-stream = { workspace = true }
 uns-stream = { workspace = true }
 zephyr-core = { workspace = true }
 zephyr-api = { workspace = true }
@@ -54,12 +55,14 @@ exclude = [
     "**/__pycache__",
     "**/.venv",
     "**/typings",
-    "**/tools"
+    "**/tools",
+    ".uv-cache"
 ]
 
 extraPaths = [
     "packages/zephyr-core/src",
     "packages/zephyr-api/src",
+    "packages/it-stream/src",
     "packages/zephyr-ingest/src",
     "packages/uns-stream/src",
 ]
@@ -68,7 +71,7 @@ extraPaths = [
 # 针对 monorepo：明确扫描范围（避免把无关目录也扫进来）
 #include = ["packages/*/src"]
 line-length = 100
-src = ["packages/uns-stream/src/uns_stream/tests/fixtures", "packages/uns-stream/src", "packages/zephyr-core/src", "packages/zephyr-ingest/src", "packages/zephyr-api/src"]
+src = ["packages/uns-stream/src/uns_stream/tests/fixtures", "packages/uns-stream/src", "packages/it-stream/src", "packages/zephyr-core/src", "packages/zephyr-ingest/src", "packages/zephyr-api/src"]
 exclude = ["**/.venv", "**/dist", "**/build", "**/.mypy_cache", "**/.ruff_cache", "**/typings", "**/tools", "**/.tmp","**/.artifact_smoke","**/.pytest_tmp_artifacts","**/.pytest_tmp_artifacts2"]
 #exclude = [
 #    "prepline_*/api",

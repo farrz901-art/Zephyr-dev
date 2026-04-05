@@ -5,6 +5,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any, cast
 
+from it_stream.artifacts import dump_it_artifacts
 from zephyr_core import PartitionResult
 from zephyr_core.contracts.v1.run_meta import RunMetaV1
 
@@ -31,6 +32,8 @@ def dump_partition_artifacts(
     if result is not None:
         _write_json(out_dir / "elements.json", [asdict(cast(Any, e)) for e in result.elements])
         _write_text(out_dir / "normalized.txt", result.normalized_text)
+        if result.engine.name == "it-stream":
+            dump_it_artifacts(out_dir=out_dir, result=result)
 
     _write_json(out_dir / "run_meta.json", meta.to_dict())
 

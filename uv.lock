@@ -12,6 +12,7 @@ resolution-markers = [
 
 [manifest]
 members = [
+    "it-stream",
     "uns-stream",
     "zephyr",
     "zephyr-api",
@@ -1040,6 +1041,17 @@ sdist = { url = "https://files.pythonhosted.org/packages/05/18/ceeb4e3ab3aa54495
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e5/ca/1172b6638d52f2d6caa2dd262ec4c811ba59eee96d54a7701930726bce18/installer-0.7.0-py3-none-any.whl", hash = "sha256:05d1933f0a5ba7d8d6296bb6d5018e7c94fa473ceb10cf198a92ccea19c27b53", size = 453838, upload-time = "2023-03-17T20:39:36.219Z" },
 ]
+
+[[package]]
+name = "it-stream"
+version = "0.1.0"
+source = { editable = "packages/it-stream" }
+dependencies = [
+    { name = "zephyr-core" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "zephyr-core", editable = "packages/zephyr-core" }]
 
 [[package]]
 name = "jinja2"
@@ -4024,6 +4036,7 @@ version = "0.1.0"
 source = { editable = "packages/zephyr-ingest" }
 dependencies = [
     { name = "httpx" },
+    { name = "it-stream" },
     { name = "uns-stream" },
     { name = "zephyr-core" },
 ]
@@ -4040,6 +4053,7 @@ weaviate = [
 requires-dist = [
     { name = "confluent-kafka", marker = "extra == 'kafka'", specifier = ">=2.3.0" },
     { name = "httpx", specifier = ">=0.28.1" },
+    { name = "it-stream", editable = "packages/it-stream" },
     { name = "uns-stream", editable = "packages/uns-stream" },
     { name = "weaviate-client", marker = "extra == 'weaviate'", specifier = ">=4.20.4,<5" },
     { name = "zephyr-core", editable = "packages/zephyr-core" },

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Literal, TypedDict
+from typing import Any, Literal, NotRequired, TypedDict
 
 DELIVERY_PAYLOAD_SCHEMA_VERSION: Literal[1] = 1
 
@@ -10,6 +10,9 @@ class ArtifactsPathsV1(TypedDict):
     run_meta_path: str
     elements_path: str
     normalized_path: str
+    records_path: NotRequired[str]
+    state_path: NotRequired[str]
+    logs_path: NotRequired[str]
 
 
 class DeliveryPayloadV1(TypedDict):

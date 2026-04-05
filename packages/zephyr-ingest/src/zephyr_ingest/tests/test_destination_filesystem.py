@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from it_stream import process_file
 from zephyr_core import (
     DocumentMetadata,
     EngineInfo,
@@ -82,3 +83,67 @@ def test_filesystem_destination_writes_success_artifacts(tmp_path: Path) -> None
             "metadata": {},
         }
     ]
+
+
+def test_filesystem_destination_writes_it_stream_artifacts(tmp_path: Path) -> None:
+    dest = FilesystemDestination()
+    input_path = tmp_path / "messages.json"
+    input_path.write_text(
+        json.dumps(
+            {
+                "messages": [
+                    {
+                        "type": "RECORD",
+                        "record": {
+                            "stream": "customers",
+                            "data": {"id": 1, "name": "Ada"},
+                        },
+                    },
+                    {
+                        "type": "STATE",
+                        "state": {"data": {"cursor": "2026-01-01"}},
+                    },
+                    {
+                        "type": "LOG",
+                        "log": {"level": "INFO", "message": "completed sync"},
+                    },
+                ]
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    meta = RunMetaV1(
+        run_id="r-it",
+        pipeline_version="p-it",
+        timestamp_utc="2026-03-21T00:00:00Z",
+        schema_version=RUN_META_SCHEMA_VERSION,
+        outcome=None,
+        document=None,
+        engine=None,
+        error=None,
+    )
+    result = process_file(
+        filename=str(input_path),
+        strategy=PartitionStrategy.AUTO,
+        sha256="abc-it",
+        size_bytes=input_path.stat().st_size,
+    )
+
+    receipt = dest(out_root=tmp_path / "out", sha256="abc-it", meta=meta, result=result)
+
+    assert receipt.ok is True
+
+    out_dir = tmp_path / "out" / "abc-it"
+    assert (out_dir / "run_meta.json").exists()
+    assert (out_dir / "records.jsonl").read_text(encoding="utf-8") == (
+        '{"data":{"id":1,"name":"Ada"},"emitted_at":null,"record_index":0,"stream":"customers"}'
+    )
+    assert (out_dir / "state.jsonl").read_text(encoding="utf-8") == (
+        '{"data":{"cursor":"2026-01-01"},"state_index":0}'
+    )
+    assert (out_dir / "logs.jsonl").read_text(encoding="utf-8") == (
+        '{"level":"INFO","log_index":0,"message":"completed sync"}'
+    )

@@ -9,6 +9,7 @@ authors = [
 requires-python = ">=3.12"
 dependencies = [
     "httpx>=0.28.1",
+    "it-stream",
     "uns-stream",
     "zephyr-core",
 ]
@@ -29,5 +30,6 @@ requires = ["uv_build>=0.10.8,<0.11.0"]
 build-backend = "uv_build"
 
 [tool.uv.sources]
+it-stream = { workspace = true }
 zephyr-core = { workspace = true }
 uns-stream = { workspace = true }

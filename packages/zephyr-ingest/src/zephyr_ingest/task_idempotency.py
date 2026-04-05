@@ -17,6 +17,18 @@ def normalize_uns_task_idempotency_key(*, identity: TaskIdentityV1) -> str:
     )
 
 
+def normalize_it_task_idempotency_key(*, identity: TaskIdentityV1) -> str:
+    return json.dumps(
+        {
+            "kind": "it",
+            "pipeline_version": identity.pipeline_version,
+            "sha256": identity.sha256,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
 def normalize_task_idempotency_key(task: TaskV1) -> str:
     if task.kind == "uns":
         if task.identity is None:
@@ -24,6 +36,8 @@ def normalize_task_idempotency_key(task: TaskV1) -> str:
         return normalize_uns_task_idempotency_key(identity=task.identity)
 
     if task.kind == "it":
-        raise NotImplementedError("Task kind 'it' idempotency normalization is not implemented")
+        if task.identity is None:
+            raise ValueError("IT task identity is required for idempotency normalization")
+        return normalize_it_task_idempotency_key(identity=task.identity)
 
     raise ValueError(f"Unsupported task kind: {task.kind}")

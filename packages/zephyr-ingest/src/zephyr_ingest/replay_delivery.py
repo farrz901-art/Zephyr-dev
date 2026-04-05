@@ -27,6 +27,106 @@ from zephyr_ingest.obs.events import log_event
 logger = logging.getLogger(__name__)
 
 
+def _load_replay_normalized_text_and_elements_count(
+    *,
+    artifacts: dict[str, Any],
+) -> tuple[str, int] | DeliveryReceipt:
+    normalized_path = Path(artifacts["normalized_path"])
+    elements_path = Path(artifacts["elements_path"])
+
+    try:
+        normalized_text = normalized_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        records_path_raw = artifacts.get("records_path")
+        if not isinstance(records_path_raw, str):
+            return DeliveryReceipt(
+                destination="weaviate",
+                ok=False,
+                details={
+                    "retryable": False,
+                    "reason": "missing_normalized_txt",
+                    "normalized_path": str(normalized_path),
+                    "error_code": str(ErrorCode.DELIVERY_INVALID_PAYLOAD),
+                },
+            )
+
+        records_path = Path(records_path_raw)
+        try:
+            lines = [
+                line
+                for line in records_path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+        except FileNotFoundError:
+            return DeliveryReceipt(
+                destination="weaviate",
+                ok=False,
+                details={
+                    "retryable": False,
+                    "reason": "missing_records_jsonl",
+                    "records_path": str(records_path),
+                    "error_code": str(ErrorCode.DELIVERY_INVALID_PAYLOAD),
+                },
+            )
+
+        try:
+            texts: list[str] = []
+            for line in lines:
+                raw_row = json.loads(line)
+                if not isinstance(raw_row, dict):
+                    raise ValueError("records.jsonl row is not an object")
+                row = cast("dict[str, object]", raw_row)
+                data_obj = row.get("data")
+                if not isinstance(data_obj, dict):
+                    raise ValueError("records.jsonl row field 'data' is not an object")
+                data = cast("dict[str, object]", data_obj)
+                texts.append(json.dumps(data, ensure_ascii=False, sort_keys=True))
+            return "\n".join(texts), len(lines)
+        except Exception as exc:
+            return DeliveryReceipt(
+                destination="weaviate",
+                ok=False,
+                details={
+                    "retryable": False,
+                    "reason": "invalid_records_jsonl",
+                    "records_path": str(records_path),
+                    "exc_type": type(exc).__name__,
+                    "exc": str(exc),
+                    "error_code": str(ErrorCode.DELIVERY_INVALID_PAYLOAD),
+                },
+            )
+
+    try:
+        raw_obj = json.loads(elements_path.read_text(encoding="utf-8"))
+        if not isinstance(raw_obj, list):
+            raise ValueError("elements.json is not a list")
+        return normalized_text, len(cast(list[Any], raw_obj))
+    except FileNotFoundError:
+        return DeliveryReceipt(
+            destination="weaviate",
+            ok=False,
+            details={
+                "retryable": False,
+                "reason": "missing_elements_json",
+                "elements_path": str(elements_path),
+                "error_code": str(ErrorCode.DELIVERY_INVALID_PAYLOAD),
+            },
+        )
+    except Exception as exc:
+        return DeliveryReceipt(
+            destination="weaviate",
+            ok=False,
+            details={
+                "retryable": False,
+                "reason": "invalid_elements_json",
+                "elements_path": str(elements_path),
+                "exc_type": type(exc).__name__,
+                "exc": str(exc),
+                "error_code": str(ErrorCode.DELIVERY_INVALID_PAYLOAD),
+            },
+        )
+
+
 class ReplaySink(Protocol):
     @property
     def name(self) -> str: ...
@@ -83,53 +183,11 @@ class WeaviateReplaySink:
         sha256 = payload["sha256"]
         obj_uuid = normalize_weaviate_delivery_object_id(sha256=sha256)
 
-        artifacts = payload["artifacts"]
-        normalized_path = Path(artifacts["normalized_path"])
-        elements_path = Path(artifacts["elements_path"])
-
-        try:
-            normalized_text = normalized_path.read_text(encoding="utf-8")
-        except FileNotFoundError:
-            return DeliveryReceipt(
-                destination="weaviate",
-                ok=False,
-                details={
-                    "retryable": False,
-                    "reason": "missing_normalized_txt",
-                    "normalized_path": str(normalized_path),
-                    "error_code": str(ErrorCode.DELIVERY_INVALID_PAYLOAD),
-                },
-            )
-
-        try:
-            raw_obj = json.loads(elements_path.read_text(encoding="utf-8"))
-            if not isinstance(raw_obj, list):
-                raise ValueError("elements.json is not a list")
-            elements_count = len(cast(list[Any], raw_obj))
-        except FileNotFoundError:
-            return DeliveryReceipt(
-                destination="weaviate",
-                ok=False,
-                details={
-                    "retryable": False,
-                    "reason": "missing_elements_json",
-                    "elements_path": str(elements_path),
-                    "error_code": str(ErrorCode.DELIVERY_INVALID_PAYLOAD),
-                },
-            )
-        except Exception as exc:
-            return DeliveryReceipt(
-                destination="weaviate",
-                ok=False,
-                details={
-                    "retryable": False,
-                    "reason": "invalid_elements_json",
-                    "elements_path": str(elements_path),
-                    "exc_type": type(exc).__name__,
-                    "exc": str(exc),
-                    "error_code": str(ErrorCode.DELIVERY_INVALID_PAYLOAD),
-                },
-            )
+        artifacts = cast(dict[str, Any], payload["artifacts"])
+        replay_material = _load_replay_normalized_text_and_elements_count(artifacts=artifacts)
+        if isinstance(replay_material, DeliveryReceipt):
+            return replay_material
+        normalized_text, elements_count = replay_material
 
         run_meta = payload.get("run_meta") or {}
         run_id = run_meta.get("run_id")
