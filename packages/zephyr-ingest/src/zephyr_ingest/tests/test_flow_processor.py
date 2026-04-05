@@ -212,7 +212,14 @@ def test_runner_routes_to_it_flow_kind(tmp_path: Path) -> None:
     assert stats.total == 1
     assert stats.success == 1
     assert (tmp_path / "out").exists()
-    out_dir = next((tmp_path / "out").iterdir())
+    # out_dir = next((tmp_path / "out").iterdir())
+    output_subdirs = [p for p in (tmp_path / "out").iterdir() if p.is_dir()]
+    # 确保真的生成了目录
+    assert len(output_subdirs) > 0, (
+        f"Expected an output directory in {tmp_path / 'out'}, but found none."
+    )
+    # 取第一个目录作为我们的目标
+    out_dir = output_subdirs[0]
     run_meta = json.loads((out_dir / "run_meta.json").read_text(encoding="utf-8"))
     assert run_meta["engine"]["name"] == "it-stream"
     assert (out_dir / "records.jsonl").read_text(encoding="utf-8") == (
