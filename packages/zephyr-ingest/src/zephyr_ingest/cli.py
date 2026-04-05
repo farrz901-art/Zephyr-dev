@@ -70,6 +70,7 @@ from zephyr_ingest.spec.argparse_render import add_specs_to_parser
 from zephyr_ingest.spec.registry import get_spec, list_spec_ids
 from zephyr_ingest.spec.toml_template import render_config_init_toml_v1, render_spec_toml_snippet_v1
 from zephyr_ingest.spec.types import ConnectorSpecV1, SpecFieldTypeV1
+from zephyr_ingest.worker_runtime import run_worker
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,6 +126,16 @@ class ResolveConfigCmd:
     run_cmd: RunCmd
     config_path: str
     strict: bool
+
+
+@dataclass(frozen=True, slots=True)
+class WorkerCmd:
+    poll_interval_ms: int
+    health_host: str
+    health_port: int
+    pipeline_version: str | None
+    run_id: str | None
+    timestamp_utc: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -257,6 +268,29 @@ def _build_parser() -> argparse.ArgumentParser:
 
     run = sub.add_parser("run", help="Run ingest pipeline over a local file path")
     _add_runlike_args(p=run, paths_required=True)
+
+    worker = sub.add_parser("worker", help="Run long-lived worker/service loop")
+    worker.add_argument(
+        "--poll-interval-ms",
+        type=int,
+        default=1000,
+        help="Polling interval in milliseconds while idle",
+    )
+    worker.add_argument(
+        "--health-host",
+        type=str,
+        default="127.0.0.1",
+        help="Host to bind health endpoints on when enabled",
+    )
+    worker.add_argument(
+        "--health-port",
+        type=int,
+        default=0,
+        help="Port to bind health endpoints on; 0 disables the health server",
+    )
+    worker.add_argument("--pipeline-version", default=None, help="Override pipeline version")
+    worker.add_argument("--run-id", default=None, help="Override run ID (UUID)")
+    worker.add_argument("--timestamp-utc", default=None, help="Override timestamp (ISO 8601)")
 
     replay = sub.add_parser("replay-delivery", help="Replay failed delivery DLQ records")
     replay.add_argument(
@@ -906,6 +940,7 @@ def _parse_cmd(
     argv: Sequence[str],
 ) -> (
     RunCmd
+    | WorkerCmd
     | ReplayDeliveryCmd
     | ResolveConfigCmd
     | InitConfigCmd
@@ -920,6 +955,22 @@ def _parse_cmd(
 
     if ns.cmd == "run":
         return _parse_run_cmd(ns, argv)
+
+    if ns.cmd == "worker":
+        poll_interval_ms = get_int(ns, "poll_interval_ms")
+        if poll_interval_ms <= 0:
+            raise ConfigError("--poll-interval-ms must be > 0")
+        health_port = get_int(ns, "health_port")
+        if health_port < 0 or health_port > 65535:
+            raise ConfigError("--health-port must be between 0 and 65535")
+        return WorkerCmd(
+            poll_interval_ms=poll_interval_ms,
+            health_host=get_req_str(ns, "health_host"),
+            health_port=health_port,
+            pipeline_version=get_opt_str(ns, "pipeline_version"),
+            run_id=get_opt_str(ns, "run_id"),
+            timestamp_utc=get_opt_str(ns, "timestamp_utc"),
+        )
 
     if ns.cmd == "config" and ns.config_cmd == "resolve":
         config_path = get_opt_str(ns, "config")
@@ -1299,6 +1350,23 @@ def main(argv: Sequence[str] | None = None) -> int:
         sys.stdout.write(json.dumps(out_obj, ensure_ascii=False, indent=2))
         sys.stdout.write("\n")
         return 0
+
+    if isinstance(cmd, WorkerCmd):
+        try:
+            ctx = RunContext.new(
+                pipeline_version=cmd.pipeline_version or PIPELINE_VERSION,
+                run_id=cmd.run_id,
+                timestamp_utc=cmd.timestamp_utc,
+            )
+            return run_worker(
+                ctx=ctx,
+                poll_interval_ms=cmd.poll_interval_ms,
+                health_host=cmd.health_host,
+                health_port=cmd.health_port,
+            )
+        except Exception as e:
+            logging.error("worker runtime failed: %s", e)
+            return 1
 
     if isinstance(cmd, InitConfigCmd):
         only_set = None if not cmd.only or "all" in cmd.only else set(cmd.only)

@@ -7,6 +7,9 @@ from typing import Any, Literal
 EventName = Literal[
     "run_start",
     "run_done",
+    "worker_start",
+    "worker_draining",
+    "worker_stop",
     "doc_start",
     "doc_done",
     "delivery_start",

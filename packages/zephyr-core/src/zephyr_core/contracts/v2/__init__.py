@@ -14,6 +14,12 @@ from zephyr_core.contracts.v2.delivery_payload import (
     DeliveryPayloadV1,
 )
 from zephyr_core.contracts.v2.delivery_receipt import DeliveryReceiptV1
+from zephyr_core.contracts.v2.healthz import (
+    HealthCheckKind,
+    HealthCheckProvider,
+    HealthCheckResult,
+)
+from zephyr_core.contracts.v2.lifecycle import Lifecycle, WorkerPhase
 from zephyr_core.contracts.v2.spec import ConnectorSpecV1, SpecFieldTypeV1, SpecFieldV1
 
 __all__ = [
@@ -25,6 +31,11 @@ __all__ = [
     "BatchReportV1",
     "CONFIG_SNAPSHOT_SCHEMA_VERSION",
     "ConfigSnapshotV1",
+    "HealthCheckKind",
+    "HealthCheckResult",
+    "HealthCheckProvider",
+    "WorkerPhase",
+    "Lifecycle",
     "SpecFieldTypeV1",
     "SpecFieldV1",
     "ConnectorSpecV1",

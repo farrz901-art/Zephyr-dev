@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
+from zephyr_core import RunContext
+from zephyr_core.contracts.v2.lifecycle import Lifecycle
 from zephyr_ingest.obs.batch_report_v1 import BATCH_REPORT_SCHEMA_VERSION, BatchReportV1
 
 
@@ -286,6 +288,36 @@ def build_prom_families(*, report: BatchReportV1) -> list[PromMetricFamily]:
             )
 
     return fams
+
+
+def build_worker_prom_families(
+    *,
+    ctx: RunContext,
+    lifecycle: Lifecycle,
+) -> list[PromMetricFamily]:
+    phase = lifecycle.phase.value
+    labels = {"pipeline_version": ctx.pipeline_version}
+
+    return [
+        PromMetricFamily(
+            name="zephyr_ingest_worker_info",
+            help="Zephyr ingest worker info (1 while the worker process is alive).",
+            mtype="gauge",
+            samples=[PromSample("zephyr_ingest_worker_info", 1.0, labels)],
+        ),
+        PromMetricFamily(
+            name="zephyr_ingest_worker_phase",
+            help="Current Zephyr ingest worker lifecycle phase (1 for the current phase).",
+            mtype="gauge",
+            samples=[
+                PromSample(
+                    "zephyr_ingest_worker_phase",
+                    1.0,
+                    {**labels, "phase": phase},
+                )
+            ],
+        ),
+    ]
 
 
 def render_prometheus_text(*, families: list[PromMetricFamily]) -> str:

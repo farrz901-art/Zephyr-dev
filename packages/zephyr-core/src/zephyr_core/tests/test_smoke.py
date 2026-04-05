@@ -18,6 +18,11 @@ def test_contract_exports_exist() -> None:
     assert hasattr(zephyr_core, "DocumentMetadata")
     assert hasattr(zephyr_core, "EngineInfo")
     assert hasattr(zephyr_core, "PartitionStrategy")
+    assert hasattr(zephyr_core, "HealthCheckKind")
+    assert hasattr(zephyr_core, "HealthCheckResult")
+    assert hasattr(zephyr_core, "HealthCheckProvider")
+    assert hasattr(zephyr_core, "WorkerPhase")
+    assert hasattr(zephyr_core, "Lifecycle")
 
 
 def test_error_exports_exist() -> None:
