@@ -64,6 +64,10 @@ def test_kafka_destination_success(tmp_path: Path) -> None:
 
     assert receipt.ok is True
     assert receipt.destination == "kafka"
+    assert receipt.details is not None
+    assert receipt.details["retryable"] is False
+    assert receipt.details["flush_attempted"] is True
+    assert receipt.details["flush_completed"] is True
     assert len(fake.calls) == 1
 
     call = fake.calls[0]
@@ -104,6 +108,9 @@ def test_kafka_destination_producer_exception() -> None:
 
     assert receipt.details["retryable"] is True
     assert receipt.details["exc_type"] == "RuntimeError"
+    assert receipt.details["failure_kind"] == "producer_error"
+    assert receipt.details["flush_attempted"] is False
+    assert receipt.details["flush_completed"] is False
     assert "broker unreachable" in receipt.details["exc"]
 
 
@@ -133,3 +140,34 @@ def test_kafka_destination_unflushed() -> None:
 
     assert receipt.details["unflushed"] == 5
     assert receipt.details["retryable"] is True
+    assert receipt.details["failure_kind"] == "flush_incomplete"
+    assert receipt.details["flush_attempted"] is True
+    assert receipt.details["flush_completed"] is True
+
+
+def test_kafka_destination_timeout_exception_maps_to_timeout_failure_kind() -> None:
+    fake = FakeProducer(should_raise=TimeoutError("flush timed out"))
+    dest = KafkaDestination(topic="test-topic", producer=fake, flush_timeout_s=3.0)
+
+    ctx = RunContext.new()
+    meta = RunMetaV1(
+        run_id=ctx.run_id,
+        pipeline_version=ctx.pipeline_version,
+        timestamp_utc=ctx.timestamp_utc,
+        schema_version=ctx.run_meta_schema_version,
+        outcome=RunOutcome.SUCCESS,
+        engine=None,
+        document=None,
+        error=None,
+        warnings=[],
+    )
+
+    receipt = dest(out_root=Path("/tmp"), sha256="xyz", meta=meta, result=None)
+
+    assert receipt.ok is False
+    assert receipt.details is not None
+    assert receipt.details["retryable"] is True
+    assert receipt.details["exc_type"] == "TimeoutError"
+    assert receipt.details["failure_kind"] == "timeout"
+    assert receipt.details["flush_attempted"] is False
+    assert receipt.details["flush_completed"] is False

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -37,16 +38,81 @@ def _should_retry_status(status_code: int) -> bool:
     return status_code == 429 or 500 <= status_code <= 599
 
 
+def _status_failure_kind(status_code: int) -> str:
+    if status_code == 429:
+        return "rate_limited"
+    if 500 <= status_code <= 599:
+        return "server_error"
+    return "client_error"
+
+
+def _parse_retry_after_ms(*, headers: httpx.Headers) -> int | None:
+    raw = headers.get("Retry-After")
+    if raw is None:
+        return None
+    try:
+        retry_after_s = int(raw.strip())
+    except ValueError:
+        return None
+    if retry_after_s < 0:
+        return None
+    return retry_after_s * 1000
+
+
+def _rate_limit_delay_ms(*, rate_limit: float | None) -> int | None:
+    if rate_limit is None or rate_limit <= 0:
+        return None
+    return max(1, math.ceil(1000.0 / rate_limit))
+
+
 def _backoff_ms(cfg: DeliveryRetryConfig, attempt: int) -> int:
     # attempt is 1-based
     ms = cfg.base_backoff_ms * (2 ** (attempt - 1))
     return min(cfg.max_backoff_ms, ms)
 
 
+def _retry_delay_ms(
+    *,
+    cfg: DeliveryRetryConfig,
+    attempt: int,
+    response: httpx.Response | None,
+    rate_limit: float | None,
+) -> int:
+    delay_ms = _backoff_ms(cfg, attempt)
+    if response is None or response.status_code != 429:
+        return delay_ms
+
+    retry_after_ms = _parse_retry_after_ms(headers=response.headers)
+    if retry_after_ms is not None:
+        delay_ms = max(delay_ms, retry_after_ms)
+
+    rate_limit_ms = _rate_limit_delay_ms(rate_limit=rate_limit)
+    if rate_limit_ms is not None:
+        delay_ms = max(delay_ms, rate_limit_ms)
+
+    return delay_ms
+
+
+def _is_retryable_http_error(exc: httpx.HTTPError) -> bool:
+    return isinstance(exc, (httpx.TimeoutException, httpx.NetworkError, httpx.RemoteProtocolError))
+
+
+def _http_error_failure_kind(exc: httpx.HTTPError) -> str:
+    if isinstance(exc, httpx.TimeoutException):
+        return "timeout"
+    if isinstance(exc, httpx.NetworkError):
+        return "connection"
+    if isinstance(exc, httpx.RemoteProtocolError):
+        return "protocol"
+    return "http_error"
+
+
 @dataclass(frozen=True, slots=True)
 class WebhookDestination:
     url: str
     timeout_s: float = 10.0
+    max_inflight: int | None = None
+    rate_limit: float | None = None
     headers: dict[str, str] = field(default_factory=_default_headers)
 
     retry: DeliveryRetryConfig = field(default_factory=_default_retry)
@@ -141,11 +207,17 @@ class WebhookDestination:
 
                     retryable = _should_retry_status(resp.status_code)
                     if self.retry.enabled and retryable and attempts < self.retry.max_attempts:
-                        ms = _backoff_ms(self.retry, attempts)
+                        ms = _retry_delay_ms(
+                            cfg=self.retry,
+                            attempt=attempts,
+                            response=resp,
+                            rate_limit=self.rate_limit,
+                        )
                         if ms > 0:
                             time.sleep(ms / 1000.0)
                         continue
 
+                    retry_after_ms = _parse_retry_after_ms(headers=resp.headers)
                     return DeliveryReceipt(
                         destination=self.name,
                         ok=False,
@@ -154,6 +226,10 @@ class WebhookDestination:
                             "status_code": resp.status_code,
                             "response_text": last_text,
                             "retryable": retryable,
+                            "failure_kind": _status_failure_kind(resp.status_code),
+                            "retry_after_s": (
+                                None if retry_after_ms is None else retry_after_ms / 1000.0
+                            ),
                             "error_code": str(ErrorCode.DELIVERY_HTTP_FAILED),
                         },
                     )
@@ -161,9 +237,9 @@ class WebhookDestination:
                 except httpx.HTTPError as e:
                     last_exc = str(e)
                     last_exc_type = type(e).__name__
+                    retryable = _is_retryable_http_error(e)
 
-                    retryable = self.retry.enabled and attempts < self.retry.max_attempts
-                    if self.retry.enabled and attempts < self.retry.max_attempts:
+                    if self.retry.enabled and retryable and attempts < self.retry.max_attempts:
                         ms = _backoff_ms(self.retry, attempts)
                         if ms > 0:
                             time.sleep(ms / 1000.0)
@@ -176,7 +252,8 @@ class WebhookDestination:
                             "attempts": attempts,
                             "exc_type": last_exc_type,
                             "exc": last_exc,
-                            "retryable": False,
+                            "retryable": retryable,
+                            "failure_kind": _http_error_failure_kind(e),
                             "error_code": str(ErrorCode.DELIVERY_HTTP_FAILED),
                         },
                     )

@@ -50,12 +50,16 @@ class FilesystemDestinationSnapshotV1(TypedDict):
 class WebhookDestinationSnapshotV1(TypedDict):
     url: str
     timeout_s: float
+    max_inflight: NotRequired[int | None]
+    rate_limit: NotRequired[float | None]
 
 
 class KafkaDestinationSnapshotV1(TypedDict):
     topic: str
     brokers: str
     flush_timeout_s: float
+    max_inflight: NotRequired[int | None]
+    rate_limit: NotRequired[float | None]
 
 
 class WeaviateDestinationSnapshotV1(TypedDict):
@@ -65,6 +69,9 @@ class WeaviateDestinationSnapshotV1(TypedDict):
     grpc: str
     api_key: str | None  # redacted: "***" or None
     skip_init_checks: bool
+    timeout_s: NotRequired[float | None]
+    max_inflight: NotRequired[int | None]
+    rate_limit: NotRequired[float | None]
 
 
 class DestinationsSnapshotV1(TypedDict):

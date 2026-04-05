@@ -41,6 +41,20 @@ class ProducerProtocol(Protocol):
         ...
 
 
+def _failure_kind_for_unflushed(*, unflushed: int) -> str:
+    return "flush_incomplete" if unflushed > 0 else "unknown"
+
+
+def _failure_kind_for_exception(exc: Exception) -> str:
+    if isinstance(exc, TimeoutError):
+        return "timeout"
+    return "producer_error"
+
+
+def _is_retryable_kafka_exception(exc: Exception) -> bool:
+    return True
+
+
 def send_delivery_payload_v1_to_kafka(
     *,
     producer: ProducerProtocol,
@@ -62,24 +76,32 @@ def send_delivery_payload_v1_to_kafka(
         "key_len": len(key_bytes),
         "value_len": len(value_bytes),
         "flush_timeout_s": flush_timeout_s,
+        "flush_attempted": False,
     }
 
     try:
         producer.produce(topic=topic, key=key_bytes, value=value_bytes)
+        details["produce_ok"] = True
+        details["flush_attempted"] = True
         unflushed = producer.flush(timeout=flush_timeout_s)
+        details["flush_completed"] = True
 
         if unflushed > 0:
             logger.warning("kafka_flush_incomplete topic=%s unflushed=%d", topic, unflushed)
             details["unflushed"] = unflushed
             details["retryable"] = True
+            details["failure_kind"] = _failure_kind_for_unflushed(unflushed=unflushed)
             details["error_code"] = str(ErrorCode.DELIVERY_KAFKA_FAILED)
             return DeliveryReceipt(destination="kafka", ok=False, details=details)
 
+        details["retryable"] = False
         return DeliveryReceipt(destination="kafka", ok=True, details=details)
     except Exception as exc:
         details["exc_type"] = type(exc).__name__
         details["exc"] = str(exc)
-        details["retryable"] = True
+        details["retryable"] = _is_retryable_kafka_exception(exc)
+        details["failure_kind"] = _failure_kind_for_exception(exc)
+        details["flush_completed"] = False
         details["error_code"] = str(ErrorCode.DELIVERY_KAFKA_FAILED)
         logger.exception("kafka_delivery_failed topic=%s exc_type=%s", topic, details["exc_type"])
         return DeliveryReceipt(destination="kafka", ok=False, details=details)
@@ -99,6 +121,8 @@ class KafkaDestination:
     topic: str
     producer: ProducerProtocol
     flush_timeout_s: float = 10.0
+    max_inflight: int | None = None
+    rate_limit: float | None = None
 
     @property
     def name(self) -> str:

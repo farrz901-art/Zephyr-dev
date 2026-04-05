@@ -54,6 +54,8 @@ def test_spec_show_toml_destination_kafka(capsys: pytest.CaptureFixture[str]) ->
     assert "topic" in out
     assert "brokers" in out
     assert "flush_timeout_s" in out
+    assert "max_inflight" in out
+    assert "rate_limit" in out
 
 
 def test_spec_show_toml_backend_uns_api_includes_env_hint(

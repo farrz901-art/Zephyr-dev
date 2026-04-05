@@ -133,6 +133,59 @@ def test_cli_run_webhook_fanout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     assert called["ok"] is True
 
 
+def test_cli_run_webhook_controls_flow_into_snapshot_and_destination(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    called = {"ok": False}
+    (tmp_path / "dummy.txt").touch()
+
+    def fake_run_documents(*, docs: Any, cfg: Any, ctx: Any, **kwargs: Any) -> Any:
+        called["ok"] = True
+
+        dest = kwargs.get("destination")
+        assert dest is not None
+        assert getattr(dest, "name") == "fanout"
+        children = getattr(dest, "destinations")
+        webhook_dest = next(d for d in children if getattr(d, "name") == "webhook")
+        assert getattr(webhook_dest, "timeout_s") == 4.5
+        assert getattr(webhook_dest, "max_inflight") == 3
+        assert getattr(webhook_dest, "rate_limit") == 1.5
+
+        snap = cast(ConfigSnapshotV1, kwargs.get("config_snapshot"))
+        webhook = cast(dict[str, object], snap["destinations"].get("webhook", {}))
+        assert webhook["timeout_s"] == 4.5
+        assert webhook["max_inflight"] == 3
+        assert webhook["rate_limit"] == 1.5
+
+        sources = snap.get("sources")
+        assert sources is not None
+        assert sources.get("destinations.webhook.timeout_s") == "cli"
+        assert sources.get("destinations.webhook.max_inflight") == "cli"
+        assert sources.get("destinations.webhook.rate_limit") == "cli"
+
+    monkeypatch.setattr(cli, "run_documents", fake_run_documents)
+
+    rc = cli.main(
+        [
+            "run",
+            "--path",
+            str(tmp_path / "dummy.txt"),
+            "--out",
+            str(tmp_path / "out"),
+            "--webhook-url",
+            "http://test.com",
+            "--webhook-timeout-s",
+            "4.5",
+            "--webhook-max-inflight",
+            "3",
+            "--webhook-rate-limit",
+            "1.5",
+        ]
+    )
+    assert rc == 0
+    assert called["ok"] is True
+
+
 def test_cli_run_backend_uns_api(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """测试 --backend uns-api 是否正确构造了后端实例"""
     called = {"ok": False}

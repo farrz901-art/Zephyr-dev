@@ -39,6 +39,8 @@ max_backoff_ms = 0
 [destinations.webhook]
 url = "http://test.com/hook"
 timeout_s = 7.0
+max_inflight = 4
+rate_limit = 2.5
 """.strip(),
     )
 
@@ -68,8 +70,11 @@ timeout_s = 7.0
         # redacted
         assert snap["backend"]["api_key"] == "***"
         assert "webhook" in snap["destinations"]
-        assert snap["destinations"]["webhook"]["url"] == "http://test.com/hook"
-        assert snap["destinations"]["webhook"]["timeout_s"] == 7.0
+        webhook = cast(dict[str, object], snap["destinations"]["webhook"])
+        assert webhook["url"] == "http://test.com/hook"
+        assert webhook["timeout_s"] == 7.0
+        assert webhook["max_inflight"] == 4
+        assert webhook["rate_limit"] == 2.5
 
         sources = snap.get("sources")
         assert sources is not None
@@ -78,6 +83,8 @@ timeout_s = 7.0
         assert sources.get("backend.api_key") == "env"
         assert sources.get("destinations.webhook.url") == "file"
         assert sources.get("destinations.webhook.timeout_s") == "file"
+        assert sources.get("destinations.webhook.max_inflight") == "file"
+        assert sources.get("destinations.webhook.rate_limit") == "file"
 
     monkeypatch.setattr(cli, "run_documents", fake_run_documents)
 

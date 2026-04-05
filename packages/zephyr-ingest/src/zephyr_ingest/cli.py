@@ -26,6 +26,7 @@ from zephyr_ingest.config.argparse_extract import (
     get_bool,
     get_float,
     get_int,
+    get_opt_float,
     get_opt_int,
     get_opt_str,
     get_req_str,
@@ -504,7 +505,24 @@ def _parse_run_cmd(ns: argparse.Namespace, argv: Sequence[str]) -> RunCmd:
 
         return file_val if file_val is not None else cli_val
 
+    def _choose_opt_float(
+        *,
+        flag: str,
+        cli_val: float | None,
+        file_val: float | None,
+    ) -> float | None:
+        if flag in present:
+            return cli_val
+
+        return file_val if file_val is not None else cli_val
+
     def _choose_int(*, flag: str, cli_val: int, file_val: int | None) -> int:
+        if flag in present:
+            return cli_val
+
+        return file_val if file_val is not None else cli_val
+
+    def _choose_opt_int(*, flag: str, cli_val: int | None, file_val: int | None) -> int | None:
         if flag in present:
             return cli_val
 
@@ -722,7 +740,22 @@ def _parse_run_cmd(ns: argparse.Namespace, argv: Sequence[str]) -> RunCmd:
             cli_val=get_float(ns, "webhook_timeout_s"),
             file_val=webhook_timeout_file,
         )
-        webhook = WebhookConfigV1(url=webhook_url, timeout_s=webhook_timeout_s)
+        webhook_max_inflight = _choose_opt_int(
+            flag="--webhook-max-inflight",
+            cli_val=get_opt_int(ns, "webhook_max_inflight"),
+            file_val=None if file_webhook is None else file_webhook.max_inflight,
+        )
+        webhook_rate_limit = _choose_opt_float(
+            flag="--webhook-rate-limit",
+            cli_val=get_opt_float(ns, "webhook_rate_limit"),
+            file_val=None if file_webhook is None else file_webhook.rate_limit,
+        )
+        webhook = WebhookConfigV1(
+            url=webhook_url,
+            timeout_s=webhook_timeout_s,
+            max_inflight=webhook_max_inflight,
+            rate_limit=webhook_rate_limit,
+        )
         # sources
         sources["destinations.webhook.url"] = (
             "cli"
@@ -731,6 +764,12 @@ def _parse_run_cmd(ns: argparse.Namespace, argv: Sequence[str]) -> RunCmd:
         )
         sources["destinations.webhook.timeout_s"] = _src(
             "--webhook-timeout-s", webhook_timeout_file
+        )
+        sources["destinations.webhook.max_inflight"] = _src(
+            "--webhook-max-inflight", None if file_webhook is None else file_webhook.max_inflight
+        )
+        sources["destinations.webhook.rate_limit"] = _src(
+            "--webhook-rate-limit", None if file_webhook is None else file_webhook.rate_limit
         )
 
     # -------------------------
@@ -756,13 +795,33 @@ def _parse_run_cmd(ns: argparse.Namespace, argv: Sequence[str]) -> RunCmd:
             cli_val=get_float(ns, "kafka_flush_timeout_s"),
             file_val=flush_timeout_file,
         )
+        kafka_max_inflight = _choose_opt_int(
+            flag="--kafka-max-inflight",
+            cli_val=get_opt_int(ns, "kafka_max_inflight"),
+            file_val=None if file_kafka is None else file_kafka.max_inflight,
+        )
+        kafka_rate_limit = _choose_opt_float(
+            flag="--kafka-rate-limit",
+            cli_val=get_opt_float(ns, "kafka_rate_limit"),
+            file_val=None if file_kafka is None else file_kafka.rate_limit,
+        )
         kafka = KafkaConfigV1(
-            topic=kafka_topic_cli, brokers=kafka_brokers_cli, flush_timeout_s=flush_timeout_s
+            topic=kafka_topic_cli,
+            brokers=kafka_brokers_cli,
+            flush_timeout_s=flush_timeout_s,
+            max_inflight=kafka_max_inflight,
+            rate_limit=kafka_rate_limit,
         )
         sources["destinations.kafka.topic"] = "cli"
         sources["destinations.kafka.brokers"] = "cli"
         sources["destinations.kafka.flush_timeout_s"] = _src(
             "--kafka-flush-timeout-s", flush_timeout_file
+        )
+        sources["destinations.kafka.max_inflight"] = _src(
+            "--kafka-max-inflight", None if file_kafka is None else file_kafka.max_inflight
+        )
+        sources["destinations.kafka.rate_limit"] = _src(
+            "--kafka-rate-limit", None if file_kafka is None else file_kafka.rate_limit
         )
     else:
         if kafka_topic_file is not None and kafka_brokers_file is not None:
@@ -772,13 +831,33 @@ def _parse_run_cmd(ns: argparse.Namespace, argv: Sequence[str]) -> RunCmd:
                 cli_val=get_float(ns, "kafka_flush_timeout_s"),
                 file_val=flush_timeout_file,
             )
+            kafka_max_inflight = _choose_opt_int(
+                flag="--kafka-max-inflight",
+                cli_val=get_opt_int(ns, "kafka_max_inflight"),
+                file_val=None if file_kafka is None else file_kafka.max_inflight,
+            )
+            kafka_rate_limit = _choose_opt_float(
+                flag="--kafka-rate-limit",
+                cli_val=get_opt_float(ns, "kafka_rate_limit"),
+                file_val=None if file_kafka is None else file_kafka.rate_limit,
+            )
             kafka = KafkaConfigV1(
-                topic=kafka_topic_file, brokers=kafka_brokers_file, flush_timeout_s=flush_timeout_s
+                topic=kafka_topic_file,
+                brokers=kafka_brokers_file,
+                flush_timeout_s=flush_timeout_s,
+                max_inflight=kafka_max_inflight,
+                rate_limit=kafka_rate_limit,
             )
             sources["destinations.kafka.topic"] = "file"
             sources["destinations.kafka.brokers"] = "file"
             sources["destinations.kafka.flush_timeout_s"] = _src(
                 "--kafka-flush-timeout-s", flush_timeout_file
+            )
+            sources["destinations.kafka.max_inflight"] = _src(
+                "--kafka-max-inflight", None if file_kafka is None else file_kafka.max_inflight
+            )
+            sources["destinations.kafka.rate_limit"] = _src(
+                "--kafka-rate-limit", None if file_kafka is None else file_kafka.rate_limit
             )
     # -------------------------
     # destinations: weaviate
@@ -802,6 +881,21 @@ def _parse_run_cmd(ns: argparse.Namespace, argv: Sequence[str]) -> RunCmd:
             flag="--weaviate-max-batch-errors",
             cli_val=get_int(ns, "weaviate_max_batch_errors"),
             file_val=None if wv_file is None else wv_file.max_batch_errors,
+        )
+        timeout_s = _choose_opt_float(
+            flag="--weaviate-timeout-s",
+            cli_val=get_opt_float(ns, "weaviate_timeout_s"),
+            file_val=None if wv_file is None else wv_file.timeout_s,
+        )
+        max_inflight = _choose_opt_int(
+            flag="--weaviate-max-inflight",
+            cli_val=get_opt_int(ns, "weaviate_max_inflight"),
+            file_val=None if wv_file is None else wv_file.max_inflight,
+        )
+        rate_limit = _choose_opt_float(
+            flag="--weaviate-rate-limit",
+            cli_val=get_opt_float(ns, "weaviate_rate_limit"),
+            file_val=None if wv_file is None else wv_file.rate_limit,
         )
         http_host = _choose_str(
             flag="--weaviate-http-host",
@@ -861,6 +955,9 @@ def _parse_run_cmd(ns: argparse.Namespace, argv: Sequence[str]) -> RunCmd:
         weaviate = WeaviateConfigV1(
             collection=weaviate_collection,
             max_batch_errors=max_batch_errors,
+            timeout_s=timeout_s,
+            max_inflight=max_inflight,
+            rate_limit=rate_limit,
             http_host=http_host,
             http_port=http_port,
             http_secure=http_secure,
@@ -878,6 +975,15 @@ def _parse_run_cmd(ns: argparse.Namespace, argv: Sequence[str]) -> RunCmd:
         )
         sources["destinations.weaviate.max_batch_errors"] = _src(
             "--weaviate-max-batch-errors", None if wv_file is None else wv_file.max_batch_errors
+        )
+        sources["destinations.weaviate.timeout_s"] = _src(
+            "--weaviate-timeout-s", None if wv_file is None else wv_file.timeout_s
+        )
+        sources["destinations.weaviate.max_inflight"] = _src(
+            "--weaviate-max-inflight", None if wv_file is None else wv_file.max_inflight
+        )
+        sources["destinations.weaviate.rate_limit"] = _src(
+            "--weaviate-rate-limit", None if wv_file is None else wv_file.rate_limit
         )
         sources["destinations.weaviate.http_host"] = _src(
             "--weaviate-http-host", None if wv_file is None else wv_file.http_host
@@ -1261,7 +1367,14 @@ def _build_destinations(*, cmd: RunCmd) -> tuple[Destination, WeaviateClientProt
     dests.append(FilesystemDestination())
 
     if cmd.webhook is not None:
-        dests.append(WebhookDestination(url=cmd.webhook.url, timeout_s=cmd.webhook.timeout_s))
+        dests.append(
+            WebhookDestination(
+                url=cmd.webhook.url,
+                timeout_s=cmd.webhook.timeout_s,
+                max_inflight=cmd.webhook.max_inflight,
+                rate_limit=cmd.webhook.rate_limit,
+            )
+        )
 
     if cmd.kafka is not None:
         from zephyr_ingest.destinations.kafka import KafkaDestination
@@ -1272,6 +1385,8 @@ def _build_destinations(*, cmd: RunCmd) -> tuple[Destination, WeaviateClientProt
                 topic=cmd.kafka.topic,
                 producer=producer,
                 flush_timeout_s=cmd.kafka.flush_timeout_s,
+                max_inflight=cmd.kafka.max_inflight,
+                rate_limit=cmd.kafka.rate_limit,
             )
         )
 
@@ -1285,6 +1400,9 @@ def _build_destinations(*, cmd: RunCmd) -> tuple[Destination, WeaviateClientProt
                 collection_name=cmd.weaviate.collection,
                 collection=collection,  # runtime object, protocol-checked in _internal factory
                 max_batch_errors=cmd.weaviate.max_batch_errors,
+                timeout_s=cmd.weaviate.timeout_s,
+                max_inflight=cmd.weaviate.max_inflight,
+                rate_limit=cmd.weaviate.rate_limit,
             )
         )
 

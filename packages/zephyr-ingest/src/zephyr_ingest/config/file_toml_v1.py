@@ -97,6 +97,8 @@ class RetryFileV1:
 class WebhookDestFileV1:
     url: str
     timeout_s: float | None = None
+    max_inflight: int | None = None
+    rate_limit: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,12 +106,17 @@ class KafkaDestFileV1:
     topic: str
     brokers: str
     flush_timeout_s: float | None = None
+    max_inflight: int | None = None
+    rate_limit: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class WeaviateDestFileV1:
     collection: str
     max_batch_errors: int | None = None
+    timeout_s: float | None = None
+    max_inflight: int | None = None
+    rate_limit: float | None = None
 
     http_host: str | None = None
     http_port: int | None = None
@@ -184,20 +191,27 @@ def load_config_file_v1(*, path: Path) -> ConfigFileV1:
     webhook: WebhookDestFileV1 | None = None
     if "webhook" in dest_tbl:
         w = _as_table(dest_tbl["webhook"], "destinations.webhook")
-        _unknown_keys(w, {"url", "timeout_s"}, "destinations.webhook")
+        _unknown_keys(w, {"url", "timeout_s", "max_inflight", "rate_limit"}, "destinations.webhook")
         url = _opt_str(w, "url", "destinations.webhook")
         if url is None:
             raise ConfigError(
                 "destinations.webhook.url is required when [destinations.webhook] is present"
             )
         webhook = WebhookDestFileV1(
-            url=url, timeout_s=_opt_float(w, "timeout_s", "destinations.webhook")
+            url=url,
+            timeout_s=_opt_float(w, "timeout_s", "destinations.webhook"),
+            max_inflight=_opt_int(w, "max_inflight", "destinations.webhook"),
+            rate_limit=_opt_float(w, "rate_limit", "destinations.webhook"),
         )
 
     kafka: KafkaDestFileV1 | None = None
     if "kafka" in dest_tbl:
         k = _as_table(dest_tbl["kafka"], "destinations.kafka")
-        _unknown_keys(k, {"topic", "brokers", "flush_timeout_s"}, "destinations.kafka")
+        _unknown_keys(
+            k,
+            {"topic", "brokers", "flush_timeout_s", "max_inflight", "rate_limit"},
+            "destinations.kafka",
+        )
         topic = _opt_str(k, "topic", "destinations.kafka")
         brokers = _opt_str(k, "brokers", "destinations.kafka")
         if topic is None or brokers is None:
@@ -209,6 +223,8 @@ def load_config_file_v1(*, path: Path) -> ConfigFileV1:
             topic=topic,
             brokers=brokers,
             flush_timeout_s=_opt_float(k, "flush_timeout_s", "destinations.kafka"),
+            max_inflight=_opt_int(k, "max_inflight", "destinations.kafka"),
+            rate_limit=_opt_float(k, "rate_limit", "destinations.kafka"),
         )
 
     weaviate: WeaviateDestFileV1 | None = None
@@ -219,6 +235,9 @@ def load_config_file_v1(*, path: Path) -> ConfigFileV1:
             {
                 "collection",
                 "max_batch_errors",
+                "timeout_s",
+                "max_inflight",
+                "rate_limit",
                 "http_host",
                 "http_port",
                 "http_secure",
@@ -239,6 +258,9 @@ def load_config_file_v1(*, path: Path) -> ConfigFileV1:
         weaviate = WeaviateDestFileV1(
             collection=collection,
             max_batch_errors=_opt_int(wv, "max_batch_errors", "destinations.weaviate"),
+            timeout_s=_opt_float(wv, "timeout_s", "destinations.weaviate"),
+            max_inflight=_opt_int(wv, "max_inflight", "destinations.weaviate"),
+            rate_limit=_opt_float(wv, "rate_limit", "destinations.weaviate"),
             http_host=_opt_str(wv, "http_host", "destinations.weaviate"),
             http_port=_opt_int(wv, "http_port", "destinations.weaviate"),
             http_secure=_opt_bool(wv, "http_secure", "destinations.weaviate"),

@@ -67,6 +67,17 @@ def get_float(ns: argparse.Namespace, name: str) -> float:
     raise ConfigError(f"--{name.replace('_', '-')} must be a float")
 
 
+def get_opt_float(ns: argparse.Namespace, name: str) -> float | None:
+    x = getattr(ns, name, None)
+    if x is None:
+        return None
+    if _is_float(x):
+        return x
+    if _is_int(x):
+        return float(x)
+    raise ConfigError(f"--{name.replace('_', '-')} must be a float")
+
+
 def get_str_list(ns: argparse.Namespace, name: str) -> list[str]:
     x = getattr(ns, name, None)
     # 1. 物理检查：确保它是个列表

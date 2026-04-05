@@ -30,6 +30,19 @@ class WeaviateCollectionProtocol(Protocol):
     def batch(self) -> WeaviateBatchManagerProtocol: ...
 
 
+def _failure_kind_for_batch_outcome(
+    *,
+    batch_errors: int,
+    failed_objects: int,
+    max_batch_errors: int,
+) -> str | None:
+    if batch_errors > max_batch_errors:
+        return "error_threshold_exceeded"
+    if failed_objects > 0:
+        return "partial_failure"
+    return None
+
+
 @dataclass(slots=True, kw_only=True)
 class WeaviateDestination:
     """
@@ -43,6 +56,9 @@ class WeaviateDestination:
     collection_name: str
     collection: WeaviateCollectionProtocol
     max_batch_errors: int = 0  # 0 => any error fails this delivery
+    timeout_s: float | None = None
+    max_inflight: int | None = None
+    rate_limit: float | None = None
 
     @property
     def name(self) -> str:
@@ -95,6 +111,7 @@ class WeaviateDestination:
             "attempts": 1,
             "collection": self.collection_name,
             "uuid": obj_uuid,
+            "object_identity": obj_uuid,
         }
 
         try:
@@ -107,9 +124,18 @@ class WeaviateDestination:
 
             details["batch_errors"] = batch_errors
             details["failed_objects"] = failed_count
+            details["max_batch_errors"] = self.max_batch_errors
+            details["batch_status"] = "ok" if batch_errors == 0 and failed_count == 0 else "partial"
 
-            retryable = (batch_errors > self.max_batch_errors) or (failed_count > 0)
+            failure_kind = _failure_kind_for_batch_outcome(
+                batch_errors=batch_errors,
+                failed_objects=failed_count,
+                max_batch_errors=self.max_batch_errors,
+            )
+            retryable = failure_kind is not None
             details["retryable"] = retryable
+            if failure_kind is not None:
+                details["failure_kind"] = failure_kind
 
             if retryable:
                 details["error_code"] = str(ErrorCode.DELIVERY_WEAVIATE_FAILED)
@@ -121,6 +147,8 @@ class WeaviateDestination:
             details["exc_type"] = type(exc).__name__
             details["exc"] = str(exc)
             details["retryable"] = True
+            details["batch_status"] = "error"
+            details["failure_kind"] = "batch_exception"
             details["error_code"] = str(ErrorCode.DELIVERY_WEAVIATE_FAILED)
             logger.exception("weaviate_delivery_failed collection=%s", self.collection_name)
             return DeliveryReceipt(destination=self.name, ok=False, details=details)

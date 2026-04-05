@@ -105,6 +105,10 @@ def test_weaviate_destination_inserts_one_object(tmp_path: Path) -> None:
         out_root=tmp_path, sha256=sha, meta=_make_meta(), result=_make_result(sha256=sha)
     )
     assert receipt.ok is True
+    assert receipt.details is not None
+    assert receipt.details["retryable"] is False
+    assert receipt.details["batch_status"] == "ok"
+    assert receipt.details["object_identity"] == normalize_weaviate_delivery_object_id(sha256=sha)
     assert len(fake_batch.added) == 1
 
     call = fake_batch.added[0]
@@ -125,3 +129,41 @@ def test_weaviate_destination_reports_failed_objects(tmp_path: Path) -> None:
     assert receipt.ok is False
     assert receipt.details is not None
     assert receipt.details["retryable"] is True
+    assert receipt.details["batch_status"] == "partial"
+    assert receipt.details["failure_kind"] == "partial_failure"
+    assert receipt.details["max_batch_errors"] == 0
+
+
+def test_weaviate_destination_tolerates_batch_errors_within_threshold(tmp_path: Path) -> None:
+    fake_batch = FakeBatch(number_errors=1)
+    coll = FakeCollection(batch=FakeBatchManager(batch=fake_batch, failed_objects=[]))
+    dest = WeaviateDestination(collection_name="ZephyrDoc", collection=coll, max_batch_errors=1)
+
+    receipt = dest(
+        out_root=tmp_path, sha256="abc", meta=_make_meta(), result=_make_result(sha256="abc")
+    )
+
+    assert receipt.ok is True
+    assert receipt.details is not None
+    assert receipt.details["retryable"] is False
+    assert receipt.details["batch_errors"] == 1
+    assert receipt.details["max_batch_errors"] == 1
+    assert receipt.details["batch_status"] == "partial"
+
+
+def test_weaviate_destination_fails_when_batch_errors_exceed_threshold(tmp_path: Path) -> None:
+    fake_batch = FakeBatch(number_errors=2)
+    coll = FakeCollection(batch=FakeBatchManager(batch=fake_batch, failed_objects=[]))
+    dest = WeaviateDestination(collection_name="ZephyrDoc", collection=coll, max_batch_errors=1)
+
+    receipt = dest(
+        out_root=tmp_path, sha256="abc", meta=_make_meta(), result=_make_result(sha256="abc")
+    )
+
+    assert receipt.ok is False
+    assert receipt.details is not None
+    assert receipt.details["retryable"] is True
+    assert receipt.details["batch_errors"] == 2
+    assert receipt.details["max_batch_errors"] == 1
+    assert receipt.details["failure_kind"] == "error_threshold_exceeded"
+    assert receipt.details["batch_status"] == "partial"
