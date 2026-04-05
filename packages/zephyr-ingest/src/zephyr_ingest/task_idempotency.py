@@ -1,0 +1,29 @@
+from __future__ import annotations
+
+import json
+
+from zephyr_ingest.task_v1 import TaskIdentityV1, TaskV1
+
+
+def normalize_uns_task_idempotency_key(*, identity: TaskIdentityV1) -> str:
+    return json.dumps(
+        {
+            "kind": "uns",
+            "pipeline_version": identity.pipeline_version,
+            "sha256": identity.sha256,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
+def normalize_task_idempotency_key(task: TaskV1) -> str:
+    if task.kind == "uns":
+        if task.identity is None:
+            raise ValueError("UNS task identity is required for idempotency normalization")
+        return normalize_uns_task_idempotency_key(identity=task.identity)
+
+    if task.kind == "it":
+        raise NotImplementedError("Task kind 'it' idempotency normalization is not implemented")
+
+    raise ValueError(f"Unsupported task kind: {task.kind}")
