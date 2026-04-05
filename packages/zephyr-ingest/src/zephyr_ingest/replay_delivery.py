@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol, cast
@@ -13,6 +12,11 @@ from zephyr_core import ErrorCode
 from zephyr_ingest._internal.delivery_payload import (
     DeliveryPayloadV1,
     build_delivery_payload_v1_from_run_meta_dict,
+)
+from zephyr_ingest.delivery_idempotency import (
+    DeliveryIdentityV1,
+    normalize_delivery_idempotency_key,
+    normalize_weaviate_delivery_object_id,
 )
 from zephyr_ingest.destinations.base import DeliveryReceipt
 from zephyr_ingest.destinations.kafka import ProducerProtocol, send_delivery_payload_v1_to_kafka
@@ -65,10 +69,6 @@ class KafkaReplaySink:
         )
 
 
-def _uuid_for_sha256(*, sha256: str) -> str:
-    return str(uuid.uuid5(uuid.NAMESPACE_DNS, sha256))
-
-
 @dataclass(frozen=True, slots=True)
 class WeaviateReplaySink:
     collection_name: str
@@ -81,7 +81,7 @@ class WeaviateReplaySink:
 
     def send(self, *, payload: DeliveryPayloadV1, idempotency_key: str) -> DeliveryReceipt:
         sha256 = payload["sha256"]
-        obj_uuid = _uuid_for_sha256(sha256=sha256)
+        obj_uuid = normalize_weaviate_delivery_object_id(sha256=sha256)
 
         artifacts = payload["artifacts"]
         normalized_path = Path(artifacts["normalized_path"])
@@ -321,7 +321,9 @@ def replay_delivery_dlq(
             )
             continue
 
-        idem = f"{sha256}:{run_id}"
+        idem = normalize_delivery_idempotency_key(
+            identity=DeliveryIdentityV1(sha256=sha256, run_id=run_id)
+        )
         receipt = sink.send(payload=payload, idempotency_key=idem)
 
         if receipt.ok:

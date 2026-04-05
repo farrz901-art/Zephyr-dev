@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import logging
-import uuid
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
 from zephyr_core import ErrorCode, PartitionResult, RunMetaV1
+from zephyr_ingest.delivery_idempotency import normalize_weaviate_delivery_object_id
 from zephyr_ingest.destinations.base import DeliveryReceipt
 
 logger = logging.getLogger(__name__)
@@ -28,12 +28,6 @@ class WeaviateBatchManagerProtocol(Protocol):
 class WeaviateCollectionProtocol(Protocol):
     @property
     def batch(self) -> WeaviateBatchManagerProtocol: ...
-
-
-def _uuid_for_sha256(*, sha256: str) -> str:
-    # Align with weaviate.util.generate_uuid5(identifier, namespace=""):
-    # uuid5(NAMESPACE_DNS, str(namespace)+str(identifier))
-    return str(uuid.uuid5(uuid.NAMESPACE_DNS, sha256))
 
 
 @dataclass(slots=True, kw_only=True)
@@ -76,7 +70,7 @@ class WeaviateDestination:
                 },
             )
 
-        obj_uuid = _uuid_for_sha256(sha256=sha256)
+        obj_uuid = normalize_weaviate_delivery_object_id(sha256=sha256)
 
         props: dict[str, Any] = {
             "sha256": sha256,

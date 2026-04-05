@@ -15,6 +15,7 @@ from zephyr_core import (
     ZephyrElement,
 )
 from zephyr_core.contracts.v1.enums import RunOutcome
+from zephyr_ingest.delivery_idempotency import normalize_weaviate_delivery_object_id
 from zephyr_ingest.destinations.weaviate import WeaviateDestination
 
 
@@ -107,7 +108,7 @@ def test_weaviate_destination_inserts_one_object(tmp_path: Path) -> None:
     assert len(fake_batch.added) == 1
 
     call = fake_batch.added[0]
-    assert call["uuid"] is not None
+    assert call["uuid"] == normalize_weaviate_delivery_object_id(sha256=sha)
     assert call["properties"]["sha256"] == sha
     assert call["properties"]["normalized_text"] == "hi"
 

@@ -14,6 +14,10 @@ from zephyr_ingest._internal.delivery_payload import (
     DeliveryPayloadV1,
     build_delivery_payload_v1,
 )
+from zephyr_ingest.delivery_idempotency import (
+    DeliveryIdentityV1,
+    normalize_delivery_idempotency_key,
+)
 from zephyr_ingest.destinations.base import DeliveryReceipt
 
 logger = logging.getLogger(__name__)
@@ -119,7 +123,9 @@ class KafkaDestination:
         )
 
         # Idempotency key (same semantics as webhook)
-        key_str = f"{sha256}:{meta.run_id}"
+        key_str = normalize_delivery_idempotency_key(
+            identity=DeliveryIdentityV1(sha256=sha256, run_id=meta.run_id)
+        )
         receipt = send_delivery_payload_v1_to_kafka(
             producer=self.producer,
             topic=self.topic,

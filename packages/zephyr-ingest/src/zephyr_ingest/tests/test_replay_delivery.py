@@ -37,6 +37,7 @@ def test_replay_delivery_moves_dlq_to_done(tmp_path: Path) -> None:
 
     # Mock webhook to return 200 OK
     def handler(request: httpx.Request) -> httpx.Response:
+        assert request.headers["Idempotency-Key"] == "abc:r1"
         data = json.loads(request.content.decode("utf-8"))
         assert data["sha256"] == "abc"
         assert "run_meta" in data

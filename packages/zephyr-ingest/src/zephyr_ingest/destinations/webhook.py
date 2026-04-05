@@ -10,6 +10,10 @@ import httpx
 
 from zephyr_core import ErrorCode, PartitionResult, RunMetaV1
 from zephyr_ingest._internal.delivery_payload import build_delivery_payload_v1
+from zephyr_ingest.delivery_idempotency import (
+    DeliveryIdentityV1,
+    normalize_delivery_idempotency_key,
+)
 from zephyr_ingest.destinations.base import DeliveryReceipt
 
 
@@ -76,7 +80,9 @@ class WebhookDestination:
         payload = build_delivery_payload_v1(out_root=out_root, sha256=sha256, meta=meta)
 
         # 2. 构造幂等键
-        idempotency_key = f"{sha256}:{meta.run_id}"
+        idempotency_key = normalize_delivery_idempotency_key(
+            identity=DeliveryIdentityV1(sha256=sha256, run_id=meta.run_id)
+        )
 
         # 3. 委派给通用的 post_payload 方法
         return self.post_payload(payload=payload, idempotency_key=idempotency_key)

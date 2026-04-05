@@ -24,6 +24,7 @@ def test_webhook_retries_on_5xx_then_succeeds(tmp_path: Path) -> None:
 
     def handler(request: httpx.Request) -> httpx.Response:
         calls["n"] += 1
+        assert request.headers["Idempotency-Key"] == "abc:r1"
         # validate payload
         data = json.loads(request.content.decode("utf-8"))
         assert data["sha256"] == "abc"
@@ -52,6 +53,7 @@ def test_webhook_does_not_retry_on_4xx(tmp_path: Path) -> None:
 
     def handler(request: httpx.Request) -> httpx.Response:
         calls["n"] += 1
+        assert request.headers["Idempotency-Key"] == "abc:r1"
         return httpx.Response(400, text="bad request")
 
     transport = httpx.MockTransport(handler)
@@ -76,6 +78,7 @@ def test_webhook_retries_exhausted(tmp_path: Path) -> None:
 
     def handler(request: httpx.Request) -> httpx.Response:
         calls["n"] += 1
+        assert request.headers["Idempotency-Key"] == "abc:r1"
         return httpx.Response(503, text="unavailable")
 
     transport = httpx.MockTransport(handler)

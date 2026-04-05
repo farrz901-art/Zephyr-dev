@@ -1,0 +1,81 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import time
+from collections.abc import Mapping
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Protocol, runtime_checkable
+
+
+@dataclass(frozen=True, slots=True)
+class AcquiredLock:
+    key: str
+    owner: str
+    lock_ref: Path
+
+
+@runtime_checkable
+class LockProvider(Protocol):
+    def acquire(self, *, key: str, owner: str) -> AcquiredLock | None: ...
+
+    def release(self, lock: AcquiredLock) -> None: ...
+
+
+@dataclass(frozen=True, slots=True)
+class FileLockProvider:
+    root: Path
+    stale_after_s: int | None = None
+
+    def __post_init__(self) -> None:
+        self.root.mkdir(parents=True, exist_ok=True)
+        if self.stale_after_s is not None and self.stale_after_s <= 0:
+            raise ValueError("stale_after_s must be > 0")
+
+    def acquire(self, *, key: str, owner: str) -> AcquiredLock | None:
+        lock_path = self._lock_path_for_key(key)
+        payload = {
+            "key": key,
+            "owner": owner,
+            "acquired_at_epoch_s": int(time.time()),
+        }
+
+        try:
+            self._write_lock(path=lock_path, payload=payload)
+            return AcquiredLock(key=key, owner=owner, lock_ref=lock_path)
+        except FileExistsError:
+            if self.stale_after_s is None:
+                return None
+            if not self._break_stale_lock(path=lock_path):
+                return None
+            try:
+                self._write_lock(path=lock_path, payload=payload)
+            except FileExistsError:
+                return None
+            return AcquiredLock(key=key, owner=owner, lock_ref=lock_path)
+
+    def release(self, lock: AcquiredLock) -> None:
+        lock.lock_ref.unlink(missing_ok=True)
+
+    def _break_stale_lock(self, *, path: Path) -> bool:
+        try:
+            stale_after_s = self.stale_after_s
+            if stale_after_s is None:
+                return False
+            age_s = time.time() - path.stat().st_mtime
+            if age_s < stale_after_s:
+                return False
+            path.unlink(missing_ok=True)
+            return True
+        except FileNotFoundError:
+            return True
+
+    def _lock_path_for_key(self, key: str) -> Path:
+        digest = hashlib.sha256(key.encode("utf-8")).hexdigest()
+        return self.root / f"{digest}.lock"
+
+    @staticmethod
+    def _write_lock(*, path: Path, payload: Mapping[str, object]) -> None:
+        with path.open("x", encoding="utf-8") as handle:
+            handle.write(json.dumps(payload, indent=2, sort_keys=True) + "\n")

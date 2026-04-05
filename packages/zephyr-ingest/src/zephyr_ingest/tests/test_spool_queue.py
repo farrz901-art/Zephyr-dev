@@ -50,7 +50,13 @@ def test_enqueue_writes_pending_task(tmp_path: Path) -> None:
 
     assert path == queue.pending_dir / "task-001.json"
     assert path.exists()
-    assert _read_json(path) == task.to_dict()
+    assert _read_json(path) == {
+        "task": task.to_dict(),
+        "governance": {
+            "failure_count": 0,
+            "orphan_count": 0,
+        },
+    }
 
 
 def test_claim_transitions_pending_to_inflight(tmp_path: Path) -> None:
@@ -80,21 +86,46 @@ def test_ack_success_transitions_inflight_to_done(tmp_path: Path) -> None:
     assert not (queue.inflight_dir / "task-003.json").exists()
 
 
-def test_ack_failure_transitions_inflight_to_failed(tmp_path: Path) -> None:
-    queue = LocalSpoolQueue(root=tmp_path / "spool")
+def test_ack_failure_requeues_pending_and_increments_failure_count(tmp_path: Path) -> None:
+    queue = LocalSpoolQueue(root=tmp_path / "spool", max_task_attempts=2)
     queue.enqueue(_make_task("task-004"))
     claimed = queue.claim_next()
     assert claimed is not None
 
     target = queue.ack_failure(claimed)
 
-    assert target == queue.failed_dir / "task-004.json"
+    assert target == queue.pending_dir / "task-004.json"
     assert target.exists()
     assert not (queue.inflight_dir / "task-004.json").exists()
+    assert _read_json(target)["governance"] == {
+        "failure_count": 1,
+        "orphan_count": 0,
+    }
+
+
+def test_ack_failure_transitions_to_poison_at_threshold(tmp_path: Path) -> None:
+    queue = LocalSpoolQueue(root=tmp_path / "spool", max_task_attempts=2)
+    queue.enqueue(_make_task("task-004"))
+
+    first_claim = queue.claim_next()
+    assert first_claim is not None
+    queue.ack_failure(first_claim)
+
+    second_claim = queue.claim_next()
+    assert second_claim is not None
+    target = queue.ack_failure(second_claim)
+
+    assert target == queue.poison_dir / "task-004.json"
+    assert target.exists()
+    assert _read_json(target)["governance"] == {
+        "failure_count": 2,
+        "orphan_count": 0,
+    }
+    assert not (queue.root / "_dlq").exists()
 
 
 def test_recover_stale_inflight_moves_task_back_to_pending(tmp_path: Path) -> None:
-    queue = LocalSpoolQueue(root=tmp_path / "spool")
+    queue = LocalSpoolQueue(root=tmp_path / "spool", max_orphan_requeues=2)
     queue.enqueue(_make_task("task-005"))
     claimed = queue.claim_next()
     assert claimed is not None
@@ -106,6 +137,29 @@ def test_recover_stale_inflight_moves_task_back_to_pending(tmp_path: Path) -> No
     assert recovered == 1
     assert (queue.pending_dir / "task-005.json").exists()
     assert not (queue.inflight_dir / "task-005.json").exists()
+    assert _read_json(queue.pending_dir / "task-005.json")["governance"] == {
+        "failure_count": 0,
+        "orphan_count": 1,
+    }
+
+
+def test_recover_stale_inflight_transitions_to_poison_at_orphan_threshold(tmp_path: Path) -> None:
+    queue = LocalSpoolQueue(root=tmp_path / "spool", max_orphan_requeues=1)
+    queue.enqueue(_make_task("task-006"))
+    claimed = queue.claim_next()
+    assert claimed is not None
+
+    os.utime(Path(claimed.claim_ref), (25, 25))
+
+    recovered = queue.recover_stale_inflight(max_age_s=10, now_epoch_s=50)
+
+    assert recovered == 1
+    assert (queue.poison_dir / "task-006.json").exists()
+    assert not (queue.pending_dir / "task-006.json").exists()
+    assert _read_json(queue.poison_dir / "task-006.json")["governance"] == {
+        "failure_count": 0,
+        "orphan_count": 1,
+    }
 
 
 def test_recover_stale_inflight_requires_positive_ttl(tmp_path: Path) -> None:

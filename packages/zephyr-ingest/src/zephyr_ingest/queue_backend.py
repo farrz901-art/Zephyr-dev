@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
+from zephyr_ingest.lock_provider import AcquiredLock, LockProvider
+from zephyr_ingest.task_idempotency import normalize_task_idempotency_key
 from zephyr_ingest.task_v1 import TaskV1
 
 QueueRecordRef = str | Path
@@ -29,6 +31,8 @@ class QueueBackend(Protocol):
 
     def ack_failure(self, claimed: ClaimedTask) -> QueueRecordRef: ...
 
+    def requeue_orphaned(self, claimed: ClaimedTask) -> QueueRecordRef: ...
+
     def recover_stale_inflight(
         self,
         *,
@@ -46,6 +50,8 @@ class QueueBackendWorkSource:
     backend: QueueBackend
     handler: TaskHandler
     recover_inflight_after_s: int | None = None
+    lock_provider: LockProvider | None = None
+    lock_owner: str = "worker"
 
     def poll(self) -> QueueWorkItem | None:
         if self.recover_inflight_after_s is not None:
@@ -54,7 +60,22 @@ class QueueBackendWorkSource:
         claimed = self.backend.claim_next()
         if claimed is None:
             return None
-        return QueueWorkItem(backend=self.backend, claimed=claimed, handler=self.handler)
+        acquired_lock = None
+        if self.lock_provider is not None:
+            acquired_lock = self.lock_provider.acquire(
+                key=normalize_task_idempotency_key(claimed.task),
+                owner=self.lock_owner,
+            )
+            if acquired_lock is None:
+                self.backend.requeue_orphaned(claimed)
+                return None
+        return QueueWorkItem(
+            backend=self.backend,
+            claimed=claimed,
+            handler=self.handler,
+            lock_provider=self.lock_provider,
+            acquired_lock=acquired_lock,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,6 +83,8 @@ class QueueWorkItem:
     backend: QueueBackend
     claimed: ClaimedTask
     handler: TaskHandler
+    lock_provider: LockProvider | None = None
+    acquired_lock: AcquiredLock | None = None
 
     def __call__(self) -> None:
         try:
@@ -69,4 +92,8 @@ class QueueWorkItem:
         except Exception:
             self.backend.ack_failure(self.claimed)
             raise
-        self.backend.ack_success(self.claimed)
+        else:
+            self.backend.ack_success(self.claimed)
+        finally:
+            if self.lock_provider is not None and self.acquired_lock is not None:
+                self.lock_provider.release(self.acquired_lock)
