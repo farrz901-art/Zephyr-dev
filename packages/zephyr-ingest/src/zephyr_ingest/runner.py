@@ -22,6 +22,7 @@ from zephyr_core.contracts.v1.enums import RunOutcome
 from zephyr_core.contracts.v1.run_meta import (
     EngineMetaV1,
     ErrorInfoV1,
+    ExecutionModeV1,
     MetricsV1,
     RunProvenanceV1,
 )
@@ -50,6 +51,15 @@ from zephyr_ingest.obs.batch_report_v1 import (
     MetricsV1 as BatchMetricsV1,
 )
 from zephyr_ingest.obs.events import log_event
+from zephyr_ingest.task_idempotency import normalize_task_idempotency_key
+from zephyr_ingest.task_v1 import (
+    TaskDocumentInputV1,
+    TaskExecutionV1,
+    TaskIdentityV1,
+    TaskInputsV1,
+    TaskKind,
+    TaskV1,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -197,12 +207,416 @@ def _duration_stats(values: list[int]) -> DurationStatsV1:
     }
 
 
+def _new_processor_cache() -> dict[FlowKind, FlowProcessor]:
+    return {}
+
+
+def _build_task_run_provenance(
+    *,
+    task: TaskV1,
+    execution_mode: ExecutionModeV1,
+) -> RunProvenanceV1:
+    task_identity_key = None
+    if task.identity is not None:
+        task_identity_key = normalize_task_idempotency_key(task)
+
+    return RunProvenanceV1(
+        run_origin="intake",
+        delivery_origin="primary",
+        execution_mode=execution_mode,
+        task_id=task.task_id,
+        task_identity_key=task_identity_key,
+    )
+
+
+def _build_task_for_document(
+    *,
+    doc: DocumentRef,
+    flow_kind: FlowKind | str,
+    cfg: RunnerConfig,
+    ctx: RunContext,
+    sha256: str,
+) -> TaskV1:
+    task_kind: TaskKind
+    if flow_kind == "uns":
+        task_kind = "uns"
+    elif flow_kind == "it":
+        task_kind = "it"
+    else:
+        raise ValueError(f"Unsupported task flow kind: {flow_kind!r}")
+
+    return TaskV1(
+        task_id=sha256,
+        kind=task_kind,
+        inputs=TaskInputsV1(document=TaskDocumentInputV1.from_document_ref(doc)),
+        execution=TaskExecutionV1(
+            strategy=cfg.strategy,
+            unique_element_ids=cfg.unique_element_ids,
+        ),
+        identity=TaskIdentityV1(
+            pipeline_version=ctx.pipeline_version,
+            sha256=sha256,
+        ),
+    )
+
+
+def process_task(
+    *,
+    task: TaskV1,
+    cfg: RunnerConfig,
+    ctx: RunContext,
+    processor: FlowProcessor,
+    destination: Destination,
+    out_root: Path | None = None,
+    hash_ms: int | None = None,
+    execution_mode: ExecutionModeV1 = "batch",
+) -> DocProcessResult:
+    doc = task.inputs.document.to_document_ref()
+    p = Path(doc.uri)
+    sha = task.identity.sha256 if task.identity is not None else sha256_file(p)
+    ext = doc.extension or p.suffix.lower()
+    resolved_out_root = (out_root or cfg.out_root).expanduser().resolve()
+    resolved_out_root.mkdir(parents=True, exist_ok=True)
+    out_dir = resolved_out_root / sha
+
+    t0 = time.perf_counter()
+    attempts = 0
+    partition_ms_total = 0
+    delivery_ms: int | None = None
+    t_part0 = time.perf_counter()
+
+    while True:
+        attempts += 1
+        try:
+            t_part0 = time.perf_counter()
+            res = processor.process(
+                doc=doc,
+                strategy=task.execution.strategy,
+                unique_element_ids=task.execution.unique_element_ids,
+                run_id=ctx.run_id,
+                pipeline_version=ctx.pipeline_version,
+                sha256=sha,
+            )
+            partition_ms_total += int((time.perf_counter() - t_part0) * 1000)
+            duration_ms = int((time.perf_counter() - t0) * 1000)
+            meta = RunMetaV1(
+                run_id=ctx.run_id,
+                pipeline_version=ctx.pipeline_version,
+                timestamp_utc=ctx.timestamp_utc,
+                schema_version=ctx.run_meta_schema_version,
+                outcome=RunOutcome.SUCCESS,
+                document=res.document,
+                engine=EngineMetaV1(
+                    name=res.engine.name,
+                    backend=res.engine.backend,
+                    version=res.engine.version,
+                    strategy=str(res.engine.strategy),
+                ),
+                metrics=MetricsV1(
+                    duration_ms=duration_ms,
+                    elements_count=len(res.elements),
+                    normalized_text_len=len(res.normalized_text),
+                    attempts=attempts,
+                ),
+                warnings=list(res.warnings),
+                error=None,
+                provenance=_build_task_run_provenance(
+                    task=task,
+                    execution_mode=execution_mode,
+                ),
+            )
+
+            log_event(
+                logger,
+                level=logging.INFO,
+                event="delivery_start",
+                run_id=ctx.run_id,
+                pipeline_version=ctx.pipeline_version,
+                sha256=sha,
+                destination=getattr(destination, "name", "unknown"),
+                outcome=None if meta.outcome is None else str(meta.outcome),
+            )
+
+            t_del0 = time.perf_counter()
+            try:
+                receipt = destination(out_root=resolved_out_root, sha256=sha, meta=meta, result=res)
+            except Exception as de:
+                receipt = DeliveryReceipt(
+                    destination=destination.name,
+                    ok=False,
+                    details={"exc_type": type(de).__name__, "exc": str(de)},
+                )
+            delivery_ms = int((time.perf_counter() - t_del0) * 1000)
+
+            log_event(
+                logger,
+                level=logging.INFO,
+                event="delivery_done",
+                run_id=ctx.run_id,
+                pipeline_version=ctx.pipeline_version,
+                sha256=sha,
+                destination=receipt.destination,
+                ok=receipt.ok,
+            )
+
+            _write_delivery_receipt(out_dir, receipt)
+
+            dlq_written = False
+            delivery_retryable: bool | None = None
+            if not receipt.ok:
+                retryable = None
+                if isinstance(receipt.details, dict):
+                    r = receipt.details.get("retryable")
+                    if isinstance(r, bool):
+                        retryable = r
+                delivery_retryable = retryable
+
+                log_event(
+                    logger,
+                    level=logging.WARNING,
+                    event="delivery_failed",
+                    run_id=ctx.run_id,
+                    pipeline_version=ctx.pipeline_version,
+                    sha256=sha,
+                    destination=receipt.destination,
+                    retryable=retryable,
+                )
+
+                try:
+                    dlq_path = write_delivery_dlq(
+                        out_root=resolved_out_root, sha256=sha, meta=meta, receipt=receipt
+                    )
+                    dlq_written = True
+
+                    log_event(
+                        logger,
+                        level=logging.WARNING,
+                        event="dlq_written",
+                        run_id=ctx.run_id,
+                        pipeline_version=ctx.pipeline_version,
+                        sha256=sha,
+                        destination=receipt.destination,
+                        dlq_path=dlq_path,
+                    )
+
+                except Exception as dlqe:
+                    logger.warning("delivery_dlq_write_failed sha=%s exc=%s", sha, str(dlqe))
+
+            log_event(
+                logger,
+                level=logging.INFO,
+                event="doc_done",
+                run_id=ctx.run_id,
+                pipeline_version=ctx.pipeline_version,
+                sha256=sha,
+                outcome=None if meta.outcome is None else str(meta.outcome),
+                hash_ms=hash_ms,
+                partition_ms=partition_ms_total,
+                delivery_ms=delivery_ms,
+            )
+
+            return DocProcessResult(
+                sha256=sha,
+                extension=ext,
+                outcome=RunOutcome.SUCCESS,
+                duration_ms=duration_ms,
+                attempts=attempts,
+                retryable=None,
+                error_code=None,
+                skipped_existing=False,
+                delivery_receipt=receipt,
+                delivery_retryable=delivery_retryable,
+                dlq_written=dlq_written,
+                hash_ms=hash_ms,
+                partition_ms=partition_ms_total,
+                delivery_ms=delivery_ms,
+            )
+        except ZephyrError as e:
+            duration_ms = int((time.perf_counter() - t0) * 1000)
+            partition_ms_total += int((time.perf_counter() - t_part0) * 1000)
+            retryable = is_retryable_exception(e)
+            if cfg.retry.enabled and retryable and attempts < cfg.retry.max_attempts:
+                backoff_ms = min(
+                    cfg.retry.max_backoff_ms,
+                    cfg.retry.base_backoff_ms * (2 ** (attempts - 1)),
+                )
+                if backoff_ms > 0:
+                    time.sleep(backoff_ms / 1000.0)
+                continue
+            e_code = str(e.code)
+            merged_details: dict[str, Any] = {}
+            if isinstance(e.details, dict):
+                merged_details = dict(e.details)
+            if "retryable" not in merged_details:
+                merged_details["retryable"] = retryable
+            if cfg.skip_unsupported and e_code == str(ErrorCode.UNS_UNSUPPORTED_TYPE):
+                outcome = RunOutcome.SKIPPED_UNSUPPORTED
+            else:
+                outcome = RunOutcome.FAILED
+
+            log_event(
+                logger,
+                level=logging.WARNING,
+                event="delivery_start",
+                run_id=ctx.run_id,
+                sha256=sha,
+                destination=getattr(destination, "name", "unknown"),
+                outcome=str(outcome),
+            )
+
+            meta = RunMetaV1(
+                run_id=ctx.run_id,
+                pipeline_version=ctx.pipeline_version,
+                timestamp_utc=ctx.timestamp_utc,
+                schema_version=ctx.run_meta_schema_version,
+                outcome=outcome,
+                metrics=MetricsV1(duration_ms=duration_ms, attempts=attempts),
+                error=ErrorInfoV1(code=e_code, message=e.message, details=merged_details),
+                provenance=_build_task_run_provenance(
+                    task=task,
+                    execution_mode=execution_mode,
+                ),
+            )
+
+            t_del_fail0 = time.perf_counter()
+            try:
+                receipt = destination(
+                    out_root=resolved_out_root,
+                    sha256=sha,
+                    meta=meta,
+                    result=None,
+                )
+            except Exception as de:
+                receipt = DeliveryReceipt(
+                    destination=destination.name,
+                    ok=False,
+                    details={"exc_type": type(de).__name__, "exc": str(de)},
+                )
+
+            delivery_ms = int((time.perf_counter() - t_del_fail0) * 1000)
+            log_event(
+                logger,
+                level=logging.WARNING,
+                event="delivery_done",
+                run_id=ctx.run_id,
+                sha256=sha,
+                destination=receipt.destination,
+                ok=receipt.ok,
+            )
+
+            _write_delivery_receipt(out_dir, receipt)
+
+            dlq_written = False
+
+            delivery_retryable2: bool | None = None
+            if not receipt.ok and isinstance(receipt.details, dict):
+                r2 = receipt.details.get("retryable")
+                if isinstance(r2, bool):
+                    delivery_retryable2 = r2
+
+            if not receipt.ok:
+                try:
+                    write_delivery_dlq(
+                        out_root=resolved_out_root, sha256=sha, meta=meta, receipt=receipt
+                    )
+                    dlq_written = True
+                except Exception as dlqe:
+                    logger.warning("delivery_dlq_write_failed sha=%s exc=%s", sha, str(dlqe))
+
+            log_event(
+                logger,
+                level=logging.INFO,
+                event="doc_done",
+                run_id=ctx.run_id,
+                sha256=sha,
+                outcome=str(outcome),
+            )
+
+            return DocProcessResult(
+                sha256=sha,
+                extension=ext,
+                outcome=outcome,
+                duration_ms=duration_ms,
+                attempts=attempts,
+                retryable=retryable,
+                error_code=e_code,
+                skipped_existing=False,
+                delivery_receipt=receipt,
+                delivery_retryable=delivery_retryable2,
+                dlq_written=dlq_written,
+                hash_ms=hash_ms,
+                partition_ms=partition_ms_total,
+                delivery_ms=delivery_ms,
+            )
+
+
+@dataclass(slots=True)
+class TaskExecutionHandler:
+    cfg: RunnerConfig
+    ctx: RunContext
+    flow_kind: FlowKind | None = None
+    processor: FlowProcessor | None = None
+    partition_fn: PartitionFn | None = None
+    destination: Destination | None = None
+    _processor_cache: dict[FlowKind, FlowProcessor] = field(
+        default_factory=_new_processor_cache,
+        init=False,
+    )
+
+    def __call__(self, task: TaskV1) -> None:
+        selected_flow_kind = self.flow_kind or task.kind
+        active_processor = self.processor
+        if active_processor is None:
+            active_processor = self._processor_cache.get(selected_flow_kind)
+            if active_processor is None:
+                active_processor = _resolve_flow_processor(
+                    flow_kind=selected_flow_kind,
+                    processor=None,
+                    partition_fn=self.partition_fn,
+                    backend=self.cfg.backend,
+                )
+                self._processor_cache[selected_flow_kind] = active_processor
+
+        resolved_destination = self.destination or self.cfg.destination or FilesystemDestination()
+        resolved_out_root = self.cfg.out_root.expanduser().resolve()
+        resolved_out_root.mkdir(parents=True, exist_ok=True)
+        process_task(
+            task=task,
+            cfg=self.cfg,
+            ctx=self.ctx,
+            processor=active_processor,
+            destination=resolved_destination,
+            out_root=resolved_out_root,
+            execution_mode="worker",
+        )
+
+
+def build_task_execution_handler(
+    *,
+    cfg: RunnerConfig,
+    ctx: RunContext,
+    flow_kind: FlowKind | None = None,
+    processor: FlowProcessor | None = None,
+    partition_fn: PartitionFn | None = None,
+    destination: Destination | None = None,
+) -> TaskExecutionHandler:
+    return TaskExecutionHandler(
+        cfg=cfg,
+        ctx=ctx,
+        flow_kind=flow_kind,
+        processor=processor,
+        partition_fn=partition_fn,
+        destination=destination,
+    )
+
+
 def _process_one(
     *,
     doc: DocumentRef,
     cfg: RunnerConfig,
     ctx: RunContext,
     out_root: Path,
+    flow_kind: FlowKind | str,
     processor: FlowProcessor,
     # artifacts_writer: ArtifactsWriter,
     destination: Destination,
@@ -320,274 +734,23 @@ def _process_one(
                     partition_ms=None,
                     delivery_ms=None,
                 )
-        t0 = time.perf_counter()
-        attempts = 0
-        partition_ms_total = 0
-        delivery_ms: int | None = None
-        t_part0 = time.perf_counter()
-
-        while True:
-            attempts += 1
-            try:
-                t_part0 = time.perf_counter()
-                res = processor.process(
-                    doc=doc,
-                    strategy=cfg.strategy,
-                    unique_element_ids=cfg.unique_element_ids,
-                    run_id=ctx.run_id,
-                    pipeline_version=ctx.pipeline_version,
-                    sha256=sha,
-                )
-                partition_ms_total += int((time.perf_counter() - t_part0) * 1000)
-                duration_ms = int((time.perf_counter() - t0) * 1000)
-                meta = RunMetaV1(
-                    run_id=ctx.run_id,
-                    pipeline_version=ctx.pipeline_version,
-                    timestamp_utc=ctx.timestamp_utc,
-                    schema_version=ctx.run_meta_schema_version,
-                    outcome=RunOutcome.SUCCESS,
-                    document=res.document,
-                    engine=EngineMetaV1(
-                        name=res.engine.name,
-                        backend=res.engine.backend,
-                        version=res.engine.version,
-                        strategy=str(res.engine.strategy),
-                    ),
-                    metrics=MetricsV1(
-                        duration_ms=duration_ms,
-                        elements_count=len(res.elements),
-                        normalized_text_len=len(res.normalized_text),
-                        attempts=attempts,
-                    ),
-                    warnings=list(res.warnings),
-                    error=None,
-                    provenance=RunProvenanceV1(
-                        run_origin="intake",
-                        delivery_origin="primary",
-                    ),
-                )
-
-                log_event(
-                    logger,
-                    level=logging.INFO,
-                    event="delivery_start",
-                    run_id=ctx.run_id,
-                    pipeline_version=ctx.pipeline_version,
-                    sha256=sha,
-                    destination=getattr(destination, "name", "unknown"),
-                    outcome=None if meta.outcome is None else str(meta.outcome),
-                )
-
-                t_del0 = time.perf_counter()
-                try:
-                    receipt = destination(out_root=out_root, sha256=sha, meta=meta, result=res)
-                except Exception as de:
-                    receipt = DeliveryReceipt(
-                        destination=destination.name,
-                        ok=False,
-                        details={"exc_type": type(de).__name__, "exc": str(de)},
-                    )
-                delivery_ms = int((time.perf_counter() - t_del0) * 1000)
-
-                log_event(
-                    logger,
-                    level=logging.INFO,
-                    event="delivery_done",
-                    run_id=ctx.run_id,
-                    pipeline_version=ctx.pipeline_version,
-                    sha256=sha,
-                    destination=receipt.destination,
-                    ok=receipt.ok,
-                )
-
-                _write_delivery_receipt(out_dir, receipt)
-
-                dlq_written = False
-                delivery_retryable: bool | None = None
-                if not receipt.ok:
-                    retryable = None
-                    if isinstance(receipt.details, dict):
-                        r = receipt.details.get("retryable")
-                        if isinstance(r, bool):
-                            retryable = r
-                    delivery_retryable = retryable
-
-                    log_event(
-                        logger,
-                        level=logging.WARNING,
-                        event="delivery_failed",
-                        run_id=ctx.run_id,
-                        pipeline_version=ctx.pipeline_version,
-                        sha256=sha,
-                        destination=receipt.destination,
-                        retryable=retryable,
-                    )
-
-                    try:
-                        dlq_path = write_delivery_dlq(
-                            out_root=out_root, sha256=sha, meta=meta, receipt=receipt
-                        )
-                        dlq_written = True
-
-                        log_event(
-                            logger,
-                            level=logging.WARNING,
-                            event="dlq_written",
-                            run_id=ctx.run_id,
-                            pipeline_version=ctx.pipeline_version,
-                            sha256=sha,
-                            destination=receipt.destination,
-                            dlq_path=dlq_path,
-                        )
-
-                    except Exception as dlqe:
-                        logger.warning("delivery_dlq_write_failed sha=%s exc=%s", sha, str(dlqe))
-
-                log_event(
-                    logger,
-                    level=logging.INFO,
-                    event="doc_done",
-                    run_id=ctx.run_id,
-                    pipeline_version=ctx.pipeline_version,
-                    sha256=sha,
-                    outcome=None if meta.outcome is None else str(meta.outcome),
-                    hash_ms=hash_ms,
-                    partition_ms=partition_ms_total,
-                    delivery_ms=delivery_ms,
-                )
-
-                # artifacts_writer(out_root=out_root, sha256=sha, meta=meta, result=res)
-                # destination(out_root=out_root, sha256=sha, meta=meta, result=res)
-                return DocProcessResult(
-                    sha256=sha,
-                    extension=ext,
-                    outcome=RunOutcome.SUCCESS,
-                    duration_ms=duration_ms,
-                    attempts=attempts,
-                    retryable=None,
-                    error_code=None,
-                    skipped_existing=False,
-                    delivery_receipt=receipt,
-                    delivery_retryable=delivery_retryable,
-                    dlq_written=dlq_written,
-                    hash_ms=hash_ms,
-                    partition_ms=partition_ms_total,
-                    delivery_ms=delivery_ms,
-                )
-            except ZephyrError as e:
-                duration_ms = int((time.perf_counter() - t0) * 1000)
-                partition_ms_total += int((time.perf_counter() - t_part0) * 1000)
-                retryable = is_retryable_exception(e)
-                if cfg.retry.enabled and retryable and attempts < cfg.retry.max_attempts:
-                    backoff_ms = min(
-                        cfg.retry.max_backoff_ms,
-                        cfg.retry.base_backoff_ms * (2 ** (attempts - 1)),
-                    )
-                    if backoff_ms > 0:
-                        time.sleep(backoff_ms / 1000.0)
-                    continue
-                e_code = str(e.code)
-                merged_details: dict[str, Any] = {}
-                if isinstance(e.details, dict):
-                    merged_details = dict(e.details)
-                if "retryable" not in merged_details:
-                    merged_details["retryable"] = retryable
-                if cfg.skip_unsupported and e_code == str(ErrorCode.UNS_UNSUPPORTED_TYPE):
-                    outcome = RunOutcome.SKIPPED_UNSUPPORTED
-                else:
-                    outcome = RunOutcome.FAILED
-
-                log_event(
-                    logger,
-                    level=logging.WARNING,
-                    event="delivery_start",
-                    run_id=ctx.run_id,
-                    sha256=sha,
-                    destination=getattr(destination, "name", "unknown"),
-                    outcome=str(outcome),  # 告知系统这是在处理失败件的交付
-                )
-
-                meta = RunMetaV1(
-                    run_id=ctx.run_id,
-                    pipeline_version=ctx.pipeline_version,
-                    timestamp_utc=ctx.timestamp_utc,
-                    schema_version=ctx.run_meta_schema_version,
-                    outcome=outcome,
-                    metrics=MetricsV1(duration_ms=duration_ms, attempts=attempts),
-                    error=ErrorInfoV1(code=e_code, message=e.message, details=merged_details),
-                    provenance=RunProvenanceV1(
-                        run_origin="intake",
-                        delivery_origin="primary",
-                    ),
-                )
-
-                t_del_fail0 = time.perf_counter()
-                try:
-                    receipt = destination(out_root=out_root, sha256=sha, meta=meta, result=None)
-                except Exception as de:
-                    receipt = DeliveryReceipt(
-                        destination=destination.name,
-                        ok=False,
-                        details={"exc_type": type(de).__name__, "exc": str(de)},
-                    )
-
-                delivery_ms = int((time.perf_counter() - t_del_fail0) * 1000)
-                log_event(
-                    logger,
-                    level=logging.WARNING,
-                    event="delivery_done",
-                    run_id=ctx.run_id,
-                    sha256=sha,
-                    destination=receipt.destination,
-                    ok=receipt.ok,
-                )
-
-                _write_delivery_receipt(out_dir, receipt)
-
-                dlq_written = False
-
-                delivery_retryable2: bool | None = None
-                if not receipt.ok and isinstance(receipt.details, dict):
-                    r2 = receipt.details.get("retryable")
-                    if isinstance(r2, bool):
-                        delivery_retryable2 = r2
-
-                if not receipt.ok:
-                    try:
-                        write_delivery_dlq(
-                            out_root=out_root, sha256=sha, meta=meta, receipt=receipt
-                        )
-                        dlq_written = True
-                    except Exception as dlqe:
-                        logger.warning("delivery_dlq_write_failed sha=%s exc=%s", sha, str(dlqe))
-
-                log_event(
-                    logger,
-                    level=logging.INFO,
-                    event="doc_done",
-                    run_id=ctx.run_id,
-                    sha256=sha,
-                    outcome=str(outcome),
-                )
-
-                # artifacts_writer(out_root=out_root, sha256=sha, meta=meta, result=None)
-                # destination(out_root=out_root, sha256=sha, meta=meta, result=None)
-                return DocProcessResult(
-                    sha256=sha,
-                    extension=ext,
-                    outcome=outcome,
-                    duration_ms=duration_ms,
-                    attempts=attempts,
-                    retryable=retryable,
-                    error_code=e_code,
-                    skipped_existing=False,
-                    delivery_receipt=receipt,
-                    delivery_retryable=delivery_retryable2,
-                    dlq_written=dlq_written,
-                    hash_ms=hash_ms,
-                    partition_ms=partition_ms_total,
-                    delivery_ms=delivery_ms,
-                )
+        task = _build_task_for_document(
+            doc=doc,
+            flow_kind=flow_kind,
+            cfg=cfg,
+            ctx=ctx,
+            sha256=sha,
+        )
+        return process_task(
+            task=task,
+            cfg=cfg,
+            ctx=ctx,
+            processor=processor,
+            destination=destination,
+            out_root=out_root,
+            hash_ms=hash_ms,
+            execution_mode="batch",
+        )
     finally:
         if lock_acquired:
             lock_path.unlink(missing_ok=True)
@@ -782,6 +945,7 @@ def run_documents(
                 cfg=cfg,
                 ctx=ctx,
                 out_root=out_root,
+                flow_kind=flow_kind,
                 processor=active_processor,
                 destination=destination,
             )
@@ -800,6 +964,7 @@ def run_documents(
                         cfg=cfg,
                         ctx=ctx,
                         out_root=out_root,
+                        flow_kind=flow_kind,
                         processor=active_processor,
                         destination=destination,
                     )

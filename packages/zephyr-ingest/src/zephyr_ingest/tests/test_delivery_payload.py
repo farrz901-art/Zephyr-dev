@@ -40,6 +40,8 @@ def test_build_delivery_payload_v1_preserves_run_meta_provenance(tmp_path: Path)
         provenance=RunProvenanceV1(
             run_origin="resume",
             delivery_origin="primary",
+            execution_mode="worker",
+            task_id="task-run-123",
             checkpoint_identity_key="cp-123",
             task_identity_key="task-123",
         ),
@@ -50,6 +52,8 @@ def test_build_delivery_payload_v1_preserves_run_meta_provenance(tmp_path: Path)
     assert payload["run_meta"]["provenance"] == {
         "run_origin": "resume",
         "delivery_origin": "primary",
+        "execution_mode": "worker",
+        "task_id": "task-run-123",
         "checkpoint_identity_key": "cp-123",
         "task_identity_key": "task-123",
     }

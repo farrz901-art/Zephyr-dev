@@ -321,6 +321,16 @@ def test_requeue_poison_task_moves_to_pending_and_preserves_governance(tmp_path:
             "recorded_at_utc": result_payload["recorded_at_utc"],
         }
     ]
+    expected_task_identity_key = (
+        '{"kind":"it","pipeline_version":"2026.04.06","sha256":"sha256-task-requeue-poison"}'
+    )
+    assert result.to_run_provenance().to_dict() == {
+        "run_origin": "requeue",
+        "delivery_origin": "primary",
+        "execution_mode": "worker",
+        "task_id": "task-requeue-poison",
+        "task_identity_key": expected_task_identity_key,
+    }
 
     inspected = inspect_local_spool_queue(root=queue.root, bucket="pending").to_dict()
     assert inspected["tasks"][0]["latest_recovery"] == pending_payload["provenance"][0]

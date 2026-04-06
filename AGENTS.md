@@ -5,9 +5,8 @@ This repository is a strict contract-first Python monorepo for Zephyr.
 Zephyr is a data logistics / preprocessing platform.
 Current state:
 - P2 is completed.
-- P3 is starting.
-- The highest-priority structural goal is P3-M0:
-  make orchestration flow-agnostic so zephyr-ingest no longer depends on an uns-stream-specific execution path.
+- P3 is completed through P3-M9.
+- P4 preparation is beginning from the P3 end-state architecture.
 
 ## Branch / delivery model
 - Active development happens on `master`.
@@ -90,21 +89,53 @@ After editing:
 - summarize what intentionally did NOT change
 - mention likely follow-up work, but do not preemptively implement it
 
-## P3-specific guidance
-Current top priority is architectural, not feature sprawl.
+## Post-P3 architectural decisions
+P3 is now considered complete enough that these repository decisions are explicit:
 
-P3-M0 goal:
-- lift zephyr-ingest from an uns-stream-specific runner into a flow-agnostic orchestration kernel
+- `zephyr-ingest` is the flow-agnostic orchestration kernel
+- the primary execution chain is `TaskV1 -> FlowProcessor -> Delivery`
+- `uns-stream` and `it-stream` are both real flow implementations
+- `uns-stream` and `it-stream` should follow the same engineering discipline, but remain independent
+  implementations
+- `zephyr-core` owns only stable cross-package contracts, not runtime mechanics
 
-That means:
-- orchestration should dispatch through a flow/task abstraction
-- current uns behavior must continue to work through a dedicated processor implementation
-- future it-stream must be able to plug in without forcing another runner rewrite
+Treat the following as guardrails for P4:
+- do not re-open queue / lock / provenance / checkpoint boundaries casually
+- build new work on the proven orchestration/task/delivery path first
+- prefer strengthening current shared semantics over creating a third execution path
 
-Do NOT:
-- implement full it-stream runtime unless the task explicitly asks
-- bind new queue/worker/service logic directly to uns-specific execution paths
-- leak unstructured or airbyte-native types into zephyr-core contracts
+## Flow boundary rules
+`uns-stream` is for non-structured document processing.
+It must not become a dumping ground for structured-data protocol or checkpoint semantics.
+
+`it-stream` is for structured-data flow execution and local checkpoint/resume semantics.
+It must not become a clone of a full upstream-native runtime/platform.
+
+Both flows must:
+- integrate through shared orchestration in `zephyr-ingest`
+- expose Zephyr-owned artifacts and typed boundaries
+- keep flow-local semantics local until they are clearly proven across more than one flow family
+
+## P4 expansion rules
+P4 should expand from the now-proven foundation, not around it.
+
+Source connector expansion:
+- is not the immediate priority until the current `it` governance/runtime path is mature enough
+- should not bypass the existing task / provenance / checkpoint discipline
+- should not force `it-stream` to absorb a full external connector platform design
+
+Destination connector expansion:
+- should build on the hardened delivery / receipt / idempotency / replay semantics already in place
+- should not introduce destination-specific shortcuts around the shared delivery path
+
+Prefer:
+- deeper hardening of current orchestration/governance surfaces
+- connector additions that fit the existing execution and delivery contracts
+
+Avoid:
+- connector proliferation that re-opens architectural questions already settled in P3
+- flow-specific orchestration forks
+- promoting first-generation local runtime semantics to `zephyr-core` too early
 
 ## Validation expectations
 The user executes privileged commands manually when needed.

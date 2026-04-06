@@ -322,9 +322,14 @@ def test_it_resume_selection_exposes_run_provenance(tmp_path: Path) -> None:
         sha256="sha-it-004b",
     )
 
-    assert selection.to_run_provenance().to_dict() == {
+    assert selection.to_run_provenance(
+        execution_mode="batch",
+        task_id="sha-it-004b",
+    ).to_dict() == {
         "run_origin": "resume",
         "delivery_origin": "primary",
+        "execution_mode": "batch",
+        "task_id": "sha-it-004b",
         "checkpoint_identity_key": artifacts.checkpoint.checkpoints[0].checkpoint_identity_key,
         "task_identity_key": artifacts.checkpoint.task_identity_key,
     }

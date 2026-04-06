@@ -71,6 +71,35 @@ For P3, `zephyr-core` may own only the minimum flow-agnostic vocabulary needed b
 But keep this package platform-neutral.
 Do not let `zephyr-core` become a dumping ground for ingest runtime mechanics.
 
+## P3 End-State Boundary Decisions
+After P3-M9, treat these as explicit repository decisions:
+
+Stable enough for `zephyr-core`:
+- `RunContext`
+- `RunMetaV1`
+- `RunProvenanceV1`
+- execution-mode vocabulary used across batch, worker, resume, and replay reporting
+- lifecycle / health contracts already shared by more than one runtime path
+
+Stable enough for P4 to depend on from `zephyr-core`:
+- shared run/provenance vocabulary
+- cross-package lifecycle and health contracts
+- versioning and error vocabulary already used by more than one real path
+
+Not ready for promotion yet:
+- queue backend protocols and backend implementations
+- lock provider protocols and backend implementations
+- delivery replay orchestration helpers
+- task-governance recovery actions
+- `it-stream` checkpoint / state / resume contracts
+
+Promotion bar at P3 end:
+- proven across more than one real execution context, and
+- not shaped by a single flow/backend/runtime implementation, and
+- versionable without importing ingest-local mechanics
+
+If a concept fails any of those tests, keep it local even if it looks reusable.
+
 ## Reading guidance
 When working in this package, start from:
 - `versioning.py`

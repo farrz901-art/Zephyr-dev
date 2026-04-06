@@ -9,7 +9,12 @@ from typing import Any, Protocol, cast
 import httpx
 
 from zephyr_core import ErrorCode
-from zephyr_core.contracts.v1.run_meta import RunOriginV1, RunProvenanceV1
+from zephyr_core.contracts.v1.run_meta import (
+    DeliveryOriginV1,
+    ExecutionModeV1,
+    RunOriginV1,
+    RunProvenanceV1,
+)
 from zephyr_ingest._internal.delivery_payload import (
     DeliveryPayloadV1,
     build_delivery_payload_v1_from_run_meta_dict,
@@ -38,6 +43,8 @@ def _run_meta_with_replay_provenance(*, run_meta: dict[str, Any]) -> dict[str, A
     run_origin_obj = provenance_payload.get("run_origin")
     checkpoint_identity_key_obj = provenance_payload.get("checkpoint_identity_key")
     task_identity_key_obj = provenance_payload.get("task_identity_key")
+    execution_mode_obj = provenance_payload.get("execution_mode")
+    task_id_obj = provenance_payload.get("task_id")
     run_origin: RunOriginV1 | None = None
     if run_origin_obj == "intake":
         run_origin = "intake"
@@ -47,9 +54,17 @@ def _run_meta_with_replay_provenance(*, run_meta: dict[str, Any]) -> dict[str, A
         run_origin = "redrive"
     elif run_origin_obj == "requeue":
         run_origin = "requeue"
+    execution_mode: ExecutionModeV1 | None = None
+    if execution_mode_obj == "batch":
+        execution_mode = "batch"
+    elif execution_mode_obj == "worker":
+        execution_mode = "worker"
+    delivery_origin: DeliveryOriginV1 = "replay"
     replay_provenance = RunProvenanceV1(
         run_origin=run_origin,
-        delivery_origin="replay",
+        delivery_origin=delivery_origin,
+        execution_mode=execution_mode,
+        task_id=task_id_obj if isinstance(task_id_obj, str) else None,
         checkpoint_identity_key=checkpoint_identity_key_obj
         if isinstance(checkpoint_identity_key_obj, str)
         else None,

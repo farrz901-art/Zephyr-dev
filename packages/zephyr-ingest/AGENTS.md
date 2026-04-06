@@ -13,12 +13,15 @@ It owns:
 It should coordinate flows, not hard-code one flow forever.
 
 ## Current architectural reality
-Today, parts of ingest still reflect an uns-stream-first execution path.
+After P3-M9, ingest is the flow-agnostic orchestration kernel.
 
-For P3, the highest-priority structural change is:
-- convert ingest into a flow-agnostic orchestration kernel
+The primary execution chain is now explicitly centered on:
+- `TaskV1 -> FlowProcessor -> Delivery`
 
-This is P3-M0 and should come before deeper worker/queue/runtime thickening.
+Both runner-style and worker-style execution should be shaped around that chain.
+Recovery-style execution (`resume`, `replay`, `requeue`/`redrive`-derived execution) should align
+to the same orchestration model where facts are shared, while keeping real semantic differences
+explicit.
 
 ## What ingest should own
 Keep these here:
@@ -30,12 +33,15 @@ Keep these here:
 - config/spec projection into runtime behavior
 - worker/service lifecycle wiring
 - observability event emission
+- queue / lock abstraction ownership and backend selection
+- task-governance inspection / recovery / metrics / provenance glue
 
 ## What ingest should NOT own
 Do not make ingest the home of:
 - unstructured backend quirks
 - airbyte-native protocol internals
 - platform-wide contract definitions that belong in `zephyr-core`
+- flow-local checkpoint/state contracts that are still proving themselves in `it-stream`
 
 And do not keep long-term direct dependencies on uns-specific execution paths in the orchestrator.
 
@@ -49,6 +55,34 @@ Desired end state for this phase slice:
 
 Do not overbuild.
 For P3-M0, prefer the smallest safe abstraction that removes uns-specific orchestration coupling.
+
+## P3 End-State Boundary Decisions
+Keep these explicit at P3 end:
+- `zephyr-ingest` owns orchestration/runtime/governance behavior
+- `it-stream` owns structured-flow-local checkpoint/state/identity/resume semantics
+- `zephyr-core` owns only stable cross-package contracts
+
+Do not promote ingest-local abstractions to `zephyr-core` only because they now have two
+implementations. Queue and lock protocols are still ingest-owned until their semantics stop being
+runtime-shaped.
+
+## P4 build-on decisions
+P4 should treat these ingest-local systems as stable enough to build on:
+- `TaskV1 -> FlowProcessor -> Delivery` as the primary execution chain
+- current task / queue / lock runtime boundaries
+- current delivery receipt / replay / idempotency discipline
+- current governance surfaces: inspection, recovery, metrics, provenance
+
+P4 should not casually re-open:
+- queue backend semantics
+- lock provider semantics
+- primary execution-chain ownership
+- delivery-path ownership
+
+Connector expansion guidance:
+- new sources should plug into existing task/orchestration/provenance discipline
+- new destinations should plug into the existing delivery pipeline, not bypass it
+- connector count is less important than preserving the shared orchestration and delivery model
 
 ## Change discipline
 Before editing:

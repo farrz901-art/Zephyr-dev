@@ -119,4 +119,9 @@ def test_runner_writes_batch_report(tmp_path: Path) -> None:
     assert calls[0][1].to_dict()["provenance"] == {
         "run_origin": "intake",
         "delivery_origin": "primary",
+        "execution_mode": "batch",
+        "task_id": calls[0][0],
+        "task_identity_key": (
+            '{"kind":"uns","pipeline_version":"p1","sha256":"' + calls[0][0] + '"}'
+        ),
     }

@@ -10,7 +10,7 @@ from zephyr_core.contracts import (  # noqa: E402
     ZephyrElement,
 )
 from zephyr_core.contracts.v1.document_ref import DocumentRef
-from zephyr_core.contracts.v1.run_meta import RunMetaV1
+from zephyr_core.contracts.v1.run_meta import ExecutionModeV1, RunMetaV1, RunProvenanceV1
 from zephyr_core.contracts.v2 import (
     HealthCheckKind,
     HealthCheckProvider,
@@ -37,6 +37,8 @@ __all__ = [
     "ErrorCode",
     "ZephyrError",
     "RunMetaV1",
+    "RunProvenanceV1",
+    "ExecutionModeV1",
     "PIPELINE_VERSION",
     "RUN_META_SCHEMA_VERSION",
     "DocumentRef",

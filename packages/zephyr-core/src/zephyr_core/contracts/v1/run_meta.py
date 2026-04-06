@@ -33,11 +33,14 @@ class ErrorInfoV1:
 
 RunOriginV1 = Literal["intake", "resume", "redrive", "requeue"]
 DeliveryOriginV1 = Literal["primary", "replay"]
+ExecutionModeV1 = Literal["batch", "worker"]
 
 
 class RunProvenanceV1Dict(TypedDict):
     run_origin: NotRequired[RunOriginV1]
     delivery_origin: NotRequired[DeliveryOriginV1]
+    execution_mode: NotRequired[ExecutionModeV1]
+    task_id: NotRequired[str]
     checkpoint_identity_key: NotRequired[str]
     task_identity_key: NotRequired[str]
 
@@ -46,6 +49,8 @@ class RunProvenanceV1Dict(TypedDict):
 class RunProvenanceV1:
     run_origin: RunOriginV1 | None = None
     delivery_origin: DeliveryOriginV1 | None = None
+    execution_mode: ExecutionModeV1 | None = None
+    task_id: str | None = None
     checkpoint_identity_key: str | None = None
     task_identity_key: str | None = None
 
@@ -55,6 +60,10 @@ class RunProvenanceV1:
             payload["run_origin"] = self.run_origin
         if self.delivery_origin is not None:
             payload["delivery_origin"] = self.delivery_origin
+        if self.execution_mode is not None:
+            payload["execution_mode"] = self.execution_mode
+        if self.task_id is not None:
+            payload["task_id"] = self.task_id
         if self.checkpoint_identity_key is not None:
             payload["checkpoint_identity_key"] = self.checkpoint_identity_key
         if self.task_identity_key is not None:

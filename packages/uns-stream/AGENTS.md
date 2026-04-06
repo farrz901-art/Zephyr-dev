@@ -49,6 +49,18 @@ The desired direction is:
 
 This package should provide a clean execution surface, not orchestrator policy.
 
+## Post-P3 boundary decisions
+At P3 end, keep these decisions explicit:
+- `uns-stream` remains the non-structured document flow
+- it should not absorb structured-data checkpoint/protocol semantics
+- it should not reassert itself as the hidden default execution model for all flows
+
+For P4:
+- preserve `uns` quality and contract discipline
+- expand `uns` only where the work is truly document-flow-specific
+- do not use `uns-stream` as a generic home for features that belong in shared orchestration or in
+  `it-stream`
+
 ## Reading guidance
 Start with:
 - `service.py`

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, TypedDict
 
+from zephyr_core.contracts.v1.run_meta import RunProvenanceV1
 from zephyr_ingest.spool_queue import (
     QueueRecoveryProvenanceV1,
     load_spool_record,
@@ -11,6 +12,7 @@ from zephyr_ingest.spool_queue import (
     spool_bucket_dir,
     write_spool_record,
 )
+from zephyr_ingest.task_idempotency import normalize_task_idempotency_key
 
 RecoverableSpoolBucket = Literal["poison", "inflight"]
 
@@ -44,6 +46,7 @@ class QueueRecoveryResultV1:
     failure_count: int
     orphan_count: int
     recorded_at_utc: str
+    task_identity_key: str | None = None
 
     def to_dict(self) -> QueueRecoveryResultDict:
         return {
@@ -59,6 +62,15 @@ class QueueRecoveryResultV1:
             "orphan_count": self.orphan_count,
             "recorded_at_utc": self.recorded_at_utc,
         }
+
+    def to_run_provenance(self) -> RunProvenanceV1:
+        return RunProvenanceV1(
+            run_origin="requeue",
+            delivery_origin="primary",
+            execution_mode="worker",
+            task_id=self.task_id,
+            task_identity_key=self.task_identity_key,
+        )
 
 
 def requeue_local_spool_task(
@@ -99,6 +111,9 @@ def requeue_local_spool_task(
     )
     write_spool_record(path=target_path, record=updated_record)
     source_path.unlink(missing_ok=True)
+    task_identity_key = None
+    if record.task.identity is not None:
+        task_identity_key = normalize_task_idempotency_key(record.task)
     return QueueRecoveryResultV1(
         root=str(resolved_root),
         task_id=record.task.task_id,
@@ -109,4 +124,5 @@ def requeue_local_spool_task(
         failure_count=record.governance.failure_count,
         orphan_count=record.governance.orphan_count,
         recorded_at_utc=recorded_at_utc,
+        task_identity_key=task_identity_key,
     )
