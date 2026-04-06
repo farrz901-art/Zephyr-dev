@@ -10,6 +10,7 @@ from zephyr_core.contracts.v2.lifecycle import Lifecycle, WorkerPhase
 from zephyr_ingest.health_server import HealthHttpServer, LifecycleHealthProvider
 from zephyr_ingest.obs.events import log_event
 from zephyr_ingest.obs.prom_export import build_worker_prom_families, render_prometheus_text
+from zephyr_ingest.queue_backend import QueueBackend, QueueBackendWorkSource, TaskHandler
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,22 @@ class WorkSource(Protocol):
 class IdleWorkSource:
     def poll(self) -> WorkItem | None:
         return None
+
+
+@dataclass(slots=True)
+class DrainingOnIdleWorkSource:
+    runtime: "WorkerRuntime"
+    delegate: WorkSource
+    _saw_work: bool = field(default=False, init=False)
+
+    def poll(self) -> WorkItem | None:
+        work = self.delegate.poll()
+        if work is None:
+            if self._saw_work:
+                self.runtime.request_draining()
+            return None
+        self._saw_work = True
+        return work
 
 
 @dataclass(slots=True)
@@ -147,12 +164,32 @@ def run_worker(
     ctx: RunContext,
     poll_interval_ms: int,
     work_source: WorkSource | None = None,
+    queue_backend: QueueBackend | None = None,
+    task_handler: TaskHandler | None = None,
+    drain_on_empty: bool = False,
     health_host: str | None = None,
     health_port: int | None = None,
     sleep_fn: Callable[[float], None] = time.sleep,
 ) -> int:
     runtime = WorkerRuntime(ctx=ctx, poll_interval_ms=poll_interval_ms)
-    source = IdleWorkSource() if work_source is None else work_source
+    if work_source is not None and (queue_backend is not None or task_handler is not None):
+        raise ValueError("work_source cannot be combined with queue_backend/task_handler")
+    if (queue_backend is None) != (task_handler is None):
+        raise ValueError("queue_backend and task_handler must be provided together")
+
+    if work_source is not None:
+        source = work_source
+    elif queue_backend is not None and task_handler is not None:
+        queue_source: WorkSource = QueueBackendWorkSource(
+            backend=queue_backend,
+            handler=task_handler,
+        )
+        if drain_on_empty:
+            source = DrainingOnIdleWorkSource(runtime=runtime, delegate=queue_source)
+        else:
+            source = queue_source
+    else:
+        source = IdleWorkSource()
 
     if health_host is not None and health_port is not None and health_port > 0:
         with HealthHttpServer(

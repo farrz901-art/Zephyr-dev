@@ -236,3 +236,141 @@ P3-M7：Observability
 P3-M8：K8s/Helm
 
 P3-M9：压测与故障演练
+
+
+P3调整：
+P3-M5：it-stream 最小真实闭环（Airbyte Protocol path）
+目标
+让第二条真实 flow 最小跑通，验证你前面做的 flow-agnostic 设计不是只为 uns 服务。
+
+为什么先做这个
+这是 P3 后半段最重要的事。
+如果长期只有 uns 是真实 flow，那么：
+
+FlowKind
+
+TaskV1
+
+QueueBackend
+
+worker/runtime
+
+delivery semantics
+这些抽象都还只在一条真实路径上被验证过。
+
+核心成果
+it-stream 包骨架
+
+最小 ItFlowProcessor
+
+最小 Airbyte message → Zephyr artifacts 闭环
+
+delivery payload 仍复用当前 Zephyr delivery path
+
+不求生产化，只求第二条真实路径跑通
+
+P3-M6：it-stream 的 State / Checkpoint 治理
+目标
+把 it-stream 从“能跑一趟”推进到“能断点续跑、可审计”的最小治理层。
+
+为什么放在 M6
+因为先要有 M5 的最小真实 flow，才能谈状态与 checkpoint。
+
+核心成果
+state artifacts
+
+checkpoint versioning
+
+window / cursor 与 task identity 协同
+
+最小 replay / resume 语义
+
+P3-M7：可运营性升级（任务治理 + 运维工具 + 指标）
+目标
+把现在的 queue/lock/poison/orphan 治理，从“止损型”推进到“可运营型”。
+
+为什么放在这里
+到 M7 时，uns 和 it 至少都有真实路径，worker/queue/lock 也已经够真实了，补运维能力最值钱。
+
+核心成果
+poison / orphan 检查工具
+
+re-drive / requeue 命令
+
+queue 深度 / poison 数 / orphan 恢复次数指标
+
+lock contention / stale recovery 指标
+
+任务失败摘要
+
+focused integration tests（Task -> Queue -> Worker -> Flow -> Delivery）
+
+P3-M8：第二真实 backend 验证点（queue 或 lock 至少再落一个）
+目标
+让 queue 或 lock 至少有第二个真实 backend 出现，从而验证哪些 abstraction 真该存在，哪些只是当前单机实现的局部最优。
+
+为什么重要
+你和 Codex 都提到了：
+很多 contract 现在留在 ingest 是对的，因为还没出现第二个 backend。
+那就应该在 P3 后段找机会验证一次。
+
+核心成果
+二选一或两者择其轻：
+
+第二个 queue backend 的最小真实实现
+
+第二个 lock backend 的最小真实实现
+
+这里不一定非要做得很大，只要形成“第二真实 backend 验证点”就够。
+
+P3-M9：统一执行链收束（runner 世界 × worker 世界）
+目标
+把现在的“双轨感”真正收束，让：
+
+batch runner
+
+task queue worker
+
+在更高层共享同一条主执行链。
+
+为什么放在后面
+因为只有当：
+
+第二条真实 flow 存在
+
+queue/lock/worker 更真实
+
+运维工具开始出现
+你才看得清最值得统一的那一层在哪里。
+
+核心成果
+TaskV1 -> FlowProcessor -> Delivery 成为更明确的主链
+
+batch / worker 共享更多执行语义
+
+report / DLQ / metrics 一致性提升
+
+减少“双入口双治理”的长期维护成本
+
+P3-M10：P3 收官与 P4 预备
+目标
+在进入 P4 前做一次正式的架构收束和升级评估。
+
+核心成果
+哪些 contract 该提升到 zephyr-core
+
+哪些仍留在 zephyr-ingest
+
+connector 扩展策略正式确定
+
+uns / it 两条 stream 的边界正式固化
+
+P4 的真实目标确定：
+
+connector 扩展
+
+第二 backend 深化
+
+企业级运营面增强
+
+还是 API/service 化进一步深入

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from http.client import HTTPConnection
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -10,8 +11,18 @@ from zephyr_core import RunContext
 from zephyr_core.contracts.v2.lifecycle import WorkerPhase
 from zephyr_ingest import cli
 from zephyr_ingest.health_server import HealthHttpServer, LifecycleHealthProvider
+from zephyr_ingest.lock_provider_factory import (
+    LocalLockProviderKind,
+    build_local_lock_provider,
+)
 from zephyr_ingest.obs.prom_export import build_worker_prom_families, render_prometheus_text
-from zephyr_ingest.worker_runtime import WorkerRuntime
+from zephyr_ingest.queue_backend import QueueBackendWorkSource
+from zephyr_ingest.queue_backend_factory import (
+    LocalQueueBackendKind,
+    build_local_queue_backend,
+)
+from zephyr_ingest.tests.test_queue_backend import make_task
+from zephyr_ingest.worker_runtime import WorkerRuntime, run_worker
 
 
 def test_cli_worker_invokes_runtime(
@@ -202,3 +213,121 @@ def test_health_server_exposes_metrics_alongside_health_endpoints() -> None:
         assert healthz.getheader("Content-Type") == "application/json; charset=utf-8"
         assert '"kind": "liveness"' in healthz_body
         conn.close()
+
+
+def test_run_worker_executes_spool_queue_backend_when_selected(tmp_path: Path) -> None:
+    backend = build_local_queue_backend(kind="spool", root=tmp_path / "spool")
+    backend.enqueue(make_task("task-worker-spool"))
+    handled: list[str] = []
+
+    rc = run_worker(
+        ctx=RunContext.new(
+            pipeline_version="p-worker",
+            run_id="r-worker-spool",
+            timestamp_utc="2026-04-04T00:00:00Z",
+        ),
+        poll_interval_ms=1,
+        queue_backend=backend,
+        task_handler=lambda task: handled.append(task.task_id),
+        drain_on_empty=True,
+        sleep_fn=lambda _: None,
+    )
+
+    assert rc == 0
+    assert handled == ["task-worker-spool"]
+
+
+def test_run_worker_executes_sqlite_queue_backend_when_selected(tmp_path: Path) -> None:
+    backend = build_local_queue_backend(kind="sqlite", root=tmp_path / "sqlite")
+    backend.enqueue(make_task("task-worker-sqlite", kind="it"))
+    handled: list[str] = []
+
+    rc = run_worker(
+        ctx=RunContext.new(
+            pipeline_version="p-worker",
+            run_id="r-worker-sqlite",
+            timestamp_utc="2026-04-04T00:00:00Z",
+        ),
+        poll_interval_ms=1,
+        queue_backend=backend,
+        task_handler=lambda task: handled.append(task.task_id),
+        drain_on_empty=True,
+        sleep_fn=lambda _: None,
+    )
+
+    assert rc == 0
+    assert handled == ["task-worker-sqlite"]
+
+
+def test_run_worker_rejects_partial_queue_backend_wiring(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="provided together"):
+        run_worker(
+            ctx=RunContext.new(
+                pipeline_version="p-worker",
+                run_id="r-worker-invalid",
+                timestamp_utc="2026-04-04T00:00:00Z",
+            ),
+            poll_interval_ms=1,
+            queue_backend=build_local_queue_backend(kind="sqlite", root=tmp_path / "sqlite"),
+            sleep_fn=lambda _: None,
+        )
+
+
+@pytest.mark.parametrize(
+    ("queue_kind", "lock_kind"),
+    [
+        ("spool", "file"),
+        ("sqlite", "sqlite"),
+    ],
+)
+def test_runtime_supports_supported_queue_and_lock_backend_pairs(
+    tmp_path: Path,
+    queue_kind: LocalQueueBackendKind,
+    lock_kind: LocalLockProviderKind,
+) -> None:
+    queue_backend = build_local_queue_backend(
+        kind=queue_kind,
+        root=tmp_path / f"{queue_kind}-queue",
+    )
+    lock_provider = build_local_lock_provider(
+        kind=lock_kind,
+        root=tmp_path / f"{lock_kind}-locks",
+        stale_after_s=10,
+    )
+    queue_backend.enqueue(make_task(f"task-{queue_kind}-{lock_kind}", kind="it"))
+    handled: list[str] = []
+
+    runtime = WorkerRuntime(
+        ctx=RunContext.new(
+            pipeline_version="p-worker",
+            run_id=f"r-{queue_kind}-{lock_kind}",
+            timestamp_utc="2026-04-04T00:00:00Z",
+        ),
+        poll_interval_ms=1,
+    )
+
+    def handle_task(task: Any) -> None:
+        handled.append(task.task_id)
+        runtime.request_draining()
+
+    source = QueueBackendWorkSource(
+        backend=queue_backend,
+        handler=handle_task,
+        lock_provider=lock_provider,
+        lock_owner="worker-pair",
+    )
+
+    rc = runtime.run(work_source=source, sleep_fn=lambda _: None)
+
+    assert rc == 0
+    assert runtime.phase == WorkerPhase.STOPPED
+    assert handled == [f"task-{queue_kind}-{lock_kind}"]
+
+    text = render_prometheus_text(
+        families=build_worker_prom_families(ctx=runtime.ctx, lifecycle=runtime, work_source=source)
+    )
+    assert 'zephyr_ingest_lock_stale_recoveries_total{pipeline_version="p-worker"} 0.0' in text
+    if queue_kind == "spool":
+        assert 'zephyr_ingest_queue_tasks{pipeline_version="p-worker",bucket="done"} 1.0' in text
+    else:
+        assert "zephyr_ingest_queue_tasks" not in text
