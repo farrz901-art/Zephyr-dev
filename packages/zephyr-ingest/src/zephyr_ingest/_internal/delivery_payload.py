@@ -42,7 +42,7 @@ def build_artifacts_paths_for_run_meta_v1(
     paths = build_artifacts_paths_v1(out_root=out_root, sha256=sha256)
     if _is_it_stream_run_meta(run_meta=run_meta):
         paths["records_path"] = str(((out_root / sha256) / "records.jsonl").resolve())
-        paths["state_path"] = str(((out_root / sha256) / "state.jsonl").resolve())
+        paths["state_path"] = str(((out_root / sha256) / "checkpoint.json").resolve())
         paths["logs_path"] = str(((out_root / sha256) / "logs.jsonl").resolve())
     return paths
 

@@ -59,8 +59,8 @@ def test_build_delivery_payload_v1_adds_it_artifact_paths_for_it_stream(tmp_path
     assert records_path.endswith("out/it123/records.jsonl") or records_path.endswith(
         "out\\it123\\records.jsonl"
     )
-    assert state_path.endswith("out/it123/state.jsonl") or state_path.endswith(
-        "out\\it123\\state.jsonl"
+    assert state_path.endswith("out/it123/checkpoint.json") or state_path.endswith(
+        "out\\it123\\checkpoint.json"
     )
     assert logs_path.endswith("out/it123/logs.jsonl") or logs_path.endswith(
         "out\\it123\\logs.jsonl"

@@ -39,7 +39,7 @@ class ItInputDocumentV1:
 
 
 @dataclass(frozen=True, slots=True)
-class _ItNormalizedInputDocumentV1:
+class ItNormalizedInputDocumentV1:
     stream: str | None
     records: list[ItRecordV1]
     states: list[ItStateV1]
@@ -56,7 +56,7 @@ def _read_object_dict(value: object, *, error_message: str) -> dict[str, object]
     return cast("dict[str, object]", value)
 
 
-def _load_legacy_input_document(raw: dict[str, object]) -> _ItNormalizedInputDocumentV1:
+def _load_legacy_input_document(raw: dict[str, object]) -> ItNormalizedInputDocumentV1:
     stream = raw.get("stream")
     records_raw = raw.get("records")
     if not isinstance(stream, str) or not stream:
@@ -77,10 +77,10 @@ def _load_legacy_input_document(raw: dict[str, object]) -> _ItNormalizedInputDoc
             raise ValueError("it-stream record field 'emitted_at' must be a string")
         records.append(ItRecordV1(data=data, emitted_at=emitted_at))
 
-    return _ItNormalizedInputDocumentV1(stream=stream, records=records, states=[], logs=[])
+    return ItNormalizedInputDocumentV1(stream=stream, records=records, states=[], logs=[])
 
 
-def _load_message_input_document(raw: dict[str, object]) -> _ItNormalizedInputDocumentV1:
+def _load_message_input_document(raw: dict[str, object]) -> ItNormalizedInputDocumentV1:
     messages_raw = raw.get("messages")
     if not isinstance(messages_raw, list):
         raise ValueError("it-stream input field 'messages' must be a list")
@@ -157,10 +157,10 @@ def _load_message_input_document(raw: dict[str, object]) -> _ItNormalizedInputDo
 
         raise ValueError(f"Unsupported it-stream message type: {msg_type!r}")
 
-    return _ItNormalizedInputDocumentV1(stream=stream, records=records, states=states, logs=logs)
+    return ItNormalizedInputDocumentV1(stream=stream, records=records, states=states, logs=logs)
 
 
-def _load_input_document(path: Path) -> _ItNormalizedInputDocumentV1:
+def load_input_document(path: Path) -> ItNormalizedInputDocumentV1:
     raw = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(raw, dict):
         raise ValueError("it-stream input must be a JSON object")
@@ -171,17 +171,14 @@ def _load_input_document(path: Path) -> _ItNormalizedInputDocumentV1:
     return _load_legacy_input_document(typed_raw)
 
 
-def process_file(
+def partition_input_document(
     *,
+    doc: ItNormalizedInputDocumentV1,
     filename: str,
-    strategy: PartitionStrategy = PartitionStrategy.AUTO,
+    strategy: PartitionStrategy,
     sha256: str,
-    size_bytes: int | None = None,
+    size_bytes: int,
 ) -> PartitionResult:
-    path = Path(filename)
-    doc = _load_input_document(path)
-    size = size_bytes if size_bytes is not None else path.stat().st_size
-
     elements: list[ZephyrElement] = []
     texts: list[str] = []
     for index, record in enumerate(doc.records):
@@ -238,10 +235,10 @@ def process_file(
 
     return PartitionResult(
         document=DocumentMetadata(
-            filename=path.name,
+            filename=filename,
             mime_type="application/json",
             sha256=sha256,
-            size_bytes=size,
+            size_bytes=size_bytes,
             created_at_utc=datetime.now(timezone.utc).isoformat(),
         ),
         engine=EngineInfo(
@@ -253,4 +250,23 @@ def process_file(
         elements=elements,
         normalized_text="\n".join(texts),
         warnings=[],
+    )
+
+
+def process_file(
+    *,
+    filename: str,
+    strategy: PartitionStrategy = PartitionStrategy.AUTO,
+    sha256: str,
+    size_bytes: int | None = None,
+) -> PartitionResult:
+    path = Path(filename)
+    doc = load_input_document(path)
+    size = size_bytes if size_bytes is not None else path.stat().st_size
+    return partition_input_document(
+        doc=doc,
+        filename=path.name,
+        strategy=strategy,
+        sha256=sha256,
+        size_bytes=size,
     )

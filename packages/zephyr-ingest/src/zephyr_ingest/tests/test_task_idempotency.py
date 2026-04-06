@@ -160,6 +160,47 @@ def test_it_task_idempotency_normalization_is_deterministic() -> None:
     assert first == '{"kind":"it","pipeline_version":"p-it","sha256":"xyz789"}'
 
 
+def test_equivalent_it_tasks_share_normalized_key() -> None:
+    left = _make_it_task(
+        task_id="task-it-001",
+        pipeline_version="p-it",
+        sha256="xyz789",
+        uri="s3://bucket/one.json",
+    )
+    right = _make_it_task(
+        task_id="task-it-002",
+        pipeline_version="p-it",
+        sha256="xyz789",
+        uri="s3://bucket/two.json",
+    )
+
+    assert normalize_task_idempotency_key(left) == normalize_task_idempotency_key(right)
+
+
+def test_non_equivalent_it_tasks_produce_different_keys() -> None:
+    left = _make_it_task(
+        task_id="task-it-001",
+        pipeline_version="p-it",
+        sha256="xyz789",
+        uri="s3://bucket/object.json",
+    )
+    right = _make_it_task(
+        task_id="task-it-002",
+        pipeline_version="p-it-next",
+        sha256="xyz789",
+        uri="s3://bucket/object.json",
+    )
+    third = _make_it_task(
+        task_id="task-it-003",
+        pipeline_version="p-it",
+        sha256="xyz999",
+        uri="s3://bucket/object.json",
+    )
+
+    assert normalize_task_idempotency_key(left) != normalize_task_idempotency_key(right)
+    assert normalize_task_idempotency_key(left) != normalize_task_idempotency_key(third)
+
+
 def test_it_task_normalization_requires_identity() -> None:
     task = TaskV1(
         task_id="task-it-001",

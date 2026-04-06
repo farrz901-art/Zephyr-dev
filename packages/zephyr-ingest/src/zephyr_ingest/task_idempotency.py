@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 
+from it_stream.identity import ItTaskIdentityV1, normalize_it_task_identity_key
 from zephyr_ingest.task_v1 import TaskIdentityV1, TaskV1
 
 
@@ -18,14 +19,11 @@ def normalize_uns_task_idempotency_key(*, identity: TaskIdentityV1) -> str:
 
 
 def normalize_it_task_idempotency_key(*, identity: TaskIdentityV1) -> str:
-    return json.dumps(
-        {
-            "kind": "it",
-            "pipeline_version": identity.pipeline_version,
-            "sha256": identity.sha256,
-        },
-        sort_keys=True,
-        separators=(",", ":"),
+    return normalize_it_task_identity_key(
+        identity=ItTaskIdentityV1(
+            pipeline_version=identity.pipeline_version,
+            sha256=identity.sha256,
+        )
     )
 
 

@@ -221,10 +221,18 @@ def test_runner_routes_to_it_flow_kind(tmp_path: Path) -> None:
     # 取第一个目录作为我们的目标
     out_dir = output_subdirs[0]
     run_meta = json.loads((out_dir / "run_meta.json").read_text(encoding="utf-8"))
+    checkpoint = json.loads((out_dir / "checkpoint.json").read_text(encoding="utf-8"))
     assert run_meta["engine"]["name"] == "it-stream"
     assert (out_dir / "records.jsonl").read_text(encoding="utf-8") == (
         '{"data":{"amount":12,"order_id":"o-1"},"emitted_at":null,"record_index":0,"stream":"orders"}'
     )
+    assert checkpoint["flow_kind"] == "it"
+    assert checkpoint["task_identity_key"] == (
+        '{"kind":"it","pipeline_version":"p-test","sha256":"'
+        + run_meta["document"]["sha256"]
+        + '"}'
+    )
+    assert checkpoint["checkpoints"] == []
 
 
 def json_dumps_messages(messages: list[dict[str, object]]) -> str:

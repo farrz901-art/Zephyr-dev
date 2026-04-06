@@ -1,13 +1,35 @@
-from it_stream.artifacts import ItArtifactsV1, build_it_artifacts, dump_it_artifacts
+from it_stream.artifacts import (
+    ItArtifactsV1,
+    ItCheckpointEntryV1,
+    ItCheckpointV1,
+    build_it_artifacts,
+    dump_it_artifacts,
+)
+from it_stream.identity import (
+    ItCheckpointIdentityV1,
+    ItTaskIdentityV1,
+    normalize_it_checkpoint_identity_key,
+    normalize_it_task_identity_key,
+)
+from it_stream.resume import ItResumeSelectionV1, load_it_resume_selection, resume_file
 from it_stream.service import ItInputDocumentV1, ItLogV1, ItRecordV1, ItStateV1, process_file
 
 __all__ = [
     "ItArtifactsV1",
+    "ItCheckpointIdentityV1",
+    "ItCheckpointEntryV1",
+    "ItCheckpointV1",
     "ItInputDocumentV1",
     "ItLogV1",
     "ItRecordV1",
     "ItStateV1",
+    "ItTaskIdentityV1",
     "build_it_artifacts",
     "dump_it_artifacts",
+    "ItResumeSelectionV1",
+    "load_it_resume_selection",
+    "normalize_it_checkpoint_identity_key",
+    "normalize_it_task_identity_key",
     "process_file",
+    "resume_file",
 ]

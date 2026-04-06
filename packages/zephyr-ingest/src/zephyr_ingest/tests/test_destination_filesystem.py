@@ -141,9 +141,23 @@ def test_filesystem_destination_writes_it_stream_artifacts(tmp_path: Path) -> No
     assert (out_dir / "records.jsonl").read_text(encoding="utf-8") == (
         '{"data":{"id":1,"name":"Ada"},"emitted_at":null,"record_index":0,"stream":"customers"}'
     )
-    assert (out_dir / "state.jsonl").read_text(encoding="utf-8") == (
-        '{"data":{"cursor":"2026-01-01"},"state_index":0}'
+    checkpoint = json.loads((out_dir / "checkpoint.json").read_text(encoding="utf-8"))
+    assert checkpoint["flow_kind"] == "it"
+    assert checkpoint["schema_version"] == 1
+    assert checkpoint["stream"] == "customers"
+    assert checkpoint["task_identity_key"] == (
+        '{"kind":"it","pipeline_version":"p-it","sha256":"abc-it"}'
     )
+    assert checkpoint["checkpoints"] == [
+        {
+            "checkpoint_identity_key": (
+                '{"kind":"it","progress":{"cursor":"2026-01-01"},'
+                '"stream":"customers","task":{"kind":"it","pipeline_version":"p-it","sha256":"abc-it"}}'
+            ),
+            "checkpoint_index": 0,
+            "progress": {"cursor": "2026-01-01"},
+        }
+    ]
     assert (out_dir / "logs.jsonl").read_text(encoding="utf-8") == (
         '{"level":"INFO","log_index":0,"message":"completed sync"}'
     )

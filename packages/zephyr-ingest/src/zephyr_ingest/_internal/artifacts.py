@@ -33,7 +33,11 @@ def dump_partition_artifacts(
         _write_json(out_dir / "elements.json", [asdict(cast(Any, e)) for e in result.elements])
         _write_text(out_dir / "normalized.txt", result.normalized_text)
         if result.engine.name == "it-stream":
-            dump_it_artifacts(out_dir=out_dir, result=result)
+            dump_it_artifacts(
+                out_dir=out_dir,
+                result=result,
+                pipeline_version=meta.pipeline_version,
+            )
 
     _write_json(out_dir / "run_meta.json", meta.to_dict())
 
