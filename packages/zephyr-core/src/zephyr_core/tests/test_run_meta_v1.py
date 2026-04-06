@@ -4,7 +4,12 @@ import json
 
 from zephyr_core.contracts.v1.enums import RunOutcome
 from zephyr_core.contracts.v1.models import DocumentMetadata
-from zephyr_core.contracts.v1.run_meta import EngineMetaV1, MetricsV1, RunMetaV1
+from zephyr_core.contracts.v1.run_meta import (
+    EngineMetaV1,
+    MetricsV1,
+    RunMetaV1,
+    RunProvenanceV1,
+)
 from zephyr_core.versioning import RUN_META_SCHEMA_VERSION
 
 
@@ -24,6 +29,7 @@ def test_run_meta_v1_is_json_serializable_and_has_keys() -> None:
         engine=EngineMetaV1(name="unstructured", backend="local", version="0.0.0", strategy="auto"),
         metrics=MetricsV1(duration_ms=1, elements_count=2, normalized_text_len=3),
         warnings=[],
+        provenance=RunProvenanceV1(run_origin="intake", delivery_origin="primary"),
     )
 
     d = meta.to_dict()
@@ -35,3 +41,7 @@ def test_run_meta_v1_is_json_serializable_and_has_keys() -> None:
     assert obj["run_id"] == "r1"
     assert obj["document"]["sha256"] == "abc"
     assert "metrics" in obj
+    assert obj["provenance"] == {
+        "run_origin": "intake",
+        "delivery_origin": "primary",
+    }

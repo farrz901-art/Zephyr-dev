@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
@@ -46,12 +46,21 @@ class TaskHandler(Protocol):
 
 
 @dataclass(frozen=True, slots=True)
+class QueueWorkSourceMetricsV1:
+    lock_contention_total: int
+
+
+@dataclass(frozen=True, slots=True)
 class QueueBackendWorkSource:
     backend: QueueBackend
     handler: TaskHandler
     recover_inflight_after_s: int | None = None
     lock_provider: LockProvider | None = None
     lock_owner: str = "worker"
+    _lock_contention_total: int = field(default=0, init=False, repr=False)
+
+    def work_source_metrics_snapshot(self) -> QueueWorkSourceMetricsV1:
+        return QueueWorkSourceMetricsV1(lock_contention_total=self._lock_contention_total)
 
     def poll(self) -> QueueWorkItem | None:
         if self.recover_inflight_after_s is not None:
@@ -67,6 +76,11 @@ class QueueBackendWorkSource:
                 owner=self.lock_owner,
             )
             if acquired_lock is None:
+                object.__setattr__(
+                    self,
+                    "_lock_contention_total",
+                    self._lock_contention_total + 1,
+                )
                 self.backend.requeue_orphaned(claimed)
                 return None
         return QueueWorkItem(

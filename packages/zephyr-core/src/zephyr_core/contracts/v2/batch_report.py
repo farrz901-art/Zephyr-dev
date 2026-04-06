@@ -35,6 +35,8 @@ class DeliveryCountersV1(TypedDict):
 
 
 DeliveryByDestinationV1: TypeAlias = dict[str, DeliveryCountersV1]
+DeliveryFailureKindsV1: TypeAlias = dict[str, int]
+DeliveryFailureKindsByDestinationV1: TypeAlias = dict[str, DeliveryFailureKindsV1]
 
 
 class DeliveryV1(TypedDict):
@@ -48,6 +50,7 @@ class DeliveryV1(TypedDict):
     dlq_dir: str
     by_destination: DeliveryByDestinationV1
     fanout_children_by_destination: DeliveryByDestinationV1
+    failure_kinds_by_destination: NotRequired[DeliveryFailureKindsByDestinationV1]
 
 
 class RetryV1(TypedDict):

@@ -7,7 +7,10 @@ from typing import cast
 
 from zephyr_core import RunContext
 from zephyr_core.contracts.v2.lifecycle import Lifecycle
+from zephyr_ingest.lock_provider import SupportsLockMetricsSnapshot
 from zephyr_ingest.obs.batch_report_v1 import BATCH_REPORT_SCHEMA_VERSION, BatchReportV1
+from zephyr_ingest.queue_backend import QueueBackendWorkSource
+from zephyr_ingest.spool_queue import SupportsQueueMetricsSnapshot
 
 
 def _escape_label_value(v: str) -> str:
@@ -234,6 +237,30 @@ def build_prom_families(*, report: BatchReportV1) -> list[PromMetricFamily]:
                     fail_samples,
                 )
 
+        failure_kinds_obj = delivery.get("failure_kinds_by_destination")
+        if failure_kinds_obj:
+            failure_kind_samples: list[PromSample] = []
+            for destination, counts in failure_kinds_obj.items():
+                for failure_kind_obj, count_obj in counts.items():
+                    failure_kind_samples.append(
+                        PromSample(
+                            "zephyr_ingest_run_delivery_failure_kind_total",
+                            float(count_obj),
+                            {
+                                **base_labels,
+                                "destination": destination,
+                                "failure_kind": failure_kind_obj,
+                            },
+                        )
+                    )
+
+            if failure_kind_samples:
+                add_gauge_family(
+                    "zephyr_ingest_run_delivery_failure_kind_total",
+                    "Delivery failures in the latest run by destination and stable failure kind.",
+                    failure_kind_samples,
+                )
+
     # doc duration + stage durations (seconds)
     durations = report.get("durations_ms")
     if durations:
@@ -294,11 +321,12 @@ def build_worker_prom_families(
     *,
     ctx: RunContext,
     lifecycle: Lifecycle,
+    work_source: object | None = None,
 ) -> list[PromMetricFamily]:
     phase = lifecycle.phase.value
     labels = {"pipeline_version": ctx.pipeline_version}
 
-    return [
+    families = [
         PromMetricFamily(
             name="zephyr_ingest_worker_info",
             help="Zephyr ingest worker info (1 while the worker process is alive).",
@@ -318,6 +346,110 @@ def build_worker_prom_families(
             ],
         ),
     ]
+
+    if not isinstance(work_source, QueueBackendWorkSource):
+        return families
+
+    backend = work_source.backend
+    if isinstance(backend, SupportsQueueMetricsSnapshot):
+        queue_snapshot = backend.queue_metrics_snapshot()
+        families.append(
+            PromMetricFamily(
+                name="zephyr_ingest_queue_tasks",
+                help="Current queue task counts by bucket.",
+                mtype="gauge",
+                samples=[
+                    PromSample(
+                        "zephyr_ingest_queue_tasks",
+                        float(value),
+                        {**labels, "bucket": bucket},
+                    )
+                    for bucket, value in (
+                        ("pending", queue_snapshot.pending),
+                        ("inflight", queue_snapshot.inflight),
+                        ("done", queue_snapshot.done),
+                        ("failed", queue_snapshot.failed),
+                        ("poison", queue_snapshot.poison),
+                    )
+                ],
+            )
+        )
+        families.extend(
+            [
+                PromMetricFamily(
+                    name="zephyr_ingest_queue_poison_transitions_total",
+                    help="Cumulative queue transitions into poison state.",
+                    mtype="counter",
+                    samples=[
+                        PromSample(
+                            "zephyr_ingest_queue_poison_transitions_total",
+                            float(queue_snapshot.poison_transition_total),
+                            labels,
+                        )
+                    ],
+                ),
+                PromMetricFamily(
+                    name="zephyr_ingest_queue_orphan_requeues_total",
+                    help="Cumulative orphan-driven queue requeues back to pending.",
+                    mtype="counter",
+                    samples=[
+                        PromSample(
+                            "zephyr_ingest_queue_orphan_requeues_total",
+                            float(queue_snapshot.orphan_requeue_total),
+                            labels,
+                        )
+                    ],
+                ),
+                PromMetricFamily(
+                    name="zephyr_ingest_queue_stale_inflight_recoveries_total",
+                    help="Cumulative stale inflight task recoveries.",
+                    mtype="counter",
+                    samples=[
+                        PromSample(
+                            "zephyr_ingest_queue_stale_inflight_recoveries_total",
+                            float(queue_snapshot.stale_inflight_recovery_total),
+                            labels,
+                        )
+                    ],
+                ),
+            ]
+        )
+
+    source_snapshot = work_source.work_source_metrics_snapshot()
+    families.append(
+        PromMetricFamily(
+            name="zephyr_ingest_queue_lock_contention_total",
+            help="Cumulative queue lock-contention requeues.",
+            mtype="counter",
+            samples=[
+                PromSample(
+                    "zephyr_ingest_queue_lock_contention_total",
+                    float(source_snapshot.lock_contention_total),
+                    labels,
+                )
+            ],
+        )
+    )
+
+    lock_provider = work_source.lock_provider
+    if lock_provider is not None and isinstance(lock_provider, SupportsLockMetricsSnapshot):
+        lock_snapshot = lock_provider.lock_metrics_snapshot()
+        families.append(
+            PromMetricFamily(
+                name="zephyr_ingest_lock_stale_recoveries_total",
+                help="Cumulative stale lock recoveries performed by the lock provider.",
+                mtype="counter",
+                samples=[
+                    PromSample(
+                        "zephyr_ingest_lock_stale_recoveries_total",
+                        float(lock_snapshot.stale_recovery_total),
+                        labels,
+                    )
+                ],
+            )
+        )
+
+    return families
 
 
 def render_prometheus_text(*, families: list[PromMetricFamily]) -> str:

@@ -5,9 +5,10 @@ import os
 import time
 import uuid
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import TypedDict, cast
+from typing import Literal, NotRequired, Protocol, TypedDict, cast, runtime_checkable
 
 from zephyr_ingest.queue_backend import ClaimedTask, QueueBackendWorkSource, QueueWorkItem
 from zephyr_ingest.task_v1 import TaskV1
@@ -21,6 +22,76 @@ class TaskGovernanceV1Dict(TypedDict):
 class SpoolTaskRecordDict(TypedDict):
     task: dict[str, object]
     governance: TaskGovernanceV1Dict
+    provenance: NotRequired[list["QueueRecoveryProvenanceV1Dict"]]
+
+
+SpoolBucket = Literal["pending", "inflight", "done", "failed", "poison"]
+
+
+@dataclass(frozen=True, slots=True)
+class QueueMetricsSnapshotV1:
+    pending: int
+    inflight: int
+    done: int
+    failed: int
+    poison: int
+    poison_transition_total: int
+    orphan_requeue_total: int
+    stale_inflight_recovery_total: int
+
+
+@runtime_checkable
+class SupportsQueueMetricsSnapshot(Protocol):
+    def queue_metrics_snapshot(self) -> QueueMetricsSnapshotV1: ...
+
+
+class QueueRecoveryProvenanceV1Dict(TypedDict):
+    action: Literal["requeue"]
+    source_bucket: Literal["poison", "inflight"]
+    target_bucket: Literal["pending"]
+    recorded_at_utc: str
+
+
+@dataclass(frozen=True, slots=True)
+class QueueRecoveryProvenanceV1:
+    action: Literal["requeue"]
+    source_bucket: Literal["poison", "inflight"]
+    target_bucket: Literal["pending"]
+    recorded_at_utc: str
+
+    def to_dict(self) -> QueueRecoveryProvenanceV1Dict:
+        return {
+            "action": self.action,
+            "source_bucket": self.source_bucket,
+            "target_bucket": self.target_bucket,
+            "recorded_at_utc": self.recorded_at_utc,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, object]) -> QueueRecoveryProvenanceV1:
+        action = data.get("action")
+        source_bucket = data.get("source_bucket")
+        target_bucket = data.get("target_bucket")
+        recorded_at_utc = data.get("recorded_at_utc")
+        if action != "requeue":
+            raise ValueError("spool provenance field 'action' must be 'requeue'")
+        normalized_source_bucket: Literal["poison", "inflight"]
+        if source_bucket == "poison":
+            normalized_source_bucket = "poison"
+        elif source_bucket == "inflight":
+            normalized_source_bucket = "inflight"
+        else:
+            raise ValueError("spool provenance field 'source_bucket' must be recoverable")
+        if target_bucket != "pending":
+            raise ValueError("spool provenance field 'target_bucket' must be 'pending'")
+        if not isinstance(recorded_at_utc, str) or not recorded_at_utc:
+            raise ValueError("spool provenance field 'recorded_at_utc' must be a non-empty string")
+        return cls(
+            action="requeue",
+            source_bucket=normalized_source_bucket,
+            target_bucket="pending",
+            recorded_at_utc=recorded_at_utc,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,12 +110,16 @@ class TaskGovernanceV1:
 class SpoolTaskRecord:
     task: TaskV1
     governance: TaskGovernanceV1 = TaskGovernanceV1()
+    provenance: tuple[QueueRecoveryProvenanceV1, ...] = ()
 
     def to_dict(self) -> SpoolTaskRecordDict:
-        return {
+        payload: SpoolTaskRecordDict = {
             "task": cast("dict[str, object]", self.task.to_dict()),
             "governance": self.governance.to_dict(),
         }
+        if self.provenance:
+            payload["provenance"] = [entry.to_dict() for entry in self.provenance]
+        return payload
 
 
 def _load_record(path: Path) -> SpoolTaskRecord:
@@ -73,12 +148,24 @@ def _load_record(path: Path) -> SpoolTaskRecord:
                 key="orphan_count",
                 default=0,
             )
+        provenance_obj = raw.get("provenance")
+        provenance: tuple[QueueRecoveryProvenanceV1, ...] = ()
+        if provenance_obj is not None:
+            if not isinstance(provenance_obj, list):
+                raise TypeError(f"Spool record field 'provenance' must be a list: {path}")
+            typed_provenance_obj = cast("list[object]", provenance_obj)
+            provenance = tuple(
+                QueueRecoveryProvenanceV1.from_dict(cast("Mapping[str, object]", item))
+                for item in typed_provenance_obj
+                if isinstance(item, Mapping)
+            )
         return SpoolTaskRecord(
             task=TaskV1.from_dict(cast("dict[str, object]", task_obj)),
             governance=TaskGovernanceV1(
                 failure_count=failure_count,
                 orphan_count=orphan_count,
             ),
+            provenance=provenance,
         )
 
     return SpoolTaskRecord(task=TaskV1.from_dict(raw))
@@ -86,6 +173,36 @@ def _load_record(path: Path) -> SpoolTaskRecord:
 
 def _load_task(path: Path) -> TaskV1:
     return _load_record(path).task
+
+
+def load_spool_record(path: Path) -> SpoolTaskRecord:
+    return _load_record(path)
+
+
+def write_spool_record(*, path: Path, record: SpoolTaskRecord) -> None:
+    _write_json_atomic(path=path, data=record.to_dict())
+
+
+def spool_bucket_dir(*, root: Path, bucket: SpoolBucket) -> Path:
+    return root / bucket
+
+
+def list_spool_bucket_paths(*, root: Path, bucket: SpoolBucket) -> list[Path]:
+    bucket_root = spool_bucket_dir(root=root, bucket=bucket)
+    if not bucket_root.exists():
+        return []
+    return sorted_spool_task_files(bucket_root)
+
+
+def sorted_spool_task_files(root: Path) -> list[Path]:
+    return sorted(
+        [path for path in root.glob("*.json") if path.is_file()],
+        key=lambda path: (path.stat().st_mtime_ns, path.name),
+    )
+
+
+def now_utc_isoformat() -> str:
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
 def _read_non_bool_int(*, data: Mapping[str, object], key: str, default: int) -> int:
@@ -110,6 +227,9 @@ class LocalSpoolQueue:
     root: Path
     max_task_attempts: int = 1
     max_orphan_requeues: int = 1
+    _poison_transition_total: int = field(default=0, init=False, repr=False)
+    _orphan_requeue_total: int = field(default=0, init=False, repr=False)
+    _stale_inflight_recovery_total: int = field(default=0, init=False, repr=False)
 
     def __post_init__(self) -> None:
         if self.max_task_attempts <= 0:
@@ -141,6 +261,24 @@ class LocalSpoolQueue:
     @property
     def poison_dir(self) -> Path:
         return self.root / "poison"
+
+    def bucket_dir(self, bucket: SpoolBucket) -> Path:
+        return spool_bucket_dir(root=self.root, bucket=bucket)
+
+    def list_bucket_paths(self, *, bucket: SpoolBucket) -> list[Path]:
+        return list_spool_bucket_paths(root=self.root, bucket=bucket)
+
+    def queue_metrics_snapshot(self) -> QueueMetricsSnapshotV1:
+        return QueueMetricsSnapshotV1(
+            pending=len(self.list_bucket_paths(bucket="pending")),
+            inflight=len(self.list_bucket_paths(bucket="inflight")),
+            done=len(self.list_bucket_paths(bucket="done")),
+            failed=len(self.list_bucket_paths(bucket="failed")),
+            poison=len(self.list_bucket_paths(bucket="poison")),
+            poison_transition_total=self._poison_transition_total,
+            orphan_requeue_total=self._orphan_requeue_total,
+            stale_inflight_recovery_total=self._stale_inflight_recovery_total,
+        )
 
     def enqueue(self, task: TaskV1) -> Path:
         target = self.pending_dir / f"{task.task_id}.json"
@@ -179,6 +317,8 @@ class LocalSpoolQueue:
         target_dir = (
             self.poison_dir if failure_count >= self.max_task_attempts else self.pending_dir
         )
+        if target_dir == self.poison_dir:
+            self._bump_counter("_poison_transition_total")
         return self._rewrite_record(path=claim_path, record=updated, target_dir=target_dir)
 
     def requeue_orphaned(self, claimed: ClaimedTask) -> Path:
@@ -203,14 +343,14 @@ class LocalSpoolQueue:
             self._requeue_orphaned_path(inflight_path)
             recovered += 1
 
+        if recovered > 0:
+            self._bump_counter("_stale_inflight_recovery_total", recovered)
+
         return recovered
 
     @staticmethod
     def _sorted_task_files(root: Path) -> list[Path]:
-        return sorted(
-            [path for path in root.glob("*.json") if path.is_file()],
-            key=lambda path: (path.stat().st_mtime_ns, path.name),
-        )
+        return sorted_spool_task_files(root)
 
     def _task_exists(self, task_id: str) -> bool:
         name = f"{task_id}.json"
@@ -242,7 +382,14 @@ class LocalSpoolQueue:
         target_dir = (
             self.poison_dir if orphan_count >= self.max_orphan_requeues else self.pending_dir
         )
+        if target_dir == self.pending_dir:
+            self._bump_counter("_orphan_requeue_total")
+        else:
+            self._bump_counter("_poison_transition_total")
         return self._rewrite_record(path=path, record=updated, target_dir=target_dir)
+
+    def _bump_counter(self, attr: str, value: int = 1) -> None:
+        object.__setattr__(self, attr, getattr(self, attr) + value)
 
     @staticmethod
     def _rewrite_record(*, path: Path, record: SpoolTaskRecord, target_dir: Path) -> Path:

@@ -36,6 +36,10 @@ def test_metrics_export_prom_stdout(tmp_path: Path, capsys: pytest.CaptureFixtur
             "dlq_dir": str((out_root / "_dlq" / "delivery").resolve()),
             "by_destination": {"filesystem": {"ok": 1, "failed": 0}},
             "fanout_children_by_destination": {},
+            "failure_kinds_by_destination": {
+                "webhook": {"server_error": 2},
+                "kafka": {"timeout": 1},
+            },
         },
         "counts_by_extension": {".txt": 1},
         "counts_by_error_code": {},
@@ -82,6 +86,8 @@ def test_metrics_export_prom_stdout(tmp_path: Path, capsys: pytest.CaptureFixtur
     assert "zephyr_ingest_run_wall_seconds" in out
     assert "zephyr_ingest_run_stage_duration_seconds" in out
     assert 'destination="filesystem"' in out
+    assert "zephyr_ingest_run_delivery_failure_kind_total" in out
+    assert 'destination="webhook",failure_kind="server_error"' in out
 
 
 def test_metrics_export_prom_textfile(tmp_path: Path) -> None:

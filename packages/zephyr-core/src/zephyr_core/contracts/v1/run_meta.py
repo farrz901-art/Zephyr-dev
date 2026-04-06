@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal, NotRequired, TypedDict
 
 from zephyr_core.contracts.v1.enums import RunOutcome
 from zephyr_core.contracts.v1.models import DocumentMetadata
@@ -31,6 +31,37 @@ class ErrorInfoV1:
     details: dict[str, Any] | None = None
 
 
+RunOriginV1 = Literal["intake", "resume", "redrive", "requeue"]
+DeliveryOriginV1 = Literal["primary", "replay"]
+
+
+class RunProvenanceV1Dict(TypedDict):
+    run_origin: NotRequired[RunOriginV1]
+    delivery_origin: NotRequired[DeliveryOriginV1]
+    checkpoint_identity_key: NotRequired[str]
+    task_identity_key: NotRequired[str]
+
+
+@dataclass(frozen=True, slots=True)
+class RunProvenanceV1:
+    run_origin: RunOriginV1 | None = None
+    delivery_origin: DeliveryOriginV1 | None = None
+    checkpoint_identity_key: str | None = None
+    task_identity_key: str | None = None
+
+    def to_dict(self) -> RunProvenanceV1Dict:
+        payload: RunProvenanceV1Dict = {}
+        if self.run_origin is not None:
+            payload["run_origin"] = self.run_origin
+        if self.delivery_origin is not None:
+            payload["delivery_origin"] = self.delivery_origin
+        if self.checkpoint_identity_key is not None:
+            payload["checkpoint_identity_key"] = self.checkpoint_identity_key
+        if self.task_identity_key is not None:
+            payload["task_identity_key"] = self.task_identity_key
+        return payload
+
+
 def _empty_warnings() -> list[str]:
     return []
 
@@ -51,6 +82,7 @@ class RunMetaV1:
     error: ErrorInfoV1 | None = None
 
     outcome: RunOutcome | None = None
+    provenance: RunProvenanceV1 | None = None
 
     def to_dict(self) -> dict[str, Any]:
         # 手写 dict，避免 Enum / dataclass 嵌套导致 JSON 序列化意外
@@ -91,4 +123,5 @@ class RunMetaV1:
                 "message": self.error.message,
                 "details": self.error.details,
             },
+            "provenance": None if self.provenance is None else self.provenance.to_dict(),
         }

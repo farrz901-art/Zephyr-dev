@@ -19,7 +19,12 @@ from zephyr_core import (
     ZephyrError,
 )
 from zephyr_core.contracts.v1.enums import RunOutcome
-from zephyr_core.contracts.v1.run_meta import EngineMetaV1, ErrorInfoV1, MetricsV1
+from zephyr_core.contracts.v1.run_meta import (
+    EngineMetaV1,
+    ErrorInfoV1,
+    MetricsV1,
+    RunProvenanceV1,
+)
 from zephyr_ingest._internal.delivery_dlq import write_delivery_dlq
 from zephyr_ingest._internal.retry_policy import is_retryable_exception
 from zephyr_ingest._internal.utils import sha256_file
@@ -158,6 +163,16 @@ def _bump_delivery_counter(
         bucket["ok"] += 1
     else:
         bucket["failed"] += 1
+
+
+def _bump_failure_kind_counter(
+    counters: dict[str, dict[str, int]],
+    *,
+    destination: str,
+    failure_kind: str,
+) -> None:
+    bucket = counters.setdefault(destination, {})
+    bucket[failure_kind] = bucket.get(failure_kind, 0) + 1
 
 
 def _p95_int(values: list[int]) -> int | None:
@@ -346,6 +361,10 @@ def _process_one(
                     ),
                     warnings=list(res.warnings),
                     error=None,
+                    provenance=RunProvenanceV1(
+                        run_origin="intake",
+                        delivery_origin="primary",
+                    ),
                 )
 
                 log_event(
@@ -496,6 +515,10 @@ def _process_one(
                     outcome=outcome,
                     metrics=MetricsV1(duration_ms=duration_ms, attempts=attempts),
                     error=ErrorInfoV1(code=e_code, message=e.message, details=merged_details),
+                    provenance=RunProvenanceV1(
+                        run_origin="intake",
+                        delivery_origin="primary",
+                    ),
                 )
 
                 t_del_fail0 = time.perf_counter()
@@ -631,6 +654,7 @@ def run_documents(
     retryable_failed: int = 0
 
     delivery_dlq_written_total = 0
+    delivery_failure_kinds_by_destination: dict[str, dict[str, int]] = {}
 
     def consume_result(r: DocProcessResult) -> None:
         nonlocal success, failed, skipped_unsupported, skipped_existing
@@ -702,6 +726,13 @@ def run_documents(
             ec = details_obj.get("error_code")
             if isinstance(ec, str) and ec:
                 counts_by_error_code[ec] = counts_by_error_code.get(ec, 0) + 1
+            failure_kind_obj = details_obj.get("failure_kind")
+            if isinstance(failure_kind_obj, str) and failure_kind_obj:
+                _bump_failure_kind_counter(
+                    delivery_failure_kinds_by_destination,
+                    destination=r.delivery_receipt.destination,
+                    failure_kind=failure_kind_obj,
+                )
 
         # 深入统计 fanout 内部情况
         if r.delivery_receipt.destination == "fanout" and isinstance(details_obj, dict):
@@ -729,6 +760,16 @@ def run_documents(
                             destination=d_name,
                             ok=d_ok,
                         )
+                        child_details_obj = item.get("details")
+                        if not d_ok and isinstance(child_details_obj, dict):
+                            child_details = cast("dict[str, object]", child_details_obj)
+                            failure_kind_obj = child_details.get("failure_kind")
+                            if isinstance(failure_kind_obj, str) and failure_kind_obj:
+                                _bump_failure_kind_counter(
+                                    delivery_failure_kinds_by_destination,
+                                    destination=d_name,
+                                    failure_kind=failure_kind_obj,
+                                )
 
     # 执行分支
     if cfg.workers <= 1:
@@ -799,6 +840,7 @@ def run_documents(
             "dlq_dir": str((out_root / "_dlq" / "delivery").resolve()),
             "by_destination": delivery_by_destination,
             "fanout_children_by_destination": fanout_children_by_destination,
+            "failure_kinds_by_destination": delivery_failure_kinds_by_destination,
         },
         "counts_by_extension": counts_by_extension,
         "counts_by_error_code": counts_by_error_code,

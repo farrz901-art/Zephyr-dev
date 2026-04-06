@@ -57,6 +57,12 @@ from zephyr_ingest.obs.prom_export import (
     load_batch_report_v1,
     render_prometheus_text,
 )
+from zephyr_ingest.queue_inspect import SPOOL_BUCKETS, inspect_local_spool_queue
+from zephyr_ingest.queue_recover import (
+    QueueRecoveryError,
+    RecoverableSpoolBucket,
+    requeue_local_spool_task,
+)
 from zephyr_ingest.replay_delivery import (
     FanoutReplaySink,
     KafkaReplaySink,
@@ -70,6 +76,7 @@ from zephyr_ingest.spec.argparse_render import add_specs_to_parser
 from zephyr_ingest.spec.registry import get_spec, list_spec_ids
 from zephyr_ingest.spec.toml_template import render_config_init_toml_v1, render_spec_toml_snippet_v1
 from zephyr_ingest.spec.types import ConnectorSpecV1, SpecFieldTypeV1
+from zephyr_ingest.spool_queue import SpoolBucket
 from zephyr_ingest.worker_runtime import run_worker
 
 
@@ -184,6 +191,20 @@ class BenchCmd:
 class MetricsExportPromCmd:
     out: str
     textfile: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class QueueInspectCmd:
+    root: str
+    bucket: SpoolBucket | None
+    limit: int | None
+
+
+@dataclass(frozen=True, slots=True)
+class QueueRequeueCmd:
+    root: str
+    bucket: RecoverableSpoolBucket
+    task_id: str
 
 
 def _add_runlike_args(*, p: argparse.ArgumentParser, paths_required: bool) -> None:
@@ -442,6 +463,44 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="If set, write exposition to this file "
         "(recommended extension: .prom). Default: stdout",
+    )
+
+    queue = sub.add_parser("queue", help="Queue inspection and recovery utilities")
+    queue_sub = queue.add_subparsers(dest="queue_cmd", required=True)
+    inspect = queue_sub.add_parser("inspect", help="Inspect local spool queue state")
+    inspect.add_argument(
+        "--root",
+        required=True,
+        help="Spool queue root directory",
+    )
+    inspect.add_argument(
+        "--bucket",
+        choices=SPOOL_BUCKETS,
+        default=None,
+        help="Optional bucket to list in detail",
+    )
+    inspect.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Optional maximum number of task records to include for --bucket",
+    )
+    requeue = queue_sub.add_parser("requeue", help="Requeue a poison or inflight task")
+    requeue.add_argument(
+        "--root",
+        required=True,
+        help="Spool queue root directory",
+    )
+    requeue.add_argument(
+        "--bucket",
+        required=True,
+        choices=("poison", "inflight"),
+        help="Recoverable source bucket",
+    )
+    requeue.add_argument(
+        "--task-id",
+        required=True,
+        help="Task id to move back to pending",
     )
 
     return p
@@ -1054,6 +1113,8 @@ def _parse_cmd(
     | DlqPruneCmd
     | BenchCmd
     | MetricsExportPromCmd
+    | QueueInspectCmd
+    | QueueRequeueCmd
 ):
     p = build_parser()
     ns = p.parse_args(list(argv))
@@ -1128,6 +1189,23 @@ def _parse_cmd(
         return MetricsExportPromCmd(
             out=get_req_str(ns, "out"),
             textfile=get_opt_str(ns, "textfile"),
+        )
+
+    if ns.cmd == "queue" and ns.queue_cmd == "inspect":
+        limit = get_opt_int(ns, "limit")
+        if limit is not None and limit <= 0:
+            raise ConfigError("--limit must be > 0")
+        return QueueInspectCmd(
+            root=get_req_str(ns, "root"),
+            bucket=cast("SpoolBucket | None", get_opt_str(ns, "bucket")),
+            limit=limit,
+        )
+
+    if ns.cmd == "queue" and ns.queue_cmd == "requeue":
+        return QueueRequeueCmd(
+            root=get_req_str(ns, "root"),
+            bucket=cast("RecoverableSpoolBucket", get_req_str(ns, "bucket")),
+            task_id=get_req_str(ns, "task_id"),
         )
 
     if ns.cmd == "replay-delivery":
@@ -1659,6 +1737,30 @@ def main(argv: Sequence[str] | None = None) -> int:
         tmp = out_path.with_suffix(out_path.suffix + ".tmp")
         tmp.write_text(text, encoding="utf-8")
         tmp.replace(out_path)
+        return 0
+
+    if isinstance(cmd, QueueInspectCmd):
+        inspect_result = inspect_local_spool_queue(
+            root=Path(cmd.root),
+            bucket=cmd.bucket,
+            limit=cmd.limit,
+        )
+        sys.stdout.write(json.dumps(inspect_result.to_dict(), ensure_ascii=False, indent=2))
+        sys.stdout.write("\n")
+        return 0
+
+    if isinstance(cmd, QueueRequeueCmd):
+        try:
+            recovery_result = requeue_local_spool_task(
+                root=Path(cmd.root),
+                source_bucket=cmd.bucket,
+                task_id=cmd.task_id,
+            )
+        except QueueRecoveryError as e:
+            logging.error("queue recovery error: %s", e)
+            return 2
+        sys.stdout.write(json.dumps(recovery_result.to_dict(), ensure_ascii=False, indent=2))
+        sys.stdout.write("\n")
         return 0
 
     if isinstance(cmd, ReplayDeliveryCmd):

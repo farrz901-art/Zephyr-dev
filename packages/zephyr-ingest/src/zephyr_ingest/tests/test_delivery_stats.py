@@ -84,6 +84,23 @@ class FanoutFailDest:
         )
 
 
+class FailureKindDest:
+    name = "webhook"
+
+    def __call__(
+        self, *, out_root: Path, sha256: str, meta: RunMetaV1, result: PartitionResult | None = None
+    ) -> DeliveryReceipt:
+        return DeliveryReceipt(
+            destination=self.name,
+            ok=False,
+            details={
+                "retryable": True,
+                "failure_kind": "server_error",
+                "error_code": "delivery_http_failed",
+            },
+        )
+
+
 def test_delivery_receipt_written_and_report_counts(tmp_path: Path) -> None:
     doc = _doc(tmp_path, "a.txt", "hello")
     out_root = tmp_path / "out"
@@ -128,3 +145,26 @@ def test_fanout_children_stats(tmp_path: Path) -> None:
     children = report["delivery"]["fanout_children_by_destination"]
     assert children["filesystem"]["ok"] == 1
     assert children["webhook"]["failed"] == 1
+
+
+def test_delivery_failure_kind_counts_are_written_to_batch_report(tmp_path: Path) -> None:
+    doc = _doc(tmp_path, "a.txt", "hello")
+    out_root = tmp_path / "out"
+    cfg = RunnerConfig(
+        out_root=out_root,
+        strategy=PartitionStrategy.AUTO,
+        workers=1,
+        destination=FailureKindDest(),
+    )
+    ctx = RunContext.new(pipeline_version="p1", run_id="r3", timestamp_utc="2026-03-22T00:00:00Z")
+
+    run_documents(
+        docs=[doc],
+        cfg=cfg,
+        ctx=ctx,
+        partition_fn=_ok_partition,
+        destination=FailureKindDest(),
+    )
+
+    report = json.loads((out_root / "batch_report.json").read_text(encoding="utf-8"))
+    assert report["delivery"]["failure_kinds_by_destination"] == {"webhook": {"server_error": 1}}

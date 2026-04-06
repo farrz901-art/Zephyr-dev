@@ -13,12 +13,21 @@ from it_stream.service import (
     partition_input_document,
 )
 from zephyr_core import PartitionResult, PartitionStrategy
+from zephyr_core.contracts.v1.run_meta import RunProvenanceV1
 
 
 @dataclass(frozen=True, slots=True)
 class ItResumeSelectionV1:
     checkpoint: ItCheckpointV1
     entry: ItCheckpointEntryV1
+
+    def to_run_provenance(self) -> RunProvenanceV1:
+        return RunProvenanceV1(
+            run_origin="resume",
+            delivery_origin="primary",
+            checkpoint_identity_key=self.entry.checkpoint_identity_key,
+            task_identity_key=self.checkpoint.task_identity_key,
+        )
 
 
 def _read_cursor(*, progress: dict[str, object], context: str) -> str:

@@ -278,6 +278,58 @@ def test_load_it_resume_selection_validates_task_identity_and_defaults_to_latest
     )
 
 
+def test_it_resume_selection_exposes_run_provenance(tmp_path: Path) -> None:
+    path = tmp_path / "messages.json"
+    path.write_text(
+        json.dumps(
+            {
+                "messages": [
+                    {
+                        "type": "RECORD",
+                        "record": {
+                            "stream": "customers",
+                            "data": {"id": 1},
+                            "emitted_at": "2026-01-01T00:00:00Z",
+                        },
+                    },
+                    {
+                        "type": "STATE",
+                        "state": {"data": {"cursor": "2026-01-01T00:00:00Z"}},
+                    },
+                ]
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    result = process_file(
+        filename=str(path),
+        strategy=PartitionStrategy.AUTO,
+        sha256="sha-it-004b",
+        size_bytes=path.stat().st_size,
+    )
+    artifacts = dump_it_artifacts(
+        out_dir=tmp_path / "artifacts",
+        result=result,
+        pipeline_version="p-it",
+    )
+
+    selection = load_it_resume_selection(
+        checkpoint_path=tmp_path / "artifacts" / "checkpoint.json",
+        pipeline_version="p-it",
+        sha256="sha-it-004b",
+    )
+
+    assert selection.to_run_provenance().to_dict() == {
+        "run_origin": "resume",
+        "delivery_origin": "primary",
+        "checkpoint_identity_key": artifacts.checkpoint.checkpoints[0].checkpoint_identity_key,
+        "task_identity_key": artifacts.checkpoint.task_identity_key,
+    }
+
+
 def test_load_it_checkpoint_round_trips_zephyr_owned_checkpoint_artifact(tmp_path: Path) -> None:
     path = tmp_path / "messages.json"
     path.write_text(

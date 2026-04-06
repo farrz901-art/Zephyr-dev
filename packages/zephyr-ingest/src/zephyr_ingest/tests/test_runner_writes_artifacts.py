@@ -116,3 +116,7 @@ def test_runner_writes_batch_report(tmp_path: Path) -> None:
     assert report["durations_ms"]["max"] is not None
 
     assert len(calls) == 1
+    assert calls[0][1].to_dict()["provenance"] == {
+        "run_origin": "intake",
+        "delivery_origin": "primary",
+    }

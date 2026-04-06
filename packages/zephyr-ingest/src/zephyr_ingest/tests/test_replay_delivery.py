@@ -5,7 +5,12 @@ from pathlib import Path
 
 import httpx
 
-from zephyr_core.contracts.v1.run_meta import ErrorInfoV1, MetricsV1, RunMetaV1
+from zephyr_core.contracts.v1.run_meta import (
+    ErrorInfoV1,
+    MetricsV1,
+    RunMetaV1,
+    RunProvenanceV1,
+)
 from zephyr_core.versioning import RUN_META_SCHEMA_VERSION
 from zephyr_ingest._internal.delivery_dlq import write_delivery_dlq
 from zephyr_ingest.destinations.base import DeliveryReceipt
@@ -23,6 +28,7 @@ def _make_failed_dlq(out_root: Path) -> Path:
         error=ErrorInfoV1(
             code="ZE-UNS-PARTITION-FAILED", message="fail", details={"retryable": True}
         ),
+        provenance=RunProvenanceV1(run_origin="intake", delivery_origin="primary"),
     )
     receipt = DeliveryReceipt(destination="webhook", ok=False, details={"status_code": 500})
     return write_delivery_dlq(out_root=out_root, sha256="abc", meta=meta, receipt=receipt)
@@ -41,6 +47,10 @@ def test_replay_delivery_moves_dlq_to_done(tmp_path: Path) -> None:
         data = json.loads(request.content.decode("utf-8"))
         assert data["sha256"] == "abc"
         assert "run_meta" in data
+        assert data["run_meta"]["provenance"] == {
+            "run_origin": "intake",
+            "delivery_origin": "replay",
+        }
         return httpx.Response(200, json={"ok": True})
 
     transport = httpx.MockTransport(handler)
@@ -98,3 +108,60 @@ def test_replay_delivery_dry_run_does_not_move(tmp_path: Path) -> None:
     # Still in DLQ, not moved
     assert dlq_path.exists()
     assert not (out_root / "_dlq" / "delivery_done" / dlq_path.name).exists()
+
+
+def test_replay_delivery_preserves_resume_checkpoint_provenance_while_marking_replay(
+    tmp_path: Path,
+) -> None:
+    out_root = tmp_path / "out"
+    out_root.mkdir(parents=True, exist_ok=True)
+
+    meta = RunMetaV1(
+        run_id="r-resume",
+        pipeline_version="p-resume",
+        timestamp_utc="2026-03-23T00:00:00Z",
+        schema_version=RUN_META_SCHEMA_VERSION,
+        outcome=None,
+        metrics=MetricsV1(duration_ms=10, attempts=1),
+        error=ErrorInfoV1(
+            code="ZE-UNS-PARTITION-FAILED", message="fail", details={"retryable": True}
+        ),
+        provenance=RunProvenanceV1(
+            run_origin="resume",
+            delivery_origin="primary",
+            checkpoint_identity_key="cp-1",
+            task_identity_key="task-1",
+        ),
+    )
+    receipt = DeliveryReceipt(destination="webhook", ok=False, details={"status_code": 500})
+    dlq_path = write_delivery_dlq(
+        out_root=out_root,
+        sha256="abc-resume",
+        meta=meta,
+        receipt=receipt,
+    )
+    assert dlq_path.exists()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        data = json.loads(request.content.decode("utf-8"))
+        assert data["run_meta"]["provenance"] == {
+            "run_origin": "resume",
+            "delivery_origin": "replay",
+            "checkpoint_identity_key": "cp-1",
+            "task_identity_key": "task-1",
+        }
+        return httpx.Response(200, json={"ok": True})
+
+    stats = replay_delivery_dlq(
+        out_root=out_root,
+        webhook_url="https://example.test/hook",
+        timeout_s=1.0,
+        transport=httpx.MockTransport(handler),
+        limit=None,
+        dry_run=False,
+        move_done=True,
+    )
+
+    assert stats.succeeded == 1
+    assert stats.failed == 0
+    assert (out_root / "_dlq" / "delivery_done" / dlq_path.name).exists()

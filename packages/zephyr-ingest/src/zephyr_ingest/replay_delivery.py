@@ -9,6 +9,7 @@ from typing import Any, Protocol, cast
 import httpx
 
 from zephyr_core import ErrorCode
+from zephyr_core.contracts.v1.run_meta import RunOriginV1, RunProvenanceV1
 from zephyr_ingest._internal.delivery_payload import (
     DeliveryPayloadV1,
     build_delivery_payload_v1_from_run_meta_dict,
@@ -25,6 +26,37 @@ from zephyr_ingest.destinations.webhook import WebhookDestination
 from zephyr_ingest.obs.events import log_event
 
 logger = logging.getLogger(__name__)
+
+
+def _run_meta_with_replay_provenance(*, run_meta: dict[str, Any]) -> dict[str, Any]:
+    payload = dict(run_meta)
+    provenance_obj = payload.get("provenance")
+    if isinstance(provenance_obj, dict):
+        provenance_payload = cast(dict[str, Any], provenance_obj)
+    else:
+        provenance_payload = {}
+    run_origin_obj = provenance_payload.get("run_origin")
+    checkpoint_identity_key_obj = provenance_payload.get("checkpoint_identity_key")
+    task_identity_key_obj = provenance_payload.get("task_identity_key")
+    run_origin: RunOriginV1 | None = None
+    if run_origin_obj == "intake":
+        run_origin = "intake"
+    elif run_origin_obj == "resume":
+        run_origin = "resume"
+    elif run_origin_obj == "redrive":
+        run_origin = "redrive"
+    elif run_origin_obj == "requeue":
+        run_origin = "requeue"
+    replay_provenance = RunProvenanceV1(
+        run_origin=run_origin,
+        delivery_origin="replay",
+        checkpoint_identity_key=checkpoint_identity_key_obj
+        if isinstance(checkpoint_identity_key_obj, str)
+        else None,
+        task_identity_key=task_identity_key_obj if isinstance(task_identity_key_obj, str) else None,
+    )
+    payload["provenance"] = replay_provenance.to_dict()
+    return payload
 
 
 def _load_replay_normalized_text_and_elements_count(
@@ -347,7 +379,7 @@ def replay_delivery_dlq(
             failed += 1
             continue
 
-        run_meta = cast("dict[str, Any]", run_meta_raw)
+        run_meta = _run_meta_with_replay_provenance(run_meta=cast("dict[str, Any]", run_meta_raw))
 
         log_event(
             logger,

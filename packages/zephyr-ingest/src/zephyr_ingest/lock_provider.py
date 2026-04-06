@@ -4,7 +4,7 @@ import hashlib
 import json
 import time
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
@@ -24,9 +24,20 @@ class LockProvider(Protocol):
 
 
 @dataclass(frozen=True, slots=True)
+class LockMetricsSnapshotV1:
+    stale_recovery_total: int
+
+
+@runtime_checkable
+class SupportsLockMetricsSnapshot(Protocol):
+    def lock_metrics_snapshot(self) -> LockMetricsSnapshotV1: ...
+
+
+@dataclass(frozen=True, slots=True)
 class FileLockProvider:
     root: Path
     stale_after_s: int | None = None
+    _stale_recovery_total: int = field(default=0, init=False, repr=False)
 
     def __post_init__(self) -> None:
         self.root.mkdir(parents=True, exist_ok=True)
@@ -58,6 +69,9 @@ class FileLockProvider:
     def release(self, lock: AcquiredLock) -> None:
         lock.lock_ref.unlink(missing_ok=True)
 
+    def lock_metrics_snapshot(self) -> LockMetricsSnapshotV1:
+        return LockMetricsSnapshotV1(stale_recovery_total=self._stale_recovery_total)
+
     def _break_stale_lock(self, *, path: Path) -> bool:
         try:
             stale_after_s = self.stale_after_s
@@ -67,6 +81,7 @@ class FileLockProvider:
             if age_s < stale_after_s:
                 return False
             path.unlink(missing_ok=True)
+            object.__setattr__(self, "_stale_recovery_total", self._stale_recovery_total + 1)
             return True
         except FileNotFoundError:
             return True

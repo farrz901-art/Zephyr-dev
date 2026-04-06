@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from zephyr_core.contracts.v1.run_meta import EngineMetaV1, RunMetaV1
+from zephyr_core.contracts.v1.run_meta import EngineMetaV1, RunMetaV1, RunProvenanceV1
 from zephyr_core.versioning import RUN_META_SCHEMA_VERSION
 from zephyr_ingest._internal.delivery_payload import build_delivery_payload_v1
 
@@ -29,6 +29,30 @@ def test_build_delivery_payload_v1_is_json_serializable(tmp_path: Path) -> None:
     assert obj["artifacts"]["out_dir"].endswith("out/abc") or obj["artifacts"]["out_dir"].endswith(
         "out\\abc"
     )
+
+
+def test_build_delivery_payload_v1_preserves_run_meta_provenance(tmp_path: Path) -> None:
+    meta = RunMetaV1(
+        run_id="r-prov",
+        pipeline_version="p-prov",
+        timestamp_utc="2026-03-24T00:00:00Z",
+        schema_version=RUN_META_SCHEMA_VERSION,
+        provenance=RunProvenanceV1(
+            run_origin="resume",
+            delivery_origin="primary",
+            checkpoint_identity_key="cp-123",
+            task_identity_key="task-123",
+        ),
+    )
+
+    payload = build_delivery_payload_v1(out_root=tmp_path / "out", sha256="abc", meta=meta)
+
+    assert payload["run_meta"]["provenance"] == {
+        "run_origin": "resume",
+        "delivery_origin": "primary",
+        "checkpoint_identity_key": "cp-123",
+        "task_identity_key": "task-123",
+    }
 
 
 def test_build_delivery_payload_v1_adds_it_artifact_paths_for_it_stream(tmp_path: Path) -> None:

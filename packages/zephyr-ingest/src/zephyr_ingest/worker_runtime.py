@@ -160,7 +160,7 @@ def run_worker(
             host=health_host,
             port=health_port,
             metrics_text_provider=lambda: render_prometheus_text(
-                families=build_worker_prom_families(ctx=ctx, lifecycle=runtime)
+                families=build_worker_prom_families(ctx=ctx, lifecycle=runtime, work_source=source)
             ),
         ):
             return runtime.run(work_source=source, sleep_fn=sleep_fn)

@@ -1,12 +1,46 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any, cast
 
 import pytest
 
+from zephyr_core import DocumentRef, PartitionStrategy
 from zephyr_ingest import cli
 from zephyr_ingest.config.snapshot_v1 import ConfigSnapshotV1
+from zephyr_ingest.spool_queue import LocalSpoolQueue
+from zephyr_ingest.task_v1 import (
+    TaskDocumentInputV1,
+    TaskExecutionV1,
+    TaskIdentityV1,
+    TaskInputsV1,
+    TaskV1,
+)
+
+
+def _make_queue_task(task_id: str) -> TaskV1:
+    doc = DocumentRef(
+        uri=f"/tmp/{task_id}.pdf",
+        source="local_file",
+        discovered_at_utc="2026-04-05T00:00:00Z",
+        filename=f"{task_id}.pdf",
+        extension=".pdf",
+        size_bytes=128,
+    )
+    return TaskV1(
+        task_id=task_id,
+        kind="it",
+        inputs=TaskInputsV1(document=TaskDocumentInputV1.from_document_ref(doc)),
+        execution=TaskExecutionV1(
+            strategy=PartitionStrategy.AUTO,
+            unique_element_ids=True,
+        ),
+        identity=TaskIdentityV1(
+            pipeline_version="2026.04.06",
+            sha256=f"sha256-{task_id}",
+        ),
+    )
 
 
 def test_cli_run_invokes_runner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -280,3 +314,96 @@ def test_cli_run_backend_local_default(tmp_path: Path, monkeypatch: pytest.Monke
 
     assert rc == 0
     assert called["ok"] is True
+
+
+def test_cli_queue_inspect_prints_summary_and_bucket_tasks(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    queue = LocalSpoolQueue(root=tmp_path / "spool", max_task_attempts=1)
+    queue.enqueue(_make_queue_task("task-cli"))
+    claimed = queue.claim_next()
+    assert claimed is not None
+    queue.ack_failure(claimed)
+
+    rc = cli.main(
+        [
+            "queue",
+            "inspect",
+            "--root",
+            str(queue.root),
+            "--bucket",
+            "poison",
+        ]
+    )
+
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["summary"] == {
+        "pending": 0,
+        "inflight": 0,
+        "done": 0,
+        "failed": 0,
+        "poison": 1,
+    }
+    assert payload["bucket"] == "poison"
+    assert payload["tasks"] == [
+        {
+            "bucket": "poison",
+            "task_id": "task-cli",
+            "kind": "it",
+            "record_path": str((queue.poison_dir / "task-cli.json").resolve()),
+            "updated_at_utc": payload["tasks"][0]["updated_at_utc"],
+            "uri": "/tmp/task-cli.pdf",
+            "source": "local_file",
+            "filename": "task-cli.pdf",
+            "discovered_at_utc": "2026-04-05T00:00:00Z",
+            "identity": {
+                "pipeline_version": "2026.04.06",
+                "sha256": "sha256-task-cli",
+            },
+            "failure_count": 1,
+            "orphan_count": 0,
+            "latest_recovery": None,
+        }
+    ]
+
+
+def test_cli_queue_requeue_prints_recovery_result(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    queue = LocalSpoolQueue(root=tmp_path / "spool", max_task_attempts=1)
+    queue.enqueue(_make_queue_task("task-recover-cli"))
+    claimed = queue.claim_next()
+    assert claimed is not None
+    queue.ack_failure(claimed)
+
+    rc = cli.main(
+        [
+            "queue",
+            "requeue",
+            "--root",
+            str(queue.root),
+            "--bucket",
+            "poison",
+            "--task-id",
+            "task-recover-cli",
+        ]
+    )
+
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload == {
+        "action": "requeue",
+        "root": str(queue.root.resolve()),
+        "task_id": "task-recover-cli",
+        "kind": "it",
+        "source_bucket": "poison",
+        "target_bucket": "pending",
+        "source_path": str((queue.poison_dir / "task-recover-cli.json").resolve()),
+        "target_path": str((queue.pending_dir / "task-recover-cli.json").resolve()),
+        "failure_count": 1,
+        "orphan_count": 0,
+        "recorded_at_utc": payload["recorded_at_utc"],
+    }
+    assert (queue.pending_dir / "task-recover-cli.json").exists()
+    assert not (queue.poison_dir / "task-recover-cli.json").exists()
