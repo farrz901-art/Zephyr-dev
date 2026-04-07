@@ -203,6 +203,93 @@ Destination connector expansion:
 - should build on the hardened delivery / receipt / idempotency / replay semantics already in place
 - should not introduce destination-specific shortcuts around the shared delivery path
 
+For destination connector work, treat the destination boundary rules, onboarding checklist, and
+first-wave candidate list in this file as the P4-M2 architecture lock. Future destination PRs
+should either follow them or explicitly update this section and its anti-drift coverage in the
+same change.
+
+For future destination connector placement and review:
+- treat a destination as a Zephyr destination adapter only when it accepts Zephyr-owned delivery
+  payloads and returns through the shared receipt / failure / replay discipline, rather than
+  redefining delivery around a backend-native client model
+- keep these delivery semantics shared across destinations: delivery payload ownership, receipt /
+  details shape discipline, idempotency expectations, retryable and `failure_kind` / `error_code`
+  semantics, replay compatibility, and observability/provenance facts emitted from delivery
+- keep destination-local only what is genuinely backend-shaped: client construction, auth/session
+  handling, request batching limits, backend-specific option mapping, transport protocol quirks,
+  receipt enrichment that fits the shared receipt shape, and backend-specific retry hints that do
+  not replace Zephyr failure semantics
+- do not bypass the shared delivery path by letting a destination define its own payload contract,
+  success/failure vocabulary, ad-hoc receipt schema, replay mechanism, idempotency shortcut, or
+  observability path
+- do not treat backend client responses or SDK objects as the stable contract; translate them into
+  Zephyr-owned payload/receipt/provenance shapes at the adapter boundary
+- keep wider abstractions local until proven by more than one real destination; do not promote
+  backend-specific batching, transaction, bulk-job, or acknowledgement semantics to `zephyr-core`
+  or generic delivery contracts just because one destination needs them
+
+For future destination connector onboarding, review against this checklist:
+- config/spec: destination config must enter through the existing Zephyr config/spec discipline and
+  remain consistent across runtime behavior, snapshots, and observability; do not pass backend
+  client options through the delivery path as loose adapter-owned blobs
+- delivery payload: destinations must accept the shared Zephyr delivery payload as the stable input
+  contract; backend request shaping may adapt that payload locally, but may not redefine or narrow
+  the shared payload contract for one destination
+- receipt/details: destinations must return through the shared receipt/details discipline and
+  normalize backend acknowledgements into Zephyr-owned receipt facts; do not expose raw SDK/client
+  objects as the durable receipt contract
+- idempotency: destinations must respect current Zephyr idempotency expectations and any existing
+  dedupe/receipt semantics; backend-specific idempotency features may enrich the adapter but may not
+  replace the shared delivery contract
+- retry and error semantics: map backend outcomes into current Zephyr `retryable`,
+  `failure_kind`, and `error_code` expectations; do not invent destination-local success/failure
+  vocabularies that bypass shared delivery behavior
+- replay compatibility: destination behavior must remain compatible with the shared replay/DLQ path;
+  do not require a destination-only replay mechanism or drop the facts needed to safely re-drive
+  delivery
+- metrics/provenance/inspectability: destinations must fit existing delivery observability surfaces
+  and preserve the facts needed to inspect delivery attempts, outcomes, backend acknowledgements,
+  and replay/idempotency-relevant behavior without creating a parallel inspection path
+- tests: every destination PR must add focused tests for config/spec wiring, payload contract
+  preservation, receipt/details normalization, idempotency behavior, retryable/failure/error
+  classification, replay compatibility, and destination-local behavior that could silently drift
+- shared vs local: keep only backend-shaped transport, auth/session, batching, option mapping, and
+  acknowledgement enrichment local; keep payload ownership, receipt discipline, replay semantics,
+  idempotency expectations, and delivery observability shared
+
+First-wave destination connector candidates for P4:
+- object storage / blob archive destination. This is a strong first-wave addition because it extends
+  the already-proven filesystem-style delivery pattern into remote durable storage without
+  re-opening shared delivery semantics. Attachment pattern: config captures stable bucket/container,
+  prefix, write mode, and object naming policy; the shared Zephyr delivery payload remains the input
+  contract; receipts normalize backend acknowledgements into object locator/version facts; shared
+  idempotency/retry/error/replay semantics remain in force; multipart upload, metadata headers, and
+  backend auth/session handling remain destination-local
+- relational row/upsert destination. This is a strong first-wave structured sink because it expands
+  from the current delivery path into durable tabular storage while still fitting shared receipt,
+  idempotency, and replay discipline when bounded to Zephyr-owned payload adaptation. Attachment
+  pattern: config captures stable connection/resource selector, target table, write mode, and key
+  policy; the shared delivery payload is adapted locally into row/upsert operations rather than
+  replaced; receipts preserve normalized table/operation/row-count facts; retryable and
+  `failure_kind` / `error_code` mapping stays shared; SQL dialect, parameter binding, and
+  transaction/batch tuning remain destination-local
+- search/index document destination. This is a strong first-wave addition because it stays close to
+  the existing document/vector-style delivery family while validating a second document-oriented
+  indexing class without changing replay/idempotency architecture. Attachment pattern: config
+  captures stable index/resource selector, write mode, and identity policy; the shared delivery
+  payload remains authoritative and is only adapted locally into index requests; receipts normalize
+  backend acknowledgement ids/status into shared receipt facts; shared replay and error semantics
+  stay intact; bulk API shaping, refresh/indexing options, and backend-specific request tuning
+  remain destination-local
+
+Not first-wave by default:
+- warehouse/bulk-load job destinations that require async manifest upload, staged commit, or
+  destination-owned job polling before current receipt/replay semantics are proven sufficient
+- destinations that require a destination-specific reconciliation or commit-log framework to become
+  usable
+- vendor-specific proliferation of current destination families before the candidate classes above
+  are proven against the shared delivery path
+
 Prefer:
 - deeper hardening of current orchestration/governance surfaces
 - connector additions that fit the existing execution and delivery contracts
