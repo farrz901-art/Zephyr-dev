@@ -21,6 +21,7 @@ from zephyr_core.contracts.v1.run_meta import (
 
 IT_CHECKPOINT_SCHEMA_VERSION: Literal[1] = 1
 ItCheckpointCompatibilityStatus = Literal["supported", "unsupported", "malformed"]
+ItCheckpointProgressKind = Literal["cursor_v1", "token_v1", "page_v1", "state_dict_v1"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -166,6 +167,7 @@ class ItCheckpointEntryV1:
     checkpoint_index: int
     checkpoint_identity_key: str
     parent_checkpoint_identity_key: str | None
+    progress_kind: ItCheckpointProgressKind
     progress: dict[str, object]
 
     def to_dict(self) -> dict[str, object]:
@@ -173,6 +175,7 @@ class ItCheckpointEntryV1:
             "checkpoint_index": self.checkpoint_index,
             "checkpoint_identity_key": self.checkpoint_identity_key,
             "parent_checkpoint_identity_key": self.parent_checkpoint_identity_key,
+            "progress_kind": self.progress_kind,
             "progress": self.progress,
         }
 
@@ -192,11 +195,29 @@ class ItCheckpointEntryV1:
                 "it-stream checkpoint field 'parent_checkpoint_identity_key' "
                 "must be a non-empty string or null"
             )
+        progress = _read_required_object_dict(metadata=data, key="progress")
+        progress_kind_raw = data.get("progress_kind")
+        progress_kind: ItCheckpointProgressKind
+        if progress_kind_raw is None:
+            progress_kind = infer_it_checkpoint_progress_kind(progress=progress)
+        elif progress_kind_raw == "cursor_v1":
+            progress_kind = "cursor_v1"
+        elif progress_kind_raw == "token_v1":
+            progress_kind = "token_v1"
+        elif progress_kind_raw == "page_v1":
+            progress_kind = "page_v1"
+        elif progress_kind_raw == "state_dict_v1":
+            progress_kind = "state_dict_v1"
+        else:
+            raise ValueError(
+                "it-stream checkpoint field 'progress_kind' must be a supported progress kind"
+            )
         return cls(
             checkpoint_index=_read_required_int(metadata=data, key="checkpoint_index"),
             checkpoint_identity_key=checkpoint_identity_key,
             parent_checkpoint_identity_key=parent_checkpoint_identity_key,
-            progress=_read_required_object_dict(metadata=data, key="progress"),
+            progress_kind=progress_kind,
+            progress=progress,
         )
 
 
@@ -278,6 +299,28 @@ class ItArtifactsV1:
     states: list[ItArtifactStateV1]
     logs: list[ItArtifactLogV1]
     checkpoint: ItCheckpointV1
+
+
+def infer_it_checkpoint_progress_kind(*, progress: dict[str, object]) -> ItCheckpointProgressKind:
+    cursor = progress.get("cursor")
+    if isinstance(cursor, str) and cursor:
+        return "cursor_v1"
+    token = progress.get("token")
+    if isinstance(token, str) and token:
+        return "token_v1"
+    page_token = progress.get("page_token")
+    if isinstance(page_token, str) and page_token:
+        return "token_v1"
+    next_page_token = progress.get("next_page_token")
+    if isinstance(next_page_token, str) and next_page_token:
+        return "token_v1"
+    page_number = progress.get("page_number")
+    if isinstance(page_number, int) and not isinstance(page_number, bool):
+        return "page_v1"
+    page = progress.get("page")
+    if isinstance(page, int) and not isinstance(page, bool):
+        return "page_v1"
+    return "state_dict_v1"
 
 
 def _default_checkpoint_provenance(*, task_identity_key: str) -> ItCheckpointProvenanceV1:
@@ -473,10 +516,12 @@ def build_it_artifacts(
     checkpoint_entries: list[ItCheckpointEntryV1] = []
     parent_checkpoint_identity_key: str | None = None
     for state in states:
+        progress_kind = infer_it_checkpoint_progress_kind(progress=state.data)
         checkpoint_identity_key = normalize_it_checkpoint_identity_key(
             identity=ItCheckpointIdentityV1(
                 task=task_identity,
                 stream=stream,
+                progress_kind=progress_kind,
                 progress=state.data,
             )
         )
@@ -485,6 +530,7 @@ def build_it_artifacts(
                 checkpoint_index=state.state_index,
                 checkpoint_identity_key=checkpoint_identity_key,
                 parent_checkpoint_identity_key=parent_checkpoint_identity_key,
+                progress_kind=progress_kind,
                 progress=state.data,
             )
         )

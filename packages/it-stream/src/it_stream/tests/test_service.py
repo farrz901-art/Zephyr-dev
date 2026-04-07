@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Literal
 
 import pytest
 
@@ -143,11 +144,13 @@ def test_dump_it_artifacts_writes_zephyr_owned_checkpoint_artifact(tmp_path: Pat
                             sha256="sha-it-002",
                         ),
                         stream="accounts",
+                        progress_kind="state_dict_v1",
                         progress={"checkpoint": 7},
                     )
                 ),
                 "checkpoint_index": 0,
                 "parent_checkpoint_identity_key": None,
+                "progress_kind": "state_dict_v1",
                 "progress": {"checkpoint": 7},
             }
         ],
@@ -186,6 +189,7 @@ def test_dump_it_artifacts_writes_zephyr_owned_checkpoint_artifact(tmp_path: Pat
     checkpoint_entry = checkpoint_row["checkpoints"][0]
     assert checkpoint_entry["checkpoint_identity_key"] != checkpoint_row["task_identity_key"]
     assert checkpoint_entry["parent_checkpoint_identity_key"] is None
+    assert checkpoint_entry["progress_kind"] == "state_dict_v1"
     assert "type" not in record_row
     assert "record" not in record_row
     assert "type" not in log_row
@@ -207,6 +211,7 @@ def test_it_checkpoint_identity_normalization_is_deterministic_and_related_to_ta
         identity=ItCheckpointIdentityV1(
             task=task_identity,
             stream="customers",
+            progress_kind="cursor_v1",
             progress={"cursor": "2026-01-01", "page": 3},
         )
     )
@@ -214,6 +219,7 @@ def test_it_checkpoint_identity_normalization_is_deterministic_and_related_to_ta
         identity=ItCheckpointIdentityV1(
             task=task_identity,
             stream="customers",
+            progress_kind="cursor_v1",
             progress={"page": 3, "cursor": "2026-01-01"},
         )
     )
@@ -221,6 +227,7 @@ def test_it_checkpoint_identity_normalization_is_deterministic_and_related_to_ta
         identity=ItCheckpointIdentityV1(
             task=task_identity,
             stream="customers",
+            progress_kind="cursor_v1",
             progress={"cursor": "2026-01-02", "page": 3},
         )
     )
@@ -230,6 +237,32 @@ def test_it_checkpoint_identity_normalization_is_deterministic_and_related_to_ta
     assert first == second
     assert first != third
     assert first != task_key
+
+
+def test_it_checkpoint_identity_normalization_distinguishes_progress_family() -> None:
+    task_identity = ItTaskIdentityV1(
+        pipeline_version="p-it",
+        sha256="sha-it-003-family",
+    )
+
+    cursor_identity = normalize_it_checkpoint_identity_key(
+        identity=ItCheckpointIdentityV1(
+            task=task_identity,
+            stream="customers",
+            progress_kind="cursor_v1",
+            progress={"cursor": "same-value"},
+        )
+    )
+    token_identity = normalize_it_checkpoint_identity_key(
+        identity=ItCheckpointIdentityV1(
+            task=task_identity,
+            stream="customers",
+            progress_kind="token_v1",
+            progress={"cursor": "same-value"},
+        )
+    )
+
+    assert cursor_identity != token_identity
 
 
 def test_load_it_resume_selection_validates_task_identity_and_defaults_to_latest_checkpoint(
@@ -567,7 +600,11 @@ def test_it_checkpoint_lineage_records_immediate_parent_only(tmp_path: Path) -> 
     first_entry, second_entry = artifacts.checkpoint.checkpoints
 
     assert first_entry.parent_checkpoint_identity_key is None
+    assert first_entry.progress_kind == "cursor_v1"
+    assert '"progress_kind":"cursor_v1"' in first_entry.checkpoint_identity_key
     assert second_entry.parent_checkpoint_identity_key == first_entry.checkpoint_identity_key
+    assert second_entry.progress_kind == "cursor_v1"
+    assert '"progress_kind":"cursor_v1"' in second_entry.checkpoint_identity_key
     assert second_entry.checkpoint_identity_key != first_entry.checkpoint_identity_key
 
 
@@ -681,6 +718,7 @@ def test_load_it_checkpoint_accepts_legacy_entries_without_lineage_field(tmp_pat
                                     sha256="sha-it-legacy",
                                 ),
                                 stream="customers",
+                                progress_kind="cursor_v1",
                                 progress={"cursor": "2026-01-01T00:00:00Z"},
                             )
                         ),
@@ -697,7 +735,269 @@ def test_load_it_checkpoint_accepts_legacy_entries_without_lineage_field(tmp_pat
     loaded = load_it_checkpoint(path=checkpoint_path)
 
     assert loaded.checkpoints[0].parent_checkpoint_identity_key is None
+    assert loaded.checkpoints[0].progress_kind == "cursor_v1"
     assert loaded.provenance is None
+
+
+def test_load_it_checkpoint_infers_non_cursor_legacy_progress_kind(tmp_path: Path) -> None:
+    checkpoint_path = tmp_path / "checkpoint.json"
+    checkpoint_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "flow_kind": "it",
+                "stream": "accounts",
+                "task_identity_key": normalize_it_task_identity_key(
+                    identity=ItTaskIdentityV1(
+                        pipeline_version="p-it",
+                        sha256="sha-it-legacy-state",
+                    )
+                ),
+                "checkpoints": [
+                    {
+                        "checkpoint_index": 0,
+                        "checkpoint_identity_key": normalize_it_checkpoint_identity_key(
+                            identity=ItCheckpointIdentityV1(
+                                task=ItTaskIdentityV1(
+                                    pipeline_version="p-it",
+                                    sha256="sha-it-legacy-state",
+                                ),
+                                stream="accounts",
+                                progress_kind="state_dict_v1",
+                                progress={"checkpoint": 7},
+                            )
+                        ),
+                        "progress": {"checkpoint": 7},
+                    }
+                ],
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    loaded = load_it_checkpoint(path=checkpoint_path)
+
+    assert loaded.checkpoints[0].progress_kind == "state_dict_v1"
+
+
+def test_load_it_checkpoint_infers_token_progress_kind(tmp_path: Path) -> None:
+    checkpoint_path = tmp_path / "checkpoint.json"
+    checkpoint_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "flow_kind": "it",
+                "stream": "customers",
+                "task_identity_key": normalize_it_task_identity_key(
+                    identity=ItTaskIdentityV1(
+                        pipeline_version="p-it",
+                        sha256="sha-it-legacy-token",
+                    )
+                ),
+                "checkpoints": [
+                    {
+                        "checkpoint_index": 0,
+                        "checkpoint_identity_key": normalize_it_checkpoint_identity_key(
+                            identity=ItCheckpointIdentityV1(
+                                task=ItTaskIdentityV1(
+                                    pipeline_version="p-it",
+                                    sha256="sha-it-legacy-token",
+                                ),
+                                stream="customers",
+                                progress_kind="token_v1",
+                                progress={"next_page_token": "tok-1"},
+                            )
+                        ),
+                        "progress": {"next_page_token": "tok-1"},
+                    }
+                ],
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    loaded = load_it_checkpoint(path=checkpoint_path)
+
+    assert loaded.checkpoints[0].progress_kind == "token_v1"
+
+
+def test_load_it_checkpoint_infers_page_progress_kind(tmp_path: Path) -> None:
+    checkpoint_path = tmp_path / "checkpoint.json"
+    checkpoint_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "flow_kind": "it",
+                "stream": "customers",
+                "task_identity_key": normalize_it_task_identity_key(
+                    identity=ItTaskIdentityV1(
+                        pipeline_version="p-it",
+                        sha256="sha-it-legacy-page",
+                    )
+                ),
+                "checkpoints": [
+                    {
+                        "checkpoint_index": 0,
+                        "checkpoint_identity_key": normalize_it_checkpoint_identity_key(
+                            identity=ItCheckpointIdentityV1(
+                                task=ItTaskIdentityV1(
+                                    pipeline_version="p-it",
+                                    sha256="sha-it-legacy-page",
+                                ),
+                                stream="customers",
+                                progress_kind="page_v1",
+                                progress={"page_number": 3},
+                            )
+                        ),
+                        "progress": {"page_number": 3},
+                    }
+                ],
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    loaded = load_it_checkpoint(path=checkpoint_path)
+
+    assert loaded.checkpoints[0].progress_kind == "page_v1"
+
+
+@pytest.mark.parametrize(
+    ("progress_kind", "progress", "sha256"),
+    [
+        ("cursor_v1", {"cursor": "2026-01-01T00:00:00Z"}, "sha-it-explicit-cursor"),
+        ("token_v1", {"next_page_token": "tok-1"}, "sha-it-explicit-token"),
+        ("page_v1", {"page_number": 3}, "sha-it-explicit-page"),
+        ("state_dict_v1", {"checkpoint": 7}, "sha-it-explicit-state"),
+    ],
+)
+def test_it_checkpoint_compatibility_explicitly_accepts_supported_progress_families(
+    tmp_path: Path,
+    progress_kind: Literal["cursor_v1", "token_v1", "page_v1", "state_dict_v1"],
+    progress: dict[str, object],
+    sha256: str,
+) -> None:
+    checkpoint_identity_key = normalize_it_checkpoint_identity_key(
+        identity=ItCheckpointIdentityV1(
+            task=ItTaskIdentityV1(
+                pipeline_version="p-it",
+                sha256=sha256,
+            ),
+            stream="customers",
+            progress_kind=progress_kind,
+            progress=progress,
+        )
+    )
+    checkpoint_path = tmp_path / "checkpoint.json"
+    checkpoint_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "flow_kind": "it",
+                "stream": "customers",
+                "task_identity_key": normalize_it_task_identity_key(
+                    identity=ItTaskIdentityV1(
+                        pipeline_version="p-it",
+                        sha256=sha256,
+                    )
+                ),
+                "checkpoints": [
+                    {
+                        "checkpoint_index": 0,
+                        "checkpoint_identity_key": checkpoint_identity_key,
+                        "progress_kind": progress_kind,
+                        "progress": progress,
+                    }
+                ],
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    raw = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+    compatibility = inspect_it_checkpoint_compatibility(raw=raw)
+
+    assert compatibility.status == "supported"
+    assert compatibility.schema_version == 1
+    assert compatibility.flow_kind == "it"
+    assert compatibility.reason is None
+
+    loaded = load_it_checkpoint(path=checkpoint_path)
+
+    assert loaded.checkpoints[0].checkpoint_identity_key == checkpoint_identity_key
+    assert loaded.checkpoints[0].progress_kind == progress_kind
+    assert loaded.checkpoints[0].progress == progress
+
+
+@pytest.mark.parametrize(
+    ("checkpoint_entry", "match"),
+    [
+        (
+            {
+                "checkpoint_index": 0,
+                "checkpoint_identity_key": "checkpoint-invalid-kind",
+                "progress_kind": "cursor_v2",
+                "progress": {"cursor": "2026-01-01T00:00:00Z"},
+            },
+            "supported progress kind",
+        ),
+        (
+            {
+                "checkpoint_index": 0,
+                "checkpoint_identity_key": "checkpoint-invalid-progress",
+                "progress_kind": "cursor_v1",
+                "progress": ["2026-01-01T00:00:00Z"],
+            },
+            "field 'progress' must be an object",
+        ),
+    ],
+)
+def test_load_it_checkpoint_rejects_malformed_progress_shape_explicitly(
+    tmp_path: Path,
+    checkpoint_entry: dict[str, object],
+    match: str,
+) -> None:
+    checkpoint_path = tmp_path / "checkpoint.json"
+    checkpoint_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "flow_kind": "it",
+                "stream": "customers",
+                "task_identity_key": normalize_it_task_identity_key(
+                    identity=ItTaskIdentityV1(
+                        pipeline_version="p-it",
+                        sha256="sha-it-malformed-progress",
+                    )
+                ),
+                "checkpoints": [checkpoint_entry],
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    raw = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+    compatibility = inspect_it_checkpoint_compatibility(raw=raw)
+
+    assert compatibility.status == "malformed"
+    assert compatibility.schema_version == 1
+    assert compatibility.flow_kind == "it"
+    assert compatibility.reason is not None
+
+    with pytest.raises(ItCheckpointCompatibilityError, match=match) as exc_info:
+        load_it_checkpoint(path=checkpoint_path)
+
+    assert exc_info.value.compatibility.status == "malformed"
 
 
 def test_legacy_checkpoint_without_lineage_or_provenance_is_still_explicitly_supported(
@@ -726,6 +1026,7 @@ def test_legacy_checkpoint_without_lineage_or_provenance_is_still_explicitly_sup
                                     sha256="sha-it-legacy-supported",
                                 ),
                                 stream="customers",
+                                progress_kind="cursor_v1",
                                 progress={"cursor": "2026-01-01T00:00:00Z"},
                             )
                         ),
@@ -999,14 +1300,116 @@ def test_resume_file_rejects_checkpoint_progress_outside_supported_cursor_subset
         result=initial,
         pipeline_version="p-it",
     )
+    checkpoint = load_it_checkpoint(path=tmp_path / "artifacts" / "checkpoint.json")
 
-    with pytest.raises(ValueError, match="cursor"):
+    assert checkpoint.checkpoints[0].progress_kind == "state_dict_v1"
+
+    with pytest.raises(ValueError, match="cursor_v1"):
         resume_file(
             filename=str(path),
             checkpoint_path=tmp_path / "artifacts" / "checkpoint.json",
             pipeline_version="p-it",
             strategy=PartitionStrategy.AUTO,
             sha256="sha-it-009",
+            size_bytes=path.stat().st_size,
+        )
+
+
+@pytest.mark.parametrize(
+    ("progress_kind", "progress", "sha256"),
+    [
+        ("token_v1", {"token": "tok-1"}, "sha-it-token"),
+        ("page_v1", {"page_number": 3}, "sha-it-page"),
+    ],
+)
+def test_resume_file_rejects_explicit_non_cursor_progress_families(
+    tmp_path: Path,
+    progress_kind: Literal["token_v1", "page_v1"],
+    progress: dict[str, object],
+    sha256: str,
+) -> None:
+    path = tmp_path / "messages.json"
+    path.write_text(
+        json.dumps(
+            {
+                "messages": [
+                    {
+                        "type": "RECORD",
+                        "record": {
+                            "stream": "customers",
+                            "data": {"id": 1},
+                            "emitted_at": "2026-01-01T00:00:00Z",
+                        },
+                    }
+                ]
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    checkpoint_path = tmp_path / "checkpoint.json"
+    checkpoint_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "flow_kind": "it",
+                "stream": "customers",
+                "task_identity_key": normalize_it_task_identity_key(
+                    identity=ItTaskIdentityV1(
+                        pipeline_version="p-it",
+                        sha256=sha256,
+                    )
+                ),
+                "checkpoints": [
+                    {
+                        "checkpoint_index": 0,
+                        "checkpoint_identity_key": normalize_it_checkpoint_identity_key(
+                            identity=ItCheckpointIdentityV1(
+                                task=ItTaskIdentityV1(
+                                    pipeline_version="p-it",
+                                    sha256=sha256,
+                                ),
+                                stream="customers",
+                                progress_kind=progress_kind,
+                                progress=progress,
+                            )
+                        ),
+                        "progress_kind": progress_kind,
+                        "progress": progress,
+                    }
+                ],
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    raw = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+    compatibility = inspect_it_checkpoint_compatibility(raw=raw)
+
+    assert compatibility.status == "supported"
+    assert compatibility.schema_version == 1
+    assert compatibility.flow_kind == "it"
+    assert compatibility.reason is None
+
+    selection = load_it_resume_selection(
+        checkpoint_path=checkpoint_path,
+        pipeline_version="p-it",
+        sha256=sha256,
+    )
+
+    assert selection.entry.progress_kind == progress_kind
+    assert selection.entry.progress == progress
+    assert selection.entry.checkpoint_identity_key != selection.checkpoint.task_identity_key
+
+    with pytest.raises(ValueError, match="cursor_v1"):
+        resume_file(
+            filename=str(path),
+            checkpoint_path=checkpoint_path,
+            pipeline_version="p-it",
+            strategy=PartitionStrategy.AUTO,
+            sha256=sha256,
             size_bytes=path.stat().st_size,
         )
 

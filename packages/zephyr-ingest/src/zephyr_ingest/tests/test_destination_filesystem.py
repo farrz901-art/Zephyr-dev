@@ -159,10 +159,12 @@ def test_filesystem_destination_writes_it_stream_artifacts(tmp_path: Path) -> No
         {
             "checkpoint_identity_key": (
                 '{"kind":"it","progress":{"cursor":"2026-01-01"},'
+                '"progress_kind":"cursor_v1",'
                 '"stream":"customers","task":{"kind":"it","pipeline_version":"p-it","sha256":"abc-it"}}'
             ),
             "checkpoint_index": 0,
             "parent_checkpoint_identity_key": None,
+            "progress_kind": "cursor_v1",
             "progress": {"cursor": "2026-01-01"},
         }
     ]

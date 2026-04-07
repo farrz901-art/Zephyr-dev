@@ -3,7 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from it_stream.artifacts import ItCheckpointEntryV1, ItCheckpointV1, load_it_checkpoint
+from it_stream.artifacts import (
+    ItCheckpointEntryV1,
+    ItCheckpointV1,
+    load_it_checkpoint,
+)
 from it_stream.identity import ItTaskIdentityV1, normalize_it_task_identity_key
 from it_stream.service import (
     ItNormalizedInputDocumentV1,
@@ -79,6 +83,9 @@ def _resume_input_document(
     doc: ItNormalizedInputDocumentV1,
     selection: ItResumeSelectionV1,
 ) -> ItNormalizedInputDocumentV1:
+    if selection.entry.progress_kind != "cursor_v1":
+        raise ValueError("it-stream resume currently requires 'cursor_v1' checkpoint progress")
+
     checkpoint_cursor = _read_cursor(
         progress=selection.entry.progress,
         context="it-stream resume checkpoint progress",

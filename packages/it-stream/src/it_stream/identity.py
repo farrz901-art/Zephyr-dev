@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from typing import Literal
+
+ItCheckpointProgressKind = Literal["cursor_v1", "token_v1", "page_v1", "state_dict_v1"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -21,6 +24,7 @@ class ItTaskIdentityV1:
 class ItCheckpointIdentityV1:
     task: ItTaskIdentityV1
     stream: str | None
+    progress_kind: ItCheckpointProgressKind
     progress: dict[str, object]
 
     def to_dict(self) -> dict[str, object]:
@@ -28,6 +32,7 @@ class ItCheckpointIdentityV1:
             "kind": "it",
             "task": self.task.to_dict(),
             "stream": self.stream,
+            "progress_kind": self.progress_kind,
             "progress": self.progress,
         }
 

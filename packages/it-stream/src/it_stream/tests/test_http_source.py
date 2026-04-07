@@ -193,6 +193,7 @@ def test_http_source_builds_zephyr_owned_records_and_checkpoint_artifacts(
                         sha256="sha-http-001",
                     ),
                     stream="customers",
+                    progress_kind="cursor_v1",
                     progress={
                         "cursor": "c-1",
                         "page_number": 1,
@@ -203,6 +204,7 @@ def test_http_source_builds_zephyr_owned_records_and_checkpoint_artifacts(
             ),
             "checkpoint_index": 0,
             "parent_checkpoint_identity_key": None,
+            "progress_kind": "cursor_v1",
             "progress": {
                 "cursor": "c-1",
                 "page_number": 1,
