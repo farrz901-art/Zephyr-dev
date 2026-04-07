@@ -39,6 +39,7 @@ from zephyr_ingest.flow_processor import (
     FlowProcessor,
     PartitionFn,
     build_processor_for_flow_kind,
+    normalize_flow_input_identity_sha,
 )
 from zephyr_ingest.obs.batch_report_v1 import (
     BATCH_REPORT_SCHEMA_VERSION,
@@ -624,6 +625,11 @@ def _process_one(
     p = Path(doc.uri)
     t_hash0 = time.perf_counter()
     sha = sha256_file(p)
+    sha = normalize_flow_input_identity_sha(
+        flow_kind=flow_kind,
+        filename=doc.uri,
+        default_sha=sha,
+    )
     hash_ms = int((time.perf_counter() - t_hash0) * 1000)
 
     log_event(

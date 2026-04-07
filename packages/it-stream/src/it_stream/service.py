@@ -6,12 +6,20 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import cast
 
+from it_stream.sources.http_source import (
+    fetch_http_json_cursor_source,
+    is_http_json_cursor_source_spec,
+    load_http_json_cursor_source_config,
+    normalize_http_json_cursor_source_identity_sha,
+)
 from zephyr_core import (
     DocumentMetadata,
     EngineInfo,
+    ErrorCode,
     PartitionResult,
     PartitionStrategy,
     ZephyrElement,
+    ZephyrError,
 )
 
 
@@ -160,15 +168,61 @@ def _load_message_input_document(raw: dict[str, object]) -> ItNormalizedInputDoc
     return ItNormalizedInputDocumentV1(stream=stream, records=records, states=states, logs=logs)
 
 
-def load_input_document(path: Path) -> ItNormalizedInputDocumentV1:
+def _load_http_source_input_document(raw: dict[str, object]) -> ItNormalizedInputDocumentV1:
+    try:
+        config = load_http_json_cursor_source_config(raw)
+    except ValueError as err:
+        raise ZephyrError(
+            code=ErrorCode.IO_READ_FAILED,
+            message=str(err),
+            details={"retryable": False, "source_kind": "http_json_cursor_v1"},
+        ) from err
+
+    payload = fetch_http_json_cursor_source(config=config)
+    return ItNormalizedInputDocumentV1(
+        stream=payload.stream,
+        records=[ItRecordV1(data=record, emitted_at=None) for record in payload.records],
+        states=[ItStateV1(data=state) for state in payload.states],
+        logs=[ItLogV1(level=level, message=message) for level, message in payload.logs],
+    )
+
+
+def _load_input_document_and_backend(path: Path) -> tuple[ItNormalizedInputDocumentV1, str]:
     raw = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(raw, dict):
         raise ValueError("it-stream input must be a JSON object")
     typed_raw = cast("dict[str, object]", raw)
 
+    if is_http_json_cursor_source_spec(typed_raw):
+        return _load_http_source_input_document(typed_raw), "http-json-cursor"
     if "messages" in typed_raw:
-        return _load_message_input_document(typed_raw)
-    return _load_legacy_input_document(typed_raw)
+        return _load_message_input_document(typed_raw), "airbyte-message-json"
+    return _load_legacy_input_document(typed_raw), "airbyte-message-json"
+
+
+def load_input_document(path: Path) -> ItNormalizedInputDocumentV1:
+    doc, _backend = _load_input_document_and_backend(path)
+    return doc
+
+
+def normalize_it_input_identity_sha(*, filename: str, default_sha: str) -> str:
+    path = Path(filename)
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return default_sha
+
+    if not isinstance(raw, dict):
+        return default_sha
+    typed_raw = cast("dict[str, object]", raw)
+    if not is_http_json_cursor_source_spec(typed_raw):
+        return default_sha
+
+    try:
+        config = load_http_json_cursor_source_config(typed_raw)
+    except ValueError:
+        return default_sha
+    return normalize_http_json_cursor_source_identity_sha(config=config)
 
 
 def partition_input_document(
@@ -178,6 +232,7 @@ def partition_input_document(
     strategy: PartitionStrategy,
     sha256: str,
     size_bytes: int,
+    backend: str = "airbyte-message-json",
 ) -> PartitionResult:
     elements: list[ZephyrElement] = []
     texts: list[str] = []
@@ -243,7 +298,7 @@ def partition_input_document(
         ),
         engine=EngineInfo(
             name="it-stream",
-            backend="airbyte-message-json",
+            backend=backend,
             version="0.1.0",
             strategy=strategy,
         ),
@@ -261,7 +316,7 @@ def process_file(
     size_bytes: int | None = None,
 ) -> PartitionResult:
     path = Path(filename)
-    doc = load_input_document(path)
+    doc, backend = _load_input_document_and_backend(path)
     size = size_bytes if size_bytes is not None else path.stat().st_size
     return partition_input_document(
         doc=doc,
@@ -269,4 +324,5 @@ def process_file(
         strategy=strategy,
         sha256=sha256,
         size_bytes=size,
+        backend=backend,
     )

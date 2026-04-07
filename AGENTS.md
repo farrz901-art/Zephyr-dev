@@ -193,6 +193,13 @@ First-wave source connector candidates for P4:
   cursor/window, and response slice facts needed for replay and inspection; pagination, rate-limit,
   and protocol adaptation details remain connector-local
 
+Flow-local source connectors should live in the owning flow package:
+- `packages/uns-stream/src/uns_stream/sources/`
+- `packages/it-stream/src/it_stream/sources/`
+
+Keep only genuinely shared source-entry logic in:
+- `packages/zephyr-ingest/src/zephyr_ingest/sources/`
+
 Not first-wave by default:
 - database/CDC connectors until `it` source-state governance is hardened by at least one simpler
   structured source

@@ -12,7 +12,14 @@ from it_stream.identity import (
     normalize_it_task_identity_key,
 )
 from it_stream.resume import ItResumeSelectionV1, load_it_resume_selection, resume_file
-from it_stream.service import ItInputDocumentV1, ItLogV1, ItRecordV1, ItStateV1, process_file
+from it_stream.service import (
+    ItInputDocumentV1,
+    ItLogV1,
+    ItRecordV1,
+    ItStateV1,
+    normalize_it_input_identity_sha,
+    process_file,
+)
 
 __all__ = [
     "ItArtifactsV1",
@@ -29,6 +36,7 @@ __all__ = [
     "ItResumeSelectionV1",
     "load_it_resume_selection",
     "normalize_it_checkpoint_identity_key",
+    "normalize_it_input_identity_sha",
     "normalize_it_task_identity_key",
     "process_file",
     "resume_file",

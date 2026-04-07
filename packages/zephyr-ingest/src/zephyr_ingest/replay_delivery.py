@@ -26,6 +26,7 @@ from zephyr_ingest.delivery_idempotency import (
 )
 from zephyr_ingest.destinations.base import DeliveryReceipt
 from zephyr_ingest.destinations.kafka import ProducerProtocol, send_delivery_payload_v1_to_kafka
+from zephyr_ingest.destinations.sqlite import send_delivery_payload_v1_to_sqlite
 from zephyr_ingest.destinations.weaviate import WeaviateCollectionProtocol
 from zephyr_ingest.destinations.webhook import WebhookDestination
 from zephyr_ingest.obs.events import log_event
@@ -213,6 +214,26 @@ class KafkaReplaySink:
             payload=payload,
             key_str=idempotency_key,
             flush_timeout_s=self.flush_timeout_s,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class SqliteReplaySink:
+    db_path: Path
+    table_name: str = "zephyr_delivery_records"
+    timeout_s: float = 5.0
+
+    @property
+    def name(self) -> str:
+        return "sqlite"
+
+    def send(self, *, payload: DeliveryPayloadV1, idempotency_key: str) -> DeliveryReceipt:
+        return send_delivery_payload_v1_to_sqlite(
+            db_path=self.db_path,
+            table_name=self.table_name,
+            payload=payload,
+            idempotency_key=idempotency_key,
+            timeout_s=self.timeout_s,
         )
 
 

@@ -3,9 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal, Protocol, cast
 
+from it_stream import normalize_it_input_identity_sha
 from it_stream.service import process_file as process_it_file
 from uns_stream.backends.base import PartitionBackend
-from uns_stream.partition.auto import partition as auto_partition
+from uns_stream.sources.http_source import normalize_uns_input_identity_sha
+from uns_stream.sources.http_source import process_file as process_uns_file
 from zephyr_core import DocumentRef, PartitionResult, PartitionStrategy
 
 FlowKind = Literal["uns", "it"]
@@ -83,7 +85,7 @@ class UnsFlowProcessor:
         pipeline_version: str | None,
         sha256: str,
     ) -> PartitionResult:
-        return auto_partition(
+        return process_uns_file(
             filename=doc.uri,
             strategy=strategy,
             unique_element_ids=unique_element_ids,
@@ -120,6 +122,19 @@ def build_default_flow_processor(*, backend: object | None = None) -> FlowProces
     """Build the default processor used when no explicit processor is supplied."""
 
     return build_processor_for_flow_kind(flow_kind=DEFAULT_FLOW_KIND, backend=backend)
+
+
+def normalize_flow_input_identity_sha(
+    *,
+    flow_kind: FlowKind | str,
+    filename: str,
+    default_sha: str,
+) -> str:
+    if flow_kind == "it":
+        return normalize_it_input_identity_sha(filename=filename, default_sha=default_sha)
+    if flow_kind == "uns":
+        return normalize_uns_input_identity_sha(filename=filename, default_sha=default_sha)
+    return default_sha
 
 
 def build_processor_for_flow_kind(
