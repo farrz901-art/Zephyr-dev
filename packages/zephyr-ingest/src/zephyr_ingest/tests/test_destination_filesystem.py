@@ -148,6 +148,13 @@ def test_filesystem_destination_writes_it_stream_artifacts(tmp_path: Path) -> No
     assert checkpoint["task_identity_key"] == (
         '{"kind":"it","pipeline_version":"p-it","sha256":"abc-it"}'
     )
+    assert checkpoint["provenance"] == {
+        "delivery_origin": "primary",
+        "execution_mode": "batch",
+        "resumed_from_checkpoint_identity_key": None,
+        "run_origin": "intake",
+        "task_identity_key": '{"kind":"it","pipeline_version":"p-it","sha256":"abc-it"}',
+    }
     assert checkpoint["checkpoints"] == [
         {
             "checkpoint_identity_key": (
@@ -155,6 +162,7 @@ def test_filesystem_destination_writes_it_stream_artifacts(tmp_path: Path) -> No
                 '"stream":"customers","task":{"kind":"it","pipeline_version":"p-it","sha256":"abc-it"}}'
             ),
             "checkpoint_index": 0,
+            "parent_checkpoint_identity_key": None,
             "progress": {"cursor": "2026-01-01"},
         }
     ]

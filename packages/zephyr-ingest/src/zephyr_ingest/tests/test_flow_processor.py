@@ -340,6 +340,13 @@ def test_runner_routes_http_json_source_specs_through_it_execution_chain(
     assert run_meta["engine"]["backend"] == "http-json-cursor"
     assert run_meta["provenance"]["task_identity_key"] == expected_task_identity_key
     assert checkpoint["task_identity_key"] == expected_task_identity_key
+    assert checkpoint["provenance"] == {
+        "delivery_origin": "primary",
+        "execution_mode": "batch",
+        "resumed_from_checkpoint_identity_key": None,
+        "run_origin": "intake",
+        "task_identity_key": expected_task_identity_key,
+    }
     assert checkpoint["checkpoints"][0]["progress"] == {
         "cursor": "c-1",
         "page_number": 1,

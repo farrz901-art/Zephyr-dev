@@ -1,9 +1,14 @@
 from it_stream.artifacts import (
     ItArtifactsV1,
+    ItCheckpointCompatibilityError,
+    ItCheckpointCompatibilityV1,
     ItCheckpointEntryV1,
+    ItCheckpointProvenanceV1,
     ItCheckpointV1,
     build_it_artifacts,
+    build_it_checkpoint_provenance,
     dump_it_artifacts,
+    inspect_it_checkpoint_compatibility,
 )
 from it_stream.identity import (
     ItCheckpointIdentityV1,
@@ -23,16 +28,21 @@ from it_stream.service import (
 
 __all__ = [
     "ItArtifactsV1",
+    "ItCheckpointCompatibilityError",
+    "ItCheckpointCompatibilityV1",
     "ItCheckpointIdentityV1",
     "ItCheckpointEntryV1",
+    "ItCheckpointProvenanceV1",
     "ItCheckpointV1",
     "ItInputDocumentV1",
     "ItLogV1",
     "ItRecordV1",
     "ItStateV1",
     "ItTaskIdentityV1",
+    "build_it_checkpoint_provenance",
     "build_it_artifacts",
     "dump_it_artifacts",
+    "inspect_it_checkpoint_compatibility",
     "ItResumeSelectionV1",
     "load_it_resume_selection",
     "normalize_it_checkpoint_identity_key",

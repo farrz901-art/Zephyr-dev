@@ -202,6 +202,7 @@ def test_http_source_builds_zephyr_owned_records_and_checkpoint_artifacts(
                 )
             ),
             "checkpoint_index": 0,
+            "parent_checkpoint_identity_key": None,
             "progress": {
                 "cursor": "c-1",
                 "page_number": 1,
@@ -210,6 +211,13 @@ def test_http_source_builds_zephyr_owned_records_and_checkpoint_artifacts(
             },
         }
     ]
+    assert checkpoint_row["provenance"] == {
+        "delivery_origin": "primary",
+        "execution_mode": "batch",
+        "resumed_from_checkpoint_identity_key": None,
+        "run_origin": "intake",
+        "task_identity_key": ('{"kind":"it","pipeline_version":"p-http","sha256":"sha-http-001"}'),
+    }
     assert json.loads(record_lines[0]) == {
         "data": {"id": 1, "name": "Ada"},
         "emitted_at": None,

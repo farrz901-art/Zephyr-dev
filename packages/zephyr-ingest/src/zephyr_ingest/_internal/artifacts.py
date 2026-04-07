@@ -37,6 +37,7 @@ def dump_partition_artifacts(
                 out_dir=out_dir,
                 result=result,
                 pipeline_version=meta.pipeline_version,
+                run_provenance=meta.provenance,
             )
 
     _write_json(out_dir / "run_meta.json", meta.to_dict())
