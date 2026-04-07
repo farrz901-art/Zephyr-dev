@@ -116,13 +116,88 @@ Both flows must:
 - expose Zephyr-owned artifacts and typed boundaries
 - keep flow-local semantics local until they are clearly proven across more than one flow family
 
+For future source connector placement:
+- place a connector in `uns-stream` when the dominant source problem is document/file/content
+  acquisition that immediately leads into partitioning, extraction, or document normalization, and
+  the important source semantics are document-native rather than protocol/checkpoint-native
+- place a connector in `it-stream` when the dominant source problem is structured record
+  transport, protocol/state handling, cursor/checkpoint progression, or resume/governance semantics
+  tied to the source protocol
+- do not force connector families into both flows for symmetry; a source adapter belongs only where
+  its primary ingestion semantics naturally live
+- do not classify by vendor similarity or packaging convenience alone; classify by data shape,
+  progression model, and failure/recovery semantics that Zephyr must own
+- keep shared surfaces limited to stable ingestion/orchestration facts in `zephyr-ingest` and
+  `zephyr-core`: task/run/provenance contracts, flow processor integration, queue/lock/governance,
+  delivery handoff, and stable source config/registration shapes that do not encode flow-local
+  semantics
+- keep flow-local until proven otherwise: document partition/normalization rules, source-specific
+  protocol handling, checkpoint/cursor identity, resume continuation policy, and any adapter
+  behavior that would blur `uns` and `it` into a generic source runtime
+
+For future source connector onboarding, review against this checklist:
+- config: connector config must enter through Zephyr-owned typed/spec surfaces; do not pass
+  connector-specific loose dicts through orchestration boundaries or promote source-specific config
+  shapes into `zephyr-core` before they are proven stable across flows
+- task identity: only stable source inputs that materially define the unit of work may contribute to
+  task identity; do not key identity on volatile timestamps, transient auth/session values, or
+  inspect-only toggles
+- artifact ownership: outputs handed to orchestration/delivery must be Zephyr-owned artifacts and
+  typed shapes; upstream-native payloads, cursors, and debug dumps may exist only as bounded
+  flow-local implementation details unless explicitly stabilized
+- provenance: preserve the source facts needed to explain what was read, under which connector
+  config/spec, and which source-local position or document selection produced the work; do not drop
+  retry/replay-relevant provenance when adapting a source
+- metrics and inspection: connectors must fit existing run/observability surfaces in
+  `zephyr-ingest`; expose enough counters/events/log context to inspect source selection, reads,
+  retries, skips, and failure classes without inventing a parallel observability path
+- tests: every connector PR must add focused tests for config validation, task identity stability,
+  artifact shape ownership boundaries, provenance preservation, retryable vs non-retryable failure
+  semantics, and any flow-local resume/cursor/document selection rules that could drift silently
+- shared vs local: share only stable orchestration-facing facts; keep source protocol handling,
+  document parsing rules, cursor/checkpoint semantics, and upstream-specific adaptation logic in the
+  owning flow until more than one real connector proves a wider contract
+
 ## P4 expansion rules
 P4 should expand from the now-proven foundation, not around it.
+
+For source connector work, treat the source placement rules, onboarding checklist, and first-wave
+candidate list in this file as the P4-M1 architecture lock. Future connector PRs should either
+follow them or explicitly update this section and its anti-drift coverage in the same change.
 
 Source connector expansion:
 - is not the immediate priority until the current `it` governance/runtime path is mature enough
 - should not bypass the existing task / provenance / checkpoint discipline
 - should not force `it-stream` to absorb a full external connector platform design
+
+First-wave source connector candidates for P4:
+- `uns-stream`: local document collection source. Use this for repository/workspace/path-rooted file
+  sets where the dominant problem is selecting documents and handing them into document
+  partition/normalization. Attachment pattern: connector config stays as a Zephyr-owned source
+  spec; task identity is derived from stable document selection facts such as source root, relative
+  path, and content/version marker; outputs remain Zephyr-owned document artifacts; provenance must
+  preserve source path and document selection/version facts; traversal/filtering details remain
+  connector-local
+- `uns-stream`: object storage / blob document collection source. Use this when documents are
+  selected from bucket/container/prefix-style stores and still enter `uns` as document-native work.
+  Attachment pattern: config captures stable container/prefix selection, not SDK-specific loose
+  blobs; task identity is derived from stable object locator plus version/etag generation facts;
+  outputs remain Zephyr-owned document artifacts; provenance must preserve object locator and
+  version facts; listing pagination/auth specifics remain connector-local
+- `it-stream`: cursor or pagination-driven structured API source. Use this when the dominant source
+  problem is structured record transport with protocol-defined page/cursor/watermark progression and
+  retry/resume semantics. Attachment pattern: config captures the stable endpoint/resource/partition
+  selector and read mode; task identity is derived from stable source selector plus the intended
+  read slice, never transient auth/session state; outputs remain Zephyr-owned structured
+  record/state artifacts rather than raw response envelopes; provenance must preserve selector,
+  cursor/window, and response slice facts needed for replay and inspection; pagination, rate-limit,
+  and protocol adaptation details remain connector-local
+
+Not first-wave by default:
+- database/CDC connectors until `it` source-state governance is hardened by at least one simpler
+  structured source
+- message-bus/streaming connectors that would re-open runtime and checkpoint architecture questions
+- vendor-specific connector proliferation before the candidate classes above are proven
 
 Destination connector expansion:
 - should build on the hardened delivery / receipt / idempotency / replay semantics already in place
