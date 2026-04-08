@@ -1238,6 +1238,41 @@ def test_load_it_resume_selection_distinguishes_incompatible_checkpoint_contract
     }
 
 
+def test_load_it_resume_selection_distinguishes_unsupported_schema_checkpoint_contract(
+    tmp_path: Path,
+) -> None:
+    checkpoint_path = tmp_path / "checkpoint.json"
+    checkpoint_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 99,
+                "flow_kind": "it",
+                "stream": "customers",
+                "task_identity_key": "task-key",
+                "checkpoints": [],
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ItResumeRecoveryError, match="schema version") as exc_info:
+        load_it_resume_selection(
+            checkpoint_path=checkpoint_path,
+            pipeline_version="p-it",
+            sha256="sha-it-incompatible-schema",
+        )
+
+    assert exc_info.value.issue.to_dict() == {
+        "status": "incompatible",
+        "code": "checkpoint_incompatible",
+        "message": "Unsupported it-stream checkpoint schema version: 99",
+        "checkpoint_identity_key": None,
+        "progress_kind": None,
+    }
+
+
 def test_load_it_resume_selection_distinguishes_malformed_checkpoint_artifact(
     tmp_path: Path,
 ) -> None:
@@ -1265,6 +1300,127 @@ def test_load_it_resume_selection_distinguishes_malformed_checkpoint_artifact(
 
     assert exc_info.value.issue.status == "malformed"
     assert exc_info.value.issue.code == "checkpoint_malformed"
+    assert exc_info.value.issue.progress_kind is None
+
+
+@pytest.mark.parametrize(
+    ("checkpoint_payload", "match"),
+    [
+        (
+            {
+                "schema_version": 1,
+                "flow_kind": "it",
+                "stream": "customers",
+                "task_identity_key": "task-key",
+                "checkpoints": [
+                    {
+                        "checkpoint_index": 0,
+                        "progress_kind": "cursor_v1",
+                        "progress": {"cursor": "2026-01-01T00:00:00Z"},
+                    }
+                ],
+            },
+            "checkpoint_identity_key",
+        ),
+        (
+            {
+                "schema_version": 1,
+                "flow_kind": "it",
+                "stream": "customers",
+                "task_identity_key": "task-key",
+                "checkpoints": [
+                    {
+                        "checkpoint_index": 0,
+                        "checkpoint_identity_key": "checkpoint-invalid-progress",
+                        "progress_kind": "cursor_v1",
+                        "progress": ["2026-01-01T00:00:00Z"],
+                    }
+                ],
+            },
+            "field 'progress' must be an object",
+        ),
+        (
+            {
+                "schema_version": 1,
+                "flow_kind": "it",
+                "stream": "customers",
+                "task_identity_key": "task-key",
+                "checkpoints": [
+                    {
+                        "checkpoint_index": 0,
+                        "checkpoint_identity_key": "checkpoint-invalid-parent",
+                        "parent_checkpoint_identity_key": False,
+                        "progress_kind": "cursor_v1",
+                        "progress": {"cursor": "2026-01-01T00:00:00Z"},
+                    }
+                ],
+            },
+            "parent_checkpoint_identity_key",
+        ),
+        (
+            {
+                "schema_version": 1,
+                "flow_kind": "it",
+                "stream": "customers",
+                "task_identity_key": "task-key",
+                "provenance": {
+                    "task_identity_key": "task-key",
+                    "run_origin": "resume",
+                    "delivery_origin": "primary",
+                    "execution_mode": "batch",
+                    "resumed_from_checkpoint_identity_key": "checkpoint-valid",
+                    "resume": {
+                        "checkpoint_identity_key": "checkpoint-valid",
+                        "progress_kind": "cursor_v1",
+                        "continuation": [],
+                    },
+                },
+                "checkpoints": [
+                    {
+                        "checkpoint_index": 0,
+                        "checkpoint_identity_key": "checkpoint-valid",
+                        "progress_kind": "cursor_v1",
+                        "progress": {"cursor": "2026-01-01T00:00:00Z"},
+                    }
+                ],
+            },
+            "field 'continuation' must be an object or null",
+        ),
+    ],
+)
+def test_load_it_resume_selection_rejects_corrupted_checkpoint_substructures_as_malformed(
+    tmp_path: Path,
+    checkpoint_payload: dict[str, object],
+    match: str,
+) -> None:
+    checkpoint_path = tmp_path / "checkpoint.json"
+    checkpoint_path.write_text(
+        json.dumps(
+            checkpoint_payload,
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    raw = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+    compatibility = inspect_it_checkpoint_compatibility(raw=raw)
+
+    assert compatibility.status == "malformed"
+    assert compatibility.schema_version == 1
+    assert compatibility.flow_kind == "it"
+    assert compatibility.reason is not None
+
+    with pytest.raises(ItResumeRecoveryError, match=match) as exc_info:
+        load_it_resume_selection(
+            checkpoint_path=checkpoint_path,
+            pipeline_version="p-it",
+            sha256="sha-it-corrupted-checkpoint",
+        )
+
+    assert exc_info.value.issue.status == "malformed"
+    assert exc_info.value.issue.code == "checkpoint_malformed"
+    assert exc_info.value.issue.checkpoint_identity_key is None
     assert exc_info.value.issue.progress_kind is None
 
 

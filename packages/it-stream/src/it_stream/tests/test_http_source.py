@@ -10,12 +10,19 @@ import pytest
 
 from it_stream import (
     ItCheckpointIdentityV1,
+    ItCheckpointProvenanceV1,
+    ItCheckpointResumeCursorContinuationV1,
+    ItCheckpointResumeProvenanceV1,
+    ItResumeRecoveryError,
     ItTaskIdentityV1,
     dump_it_artifacts,
+    load_it_resume_selection,
     normalize_it_checkpoint_identity_key,
     normalize_it_input_identity_sha,
     process_file,
+    resume_file,
 )
+from it_stream.artifacts import load_it_checkpoint
 from it_stream.sources import http_source
 from zephyr_core import ErrorCode, PartitionStrategy, ZephyrError
 
@@ -238,6 +245,181 @@ def test_http_source_builds_zephyr_owned_records_and_checkpoint_artifacts(
     }
     assert "records" not in checkpoint_row
     assert "next_cursor" not in checkpoint_row
+
+
+def test_http_source_real_path_recovery_supports_state_only_resume_and_resumed_provenance(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "source.json"
+    _write_http_source_spec(path, url="https://example.test/api/customers")
+
+    def fake_urlopen(request: object, timeout: float = 10.0) -> _FakeResponse:
+        del timeout
+        full_url = cast("str", getattr(request, "full_url"))
+        if "cursor=c-2" in full_url:
+            return _FakeResponse({"records": [], "next_cursor": None})
+        if "cursor=c-1" in full_url:
+            return _FakeResponse({"records": [], "next_cursor": "c-2"})
+        return _FakeResponse({"records": [], "next_cursor": "c-1"})
+
+    monkeypatch.setattr(http_source, "urlopen", fake_urlopen)
+
+    initial = process_file(
+        filename=str(path),
+        strategy=PartitionStrategy.AUTO,
+        sha256="sha-http-resume",
+        size_bytes=path.stat().st_size,
+    )
+    initial_artifacts = dump_it_artifacts(
+        out_dir=tmp_path / "initial-artifacts",
+        result=initial,
+        pipeline_version="p-http-resume",
+    )
+
+    assert initial.engine.backend == "http-json-cursor"
+    assert [element.metadata["artifact_kind"] for element in initial.elements] == [
+        "state",
+        "state",
+        "log",
+        "log",
+        "log",
+        "log",
+    ]
+
+    first_checkpoint, second_checkpoint = initial_artifacts.checkpoint.checkpoints
+    assert first_checkpoint.parent_checkpoint_identity_key is None
+    assert second_checkpoint.parent_checkpoint_identity_key == (
+        first_checkpoint.checkpoint_identity_key
+    )
+
+    selection = load_it_resume_selection(
+        checkpoint_path=tmp_path / "initial-artifacts" / "checkpoint.json",
+        pipeline_version="p-http-resume",
+        sha256="sha-http-resume",
+        checkpoint_identity_key=first_checkpoint.checkpoint_identity_key,
+    )
+
+    assert selection.selected_checkpoint.mode == "explicit_checkpoint_identity"
+    assert selection.selected_checkpoint.checkpoint_identity_key == (
+        first_checkpoint.checkpoint_identity_key
+    )
+    assert selection.selected_checkpoint.parent_checkpoint_identity_key is None
+    assert selection.selected_checkpoint.progress_kind == "cursor_v1"
+    assert selection.entry.progress == {
+        "cursor": "c-1",
+        "page_number": 1,
+        "record_count": 0,
+        "source_url": "https://example.test/api/customers",
+    }
+    assert selection.checkpoint.task_identity_key != first_checkpoint.checkpoint_identity_key
+    assert selection.continuation is not None
+    assert selection.continuation.progress_kind == "cursor_v1"
+    assert selection.continuation.exclusive_after_cursor == "c-1"
+
+    resumed = resume_file(
+        filename=str(path),
+        checkpoint_path=tmp_path / "initial-artifacts" / "checkpoint.json",
+        checkpoint_identity_key=first_checkpoint.checkpoint_identity_key,
+        pipeline_version="p-http-resume",
+        strategy=PartitionStrategy.AUTO,
+        sha256="sha-http-resume",
+        size_bytes=path.stat().st_size,
+    )
+
+    assert [element.metadata["artifact_kind"] for element in resumed.elements] == ["state"]
+    assert resumed.elements[0].metadata["data"] == {
+        "cursor": "c-2",
+        "page_number": 2,
+        "source_url": "https://example.test/api/customers",
+        "record_count": 0,
+    }
+
+    resumed_artifacts = dump_it_artifacts(
+        out_dir=tmp_path / "resumed-artifacts",
+        result=resumed,
+        pipeline_version="p-http-resume",
+        run_provenance=selection.to_run_provenance(
+            execution_mode="worker",
+            task_id="task-http-resume",
+        ),
+        resume_provenance=selection.to_checkpoint_resume_provenance(),
+    )
+    loaded_resumed = load_it_checkpoint(path=tmp_path / "resumed-artifacts" / "checkpoint.json")
+
+    assert loaded_resumed.provenance == ItCheckpointProvenanceV1(
+        task_identity_key=initial_artifacts.checkpoint.task_identity_key,
+        run_origin="resume",
+        delivery_origin="primary",
+        execution_mode="worker",
+        resumed_from_checkpoint_identity_key=first_checkpoint.checkpoint_identity_key,
+        resume=ItCheckpointResumeProvenanceV1(
+            checkpoint_identity_key=first_checkpoint.checkpoint_identity_key,
+            progress_kind="cursor_v1",
+            continuation=ItCheckpointResumeCursorContinuationV1(exclusive_after_cursor="c-1"),
+        ),
+    )
+    assert loaded_resumed.checkpoints[0].parent_checkpoint_identity_key is None
+    assert loaded_resumed.checkpoints[0].progress_kind == "cursor_v1"
+    assert loaded_resumed.checkpoints[0].checkpoint_identity_key != (
+        loaded_resumed.task_identity_key
+    )
+    assert resumed_artifacts.checkpoint.provenance == loaded_resumed.provenance
+
+
+def test_http_source_real_path_recovery_blocks_when_records_lack_resume_timestamps(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "source.json"
+    _write_http_source_spec(path, url="https://example.test/api/customers")
+
+    def fake_urlopen(request: object, timeout: float = 10.0) -> _FakeResponse:
+        del timeout
+        full_url = cast("str", getattr(request, "full_url"))
+        if "cursor=c-1" in full_url:
+            return _FakeResponse({"records": [{"id": 2}], "next_cursor": None})
+        return _FakeResponse({"records": [{"id": 1}], "next_cursor": "c-1"})
+
+    monkeypatch.setattr(http_source, "urlopen", fake_urlopen)
+
+    initial = process_file(
+        filename=str(path),
+        strategy=PartitionStrategy.AUTO,
+        sha256="sha-http-blocked-resume",
+        size_bytes=path.stat().st_size,
+    )
+    artifacts = dump_it_artifacts(
+        out_dir=tmp_path / "artifacts",
+        result=initial,
+        pipeline_version="p-http-blocked",
+    )
+    selection = load_it_resume_selection(
+        checkpoint_path=tmp_path / "artifacts" / "checkpoint.json",
+        pipeline_version="p-http-blocked",
+        sha256="sha-http-blocked-resume",
+    )
+
+    assert selection.selected_checkpoint.progress_kind == "cursor_v1"
+    assert selection.continuation is not None
+    assert selection.continuation.exclusive_after_cursor == "c-1"
+
+    with pytest.raises(ItResumeRecoveryError, match="record.emitted_at") as exc_info:
+        resume_file(
+            filename=str(path),
+            checkpoint_path=tmp_path / "artifacts" / "checkpoint.json",
+            pipeline_version="p-http-blocked",
+            strategy=PartitionStrategy.AUTO,
+            sha256="sha-http-blocked-resume",
+            size_bytes=path.stat().st_size,
+        )
+
+    assert exc_info.value.issue.status == "blocked"
+    assert exc_info.value.issue.code == "missing_record_emitted_at"
+    assert exc_info.value.issue.checkpoint_identity_key == (
+        artifacts.checkpoint.checkpoints[0].checkpoint_identity_key
+    )
+    assert exc_info.value.issue.progress_kind == "cursor_v1"
 
 
 @pytest.mark.parametrize(
