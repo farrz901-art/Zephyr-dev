@@ -214,6 +214,10 @@ def test_inspect_queue_summary_reports_expected_buckets(tmp_path: Path) -> None:
         "done": 1,
         "failed": 0,
         "poison": 1,
+        "listed_tasks": 0,
+        "governance_problem_tasks": 0,
+        "visible_requeue_history_tasks": 0,
+        "recovery_audit_support": "none",
     }
     assert result.bucket is None
     assert result.tasks == ()
@@ -234,12 +238,18 @@ def test_inspect_queue_bucket_list_surfaces_governance_and_identity_metadata(
     assert payload["bucket"] == "poison"
     assert len(payload["tasks"]) == 1
     assert payload["summary"]["poison"] == 1
+    assert payload["summary"]["listed_tasks"] == 1
+    assert payload["summary"]["governance_problem_tasks"] == 1
+    assert payload["summary"]["visible_requeue_history_tasks"] == 0
+    assert payload["summary"]["recovery_audit_support"] == "persisted_in_history"
     assert payload["tasks"][0] == {
         "bucket": "poison",
         "state": "poison",
         "governance_labels": [],
+        "governance_problem": "poison_attempts_exhausted",
         "poison_kind": "attempts_exhausted",
         "handling_expectation": "requeue_supported",
+        "recovery_audit_support": "persisted_in_history",
         "task_id": "task-identity",
         "kind": "it",
         "record_path": str((queue.poison_dir / "task-identity.json").resolve()),
@@ -300,6 +310,10 @@ def test_requeue_poison_task_moves_to_pending_and_preserves_governance(tmp_path:
     result_payload = result.to_dict()
     assert result_payload == {
         "action": "requeue",
+        "support_status": "supported",
+        "governance_result": "moved_to_pending",
+        "redrive_support": "not_modeled",
+        "audit_support": "persisted_in_history",
         "root": str(queue.root.resolve()),
         "task_id": "task-requeue-poison",
         "kind": "it",
@@ -358,6 +372,10 @@ def test_requeue_inflight_task_moves_to_pending_and_preserves_governance(tmp_pat
     result_payload = result.to_dict()
     assert result_payload == {
         "action": "requeue",
+        "support_status": "supported",
+        "governance_result": "moved_to_pending",
+        "redrive_support": "not_modeled",
+        "audit_support": "persisted_in_history",
         "root": str(queue.root.resolve()),
         "task_id": "task-requeue-inflight",
         "kind": "uns",

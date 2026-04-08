@@ -23,10 +23,16 @@ RecoverableSpoolBucket = Literal["poison", "inflight"]
 QueueGovernanceActionKind = Literal["requeue"]
 QueueGovernanceActionAuditSupport = Literal["persisted_in_history", "result_only"]
 QueueGovernanceActionRedriveSemantics = Literal["not_modeled"]
+QueueRecoverySupportStatus = Literal["supported"]
+QueueRecoveryGovernanceResult = Literal["moved_to_pending"]
 
 
 class QueueRecoveryResultDict(TypedDict):
     action: Literal["requeue"]
+    support_status: QueueRecoverySupportStatus
+    governance_result: QueueRecoveryGovernanceResult
+    redrive_support: QueueGovernanceActionRedriveSemantics
+    audit_support: QueueGovernanceActionAuditSupport
     root: str
     task_id: str
     kind: str
@@ -70,6 +76,10 @@ class QueueRecoveryResultV1:
     def to_dict(self) -> QueueRecoveryResultDict:
         return {
             "action": "requeue",
+            "support_status": "supported",
+            "governance_result": "moved_to_pending",
+            "redrive_support": "not_modeled",
+            "audit_support": self.audit_support,
             "root": self.root,
             "task_id": self.task_id,
             "kind": self.kind,
@@ -100,6 +110,14 @@ class QueueRecoveryResultV1:
             recorded_at_utc=self.recorded_at_utc,
             audit_support=self.audit_support,
         )
+
+    @property
+    def support_status(self) -> QueueRecoverySupportStatus:
+        return "supported"
+
+    @property
+    def governance_result(self) -> QueueRecoveryGovernanceResult:
+        return "moved_to_pending"
 
 
 def requeue_local_task(

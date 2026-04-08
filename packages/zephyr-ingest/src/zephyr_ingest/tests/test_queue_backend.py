@@ -230,14 +230,20 @@ def test_sqlite_queue_participates_in_shared_inspection_and_requeue_subset(
         "done": 0,
         "failed": 0,
         "poison": 1,
+        "listed_tasks": 1,
+        "governance_problem_tasks": 1,
+        "visible_requeue_history_tasks": 0,
+        "recovery_audit_support": "result_only",
     }
     assert poison_view["tasks"] == [
         {
             "bucket": "poison",
             "state": "poison",
             "governance_labels": [],
+            "governance_problem": "poison_attempts_exhausted",
             "poison_kind": "attempts_exhausted",
             "handling_expectation": "requeue_supported",
+            "recovery_audit_support": "result_only",
             "task_id": "task-sqlite-governed",
             "kind": "it",
             "record_path": (
@@ -269,8 +275,14 @@ def test_sqlite_queue_participates_in_shared_inspection_and_requeue_subset(
     assert recovery.governance_action.target_state == "pending"
     assert recovery.governance_action.audit_support == "result_only"
     assert recovery.governance_action.redrive_semantics == "not_modeled"
+    assert recovery.support_status == "supported"
+    assert recovery.governance_result == "moved_to_pending"
     assert recovery.to_dict() == {
         "action": "requeue",
+        "support_status": "supported",
+        "governance_result": "moved_to_pending",
+        "redrive_support": "not_modeled",
+        "audit_support": "result_only",
         "root": str(backend.root.resolve()),
         "task_id": "task-sqlite-governed",
         "kind": "it",
@@ -306,11 +318,17 @@ def test_sqlite_queue_participates_in_shared_inspection_and_requeue_subset(
         "done": 0,
         "failed": 0,
         "poison": 0,
+        "listed_tasks": 1,
+        "governance_problem_tasks": 0,
+        "visible_requeue_history_tasks": 0,
+        "recovery_audit_support": "result_only",
     }
     assert pending_view["tasks"][0]["state"] == "pending"
     assert pending_view["tasks"][0]["governance_labels"] == []
+    assert pending_view["tasks"][0]["governance_problem"] == "none"
     assert pending_view["tasks"][0]["poison_kind"] == "not_poison"
     assert pending_view["tasks"][0]["handling_expectation"] == "none"
+    assert pending_view["tasks"][0]["recovery_audit_support"] == "result_only"
     assert pending_view["tasks"][0]["latest_recovery"] is None
 
 
@@ -613,6 +631,7 @@ def test_governance_recovery_runtime_metrics_and_inspection_stay_coherent(
     assert poison_view["summary"]["poison"] == 1
     assert poison_view["tasks"][0]["state"] == "poison"
     assert poison_view["tasks"][0]["governance_labels"] == []
+    assert poison_view["tasks"][0]["governance_problem"] == "poison_attempts_exhausted"
     assert poison_view["tasks"][0]["poison_kind"] == "attempts_exhausted"
     assert poison_view["tasks"][0]["handling_expectation"] == "requeue_supported"
     assert poison_view["tasks"][0]["task_id"] == "task-governed"
@@ -648,9 +667,14 @@ def test_governance_recovery_runtime_metrics_and_inspection_stay_coherent(
         "done": 0,
         "failed": 0,
         "poison": 0,
+        "listed_tasks": 1,
+        "governance_problem_tasks": 0,
+        "visible_requeue_history_tasks": 1,
+        "recovery_audit_support": "persisted_in_history",
     }
     assert pending_view["tasks"][0]["state"] == "pending"
     assert pending_view["tasks"][0]["governance_labels"] == ["requeued"]
+    assert pending_view["tasks"][0]["governance_problem"] == "none"
     assert pending_view["tasks"][0]["poison_kind"] == "not_poison"
     assert pending_view["tasks"][0]["handling_expectation"] == "none"
     assert pending_view["tasks"][0]["latest_recovery"] == {
@@ -690,9 +714,14 @@ def test_governance_recovery_runtime_metrics_and_inspection_stay_coherent(
         "done": 1,
         "failed": 0,
         "poison": 0,
+        "listed_tasks": 1,
+        "governance_problem_tasks": 0,
+        "visible_requeue_history_tasks": 1,
+        "recovery_audit_support": "persisted_in_history",
     }
     assert done_view["tasks"][0]["state"] == "done"
     assert done_view["tasks"][0]["governance_labels"] == ["requeued"]
+    assert done_view["tasks"][0]["governance_problem"] == "none"
     assert done_view["tasks"][0]["poison_kind"] == "not_poison"
     assert done_view["tasks"][0]["handling_expectation"] == "none"
     assert done_view["tasks"][0]["latest_recovery"] == pending_view["tasks"][0]["latest_recovery"]
@@ -737,8 +766,16 @@ def test_supported_backend_pairs_keep_governance_surfaces_coherent(
     )
     poison_view = poison_result.to_dict()
     assert poison_view["summary"]["poison"] == 1
+    assert poison_view["summary"]["listed_tasks"] == 1
+    assert poison_view["summary"]["governance_problem_tasks"] == 1
+    assert poison_view["summary"]["visible_requeue_history_tasks"] == 0
+    if expects_recovery_history:
+        assert poison_view["summary"]["recovery_audit_support"] == "persisted_in_history"
+    else:
+        assert poison_view["summary"]["recovery_audit_support"] == "result_only"
     assert poison_view["tasks"][0]["state"] == "poison"
     assert poison_view["tasks"][0]["governance_labels"] == []
+    assert poison_view["tasks"][0]["governance_problem"] == "poison_attempts_exhausted"
     assert poison_view["tasks"][0]["poison_kind"] == "attempts_exhausted"
     assert poison_view["tasks"][0]["handling_expectation"] == "requeue_supported"
     assert poison_view["tasks"][0]["task_id"] == task.task_id
@@ -747,6 +784,10 @@ def test_supported_backend_pairs_keep_governance_surfaces_coherent(
         "sha256": f"sha-{task.task_id}",
     }
     assert poison_view["tasks"][0]["latest_recovery"] is None
+    if expects_recovery_history:
+        assert poison_view["tasks"][0]["recovery_audit_support"] == "persisted_in_history"
+    else:
+        assert poison_view["tasks"][0]["recovery_audit_support"] == "result_only"
 
     recovery = requeue_local_task(
         root=tmp_path / f"{queue_kind}-queue",
@@ -757,11 +798,18 @@ def test_supported_backend_pairs_keep_governance_surfaces_coherent(
     assert recovery.governance_action.action == "requeue"
     assert recovery.governance_action.source_state == "poison"
     assert recovery.governance_action.target_state == "pending"
+    assert recovery.support_status == "supported"
+    assert recovery.governance_result == "moved_to_pending"
     if expects_recovery_history:
         assert recovery.governance_action.audit_support == "persisted_in_history"
+        assert recovery.to_dict()["audit_support"] == "persisted_in_history"
     else:
         assert recovery.governance_action.audit_support == "result_only"
+        assert recovery.to_dict()["audit_support"] == "result_only"
     assert recovery.governance_action.redrive_semantics == "not_modeled"
+    assert recovery.to_dict()["support_status"] == "supported"
+    assert recovery.to_dict()["governance_result"] == "moved_to_pending"
+    assert recovery.to_dict()["redrive_support"] == "not_modeled"
     assert recovery.to_run_provenance().to_dict() == {
         "run_origin": "requeue",
         "delivery_origin": "primary",
@@ -784,6 +832,12 @@ def test_supported_backend_pairs_keep_governance_surfaces_coherent(
         "done": 0,
         "failed": 0,
         "poison": 0,
+        "listed_tasks": 1,
+        "governance_problem_tasks": 0,
+        "visible_requeue_history_tasks": 1 if expects_recovery_history else 0,
+        "recovery_audit_support": (
+            "persisted_in_history" if expects_recovery_history else "result_only"
+        ),
     }
     if expects_recovery_history:
         assert pending_result.tasks[0].governance_action_audit_support == "persisted_in_history"
@@ -795,8 +849,10 @@ def test_supported_backend_pairs_keep_governance_surfaces_coherent(
         assert latest_governance_action.audit_support == "persisted_in_history"
         assert pending_view["tasks"][0]["state"] == "pending"
         assert pending_view["tasks"][0]["governance_labels"] == ["requeued"]
+        assert pending_view["tasks"][0]["governance_problem"] == "none"
         assert pending_view["tasks"][0]["poison_kind"] == "not_poison"
         assert pending_view["tasks"][0]["handling_expectation"] == "none"
+        assert pending_view["tasks"][0]["recovery_audit_support"] == "persisted_in_history"
         assert pending_view["tasks"][0]["latest_recovery"] == {
             "action": "requeue",
             "source_bucket": "poison",
@@ -808,8 +864,10 @@ def test_supported_backend_pairs_keep_governance_surfaces_coherent(
         assert pending_result.tasks[0].latest_governance_action is None
         assert pending_view["tasks"][0]["state"] == "pending"
         assert pending_view["tasks"][0]["governance_labels"] == []
+        assert pending_view["tasks"][0]["governance_problem"] == "none"
         assert pending_view["tasks"][0]["poison_kind"] == "not_poison"
         assert pending_view["tasks"][0]["handling_expectation"] == "none"
+        assert pending_view["tasks"][0]["recovery_audit_support"] == "result_only"
         assert pending_view["tasks"][0]["latest_recovery"] is None
 
     lock_key = normalize_task_idempotency_key(task)
@@ -864,20 +922,30 @@ def test_supported_backend_pairs_keep_governance_surfaces_coherent(
         "done": 1,
         "failed": 0,
         "poison": 0,
+        "listed_tasks": 1,
+        "governance_problem_tasks": 0,
+        "visible_requeue_history_tasks": 1 if expects_recovery_history else 0,
+        "recovery_audit_support": (
+            "persisted_in_history" if expects_recovery_history else "result_only"
+        ),
     }
     if expects_recovery_history:
         assert done_view["tasks"][0]["state"] == "done"
         assert done_view["tasks"][0]["governance_labels"] == ["requeued"]
+        assert done_view["tasks"][0]["governance_problem"] == "none"
         assert done_view["tasks"][0]["poison_kind"] == "not_poison"
         assert done_view["tasks"][0]["handling_expectation"] == "none"
+        assert done_view["tasks"][0]["recovery_audit_support"] == "persisted_in_history"
         assert (
             done_view["tasks"][0]["latest_recovery"] == pending_view["tasks"][0]["latest_recovery"]
         )
     else:
         assert done_view["tasks"][0]["state"] == "done"
         assert done_view["tasks"][0]["governance_labels"] == []
+        assert done_view["tasks"][0]["governance_problem"] == "none"
         assert done_view["tasks"][0]["poison_kind"] == "not_poison"
         assert done_view["tasks"][0]["handling_expectation"] == "none"
+        assert done_view["tasks"][0]["recovery_audit_support"] == "result_only"
         assert done_view["tasks"][0]["latest_recovery"] is None
 
     text = render_prometheus_text(
@@ -916,6 +984,7 @@ def test_queue_inspection_exposes_orphan_as_governance_label_not_core_state(
     assert pending_view["tasks"][0]["task_id"] == task.task_id
     assert pending_view["tasks"][0]["state"] == "pending"
     assert pending_view["tasks"][0]["governance_labels"] == ["orphaned"]
+    assert pending_view["tasks"][0]["governance_problem"] == "orphaned"
     assert pending_view["tasks"][0]["poison_kind"] == "not_poison"
     assert pending_view["tasks"][0]["handling_expectation"] == "none"
     assert pending_view["tasks"][0]["orphan_count"] == 1
@@ -959,10 +1028,18 @@ def test_queue_inspection_distinguishes_poison_from_attempts_and_orphan_threshol
     ).to_dict()
 
     assert poison_view["summary"]["poison"] == 2
+    assert poison_view["summary"]["listed_tasks"] == 2
+    assert poison_view["summary"]["governance_problem_tasks"] == 2
+    assert poison_view["summary"]["visible_requeue_history_tasks"] == 0
+    if backend_kind == "spool":
+        assert poison_view["summary"]["recovery_audit_support"] == "persisted_in_history"
+    else:
+        assert poison_view["summary"]["recovery_audit_support"] == "result_only"
     by_task_id = {task["task_id"]: task for task in poison_view["tasks"]}
 
     assert by_task_id[failure_task.task_id]["state"] == "poison"
     assert by_task_id[failure_task.task_id]["governance_labels"] == []
+    assert by_task_id[failure_task.task_id]["governance_problem"] == "poison_attempts_exhausted"
     assert by_task_id[failure_task.task_id]["poison_kind"] == "attempts_exhausted"
     assert by_task_id[failure_task.task_id]["handling_expectation"] == "requeue_supported"
     assert by_task_id[failure_task.task_id]["failure_count"] == 1
@@ -970,6 +1047,7 @@ def test_queue_inspection_distinguishes_poison_from_attempts_and_orphan_threshol
 
     assert by_task_id[orphan_task.task_id]["state"] == "poison"
     assert by_task_id[orphan_task.task_id]["governance_labels"] == ["orphaned"]
+    assert by_task_id[orphan_task.task_id]["governance_problem"] == "poison_orphaned"
     assert by_task_id[orphan_task.task_id]["poison_kind"] == "orphaned"
     assert by_task_id[orphan_task.task_id]["handling_expectation"] == "requeue_supported"
     assert by_task_id[orphan_task.task_id]["failure_count"] == 0
@@ -1020,6 +1098,12 @@ def test_task_governance_boundary_keeps_state_poison_and_recovery_action_distinc
         bucket="poison",
     )
     assert poison_result.summary.poison == 2
+    assert poison_result.summary.listed_tasks == 2
+    assert poison_result.summary.governance_problem_tasks == 2
+    assert poison_result.summary.visible_requeue_history_tasks == 0
+    assert poison_result.summary.recovery_audit_support == (
+        "persisted_in_history" if expects_recovery_history else "result_only"
+    )
 
     poison_tasks = {task.task_id: task for task in poison_result.tasks}
     failed_poison = poison_tasks[failure_task.task_id]
@@ -1027,17 +1111,25 @@ def test_task_governance_boundary_keeps_state_poison_and_recovery_action_distinc
 
     assert failed_poison.state == "poison"
     assert failed_poison.governance_labels == ()
+    assert failed_poison.governance_problem == "poison_attempts_exhausted"
     assert failed_poison.poison_kind == "attempts_exhausted"
     assert failed_poison.handling_expectation == "requeue_supported"
     assert failed_poison.latest_recovery is None
+    assert failed_poison.recovery_audit_support == (
+        "persisted_in_history" if expects_recovery_history else "result_only"
+    )
     assert failed_poison.governance_action_audit_support == "result_only"
     assert failed_poison.latest_governance_action is None
 
     assert orphan_poison.state == "poison"
     assert orphan_poison.governance_labels == ("orphaned",)
+    assert orphan_poison.governance_problem == "poison_orphaned"
     assert orphan_poison.poison_kind == "orphaned"
     assert orphan_poison.handling_expectation == "requeue_supported"
     assert orphan_poison.latest_recovery is None
+    assert orphan_poison.recovery_audit_support == (
+        "persisted_in_history" if expects_recovery_history else "result_only"
+    )
     assert orphan_poison.governance_action_audit_support == "result_only"
     assert orphan_poison.latest_governance_action is None
 
@@ -1051,10 +1143,17 @@ def test_task_governance_boundary_keeps_state_poison_and_recovery_action_distinc
     assert recovery.governance_action.source_state == "poison"
     assert recovery.governance_action.target_state == "pending"
     assert recovery.governance_action.redrive_semantics == "not_modeled"
+    assert recovery.support_status == "supported"
+    assert recovery.governance_result == "moved_to_pending"
     if expects_recovery_history:
         assert recovery.governance_action.audit_support == "persisted_in_history"
+        assert recovery.to_dict()["audit_support"] == "persisted_in_history"
     else:
         assert recovery.governance_action.audit_support == "result_only"
+        assert recovery.to_dict()["audit_support"] == "result_only"
+    assert recovery.to_dict()["support_status"] == "supported"
+    assert recovery.to_dict()["governance_result"] == "moved_to_pending"
+    assert recovery.to_dict()["redrive_support"] == "not_modeled"
 
     pending_result = inspect_local_queue(
         root=backend_root,
@@ -1062,14 +1161,24 @@ def test_task_governance_boundary_keeps_state_poison_and_recovery_action_distinc
         bucket="pending",
     )
     assert pending_result.summary.pending == 1
+    assert pending_result.summary.listed_tasks == 1
+    assert pending_result.summary.governance_problem_tasks == 0
+    assert pending_result.summary.visible_requeue_history_tasks == (
+        1 if expects_recovery_history else 0
+    )
+    assert pending_result.summary.recovery_audit_support == (
+        "persisted_in_history" if expects_recovery_history else "result_only"
+    )
     recovered_task = pending_result.tasks[0]
 
     assert recovered_task.task_id == failure_task.task_id
     assert recovered_task.state == "pending"
+    assert recovered_task.governance_problem == "none"
     assert recovered_task.poison_kind == "not_poison"
     assert recovered_task.handling_expectation == "none"
     if expects_recovery_history:
         assert recovered_task.governance_labels == ("requeued",)
+        assert recovered_task.recovery_audit_support == "persisted_in_history"
         assert recovered_task.governance_action_audit_support == "persisted_in_history"
         assert recovered_task.latest_recovery == {
             "action": "requeue",
@@ -1086,6 +1195,96 @@ def test_task_governance_boundary_keeps_state_poison_and_recovery_action_distinc
         assert latest_governance_action.redrive_semantics == "not_modeled"
     else:
         assert recovered_task.governance_labels == ()
+        assert recovered_task.recovery_audit_support == "result_only"
         assert recovered_task.governance_action_audit_support == "result_only"
         assert recovered_task.latest_recovery is None
         assert recovered_task.latest_governance_action is None
+
+
+@pytest.mark.parametrize(
+    ("backend_kind", "expects_recovery_history"),
+    [
+        ("spool", True),
+        ("sqlite", False),
+    ],
+)
+def test_operator_surface_boundary_keeps_inspection_recovery_and_summary_facts_distinct(
+    tmp_path: Path,
+    backend_kind: Literal["spool", "sqlite"],
+    expects_recovery_history: bool,
+) -> None:
+    backend_root = tmp_path / f"{backend_kind}-queue"
+    if backend_kind == "spool":
+        backend: QueueBackend = LocalSpoolQueue(root=backend_root, max_task_attempts=1)
+    else:
+        backend = SqliteQueueBackend(root=backend_root, max_task_attempts=1)
+
+    task = _make_task(f"task-operator-boundary-{backend_kind}", kind="it")
+    backend.enqueue(task)
+    claimed = backend.claim_next()
+    assert claimed is not None
+    backend.ack_failure(claimed)
+
+    poison_result = inspect_local_queue(
+        root=backend_root,
+        backend_kind=backend_kind,
+        bucket="poison",
+    )
+    poison_task = poison_result.tasks[0]
+    assert poison_result.summary.listed_tasks == 1
+    assert poison_result.summary.governance_problem_tasks == 1
+    assert poison_result.summary.visible_requeue_history_tasks == 0
+    assert poison_result.summary.recovery_audit_support == (
+        "persisted_in_history" if expects_recovery_history else "result_only"
+    )
+    assert poison_task.state == "poison"
+    assert poison_task.governance_problem == "poison_attempts_exhausted"
+    assert poison_task.handling_expectation == "requeue_supported"
+    assert poison_task.recovery_audit_support == (
+        "persisted_in_history" if expects_recovery_history else "result_only"
+    )
+    assert poison_task.latest_recovery is None
+    assert poison_task.latest_governance_action is None
+
+    recovery = requeue_local_task(
+        root=backend_root,
+        backend_kind=backend_kind,
+        source_bucket="poison",
+        task_id=task.task_id,
+    )
+    assert recovery.governance_action.action == "requeue"
+    assert recovery.support_status == "supported"
+    assert recovery.governance_result == "moved_to_pending"
+    assert recovery.to_dict()["redrive_support"] == "not_modeled"
+    assert recovery.to_dict()["audit_support"] == (
+        "persisted_in_history" if expects_recovery_history else "result_only"
+    )
+
+    pending_result = inspect_local_queue(
+        root=backend_root,
+        backend_kind=backend_kind,
+        bucket="pending",
+    )
+    pending_task = pending_result.tasks[0]
+    assert pending_result.summary.listed_tasks == 1
+    assert pending_result.summary.governance_problem_tasks == 0
+    assert pending_result.summary.visible_requeue_history_tasks == (
+        1 if expects_recovery_history else 0
+    )
+    assert pending_result.summary.recovery_audit_support == (
+        "persisted_in_history" if expects_recovery_history else "result_only"
+    )
+    assert pending_task.state == "pending"
+    assert pending_task.governance_problem == "none"
+    assert pending_task.handling_expectation == "none"
+    if expects_recovery_history:
+        latest_action = pending_task.latest_governance_action
+        assert latest_action is not None
+        assert pending_task.governance_labels == ("requeued",)
+        assert pending_task.latest_recovery is not None
+        assert latest_action.action == "requeue"
+        assert latest_action.audit_support == "persisted_in_history"
+    else:
+        assert pending_task.governance_labels == ()
+        assert pending_task.latest_recovery is None
+        assert pending_task.latest_governance_action is None

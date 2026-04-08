@@ -22,6 +22,8 @@ QueueTaskState = Literal["pending", "inflight", "done", "failed", "poison"]
 QueueGovernanceLabel = Literal["orphaned", "requeued"]
 QueuePoisonKind = Literal["attempts_exhausted", "orphaned", "not_poison"]
 QueueHandlingExpectation = Literal["requeue_supported", "none"]
+QueueGovernanceProblem = Literal["none", "orphaned", "poison_attempts_exhausted", "poison_orphaned"]
+QueueInspectSummaryAuditSupport = Literal["persisted_in_history", "result_only", "none"]
 
 
 class QueueInspectSummaryDict(TypedDict):
@@ -30,14 +32,20 @@ class QueueInspectSummaryDict(TypedDict):
     done: int
     failed: int
     poison: int
+    listed_tasks: int
+    governance_problem_tasks: int
+    visible_requeue_history_tasks: int
+    recovery_audit_support: QueueInspectSummaryAuditSupport
 
 
 class QueueInspectTaskDict(TypedDict):
     bucket: SpoolBucket
     state: QueueTaskState
     governance_labels: list[QueueGovernanceLabel]
+    governance_problem: QueueGovernanceProblem
     poison_kind: QueuePoisonKind
     handling_expectation: QueueHandlingExpectation
+    recovery_audit_support: QueueGovernanceActionAuditSupport
     task_id: str
     kind: str
     record_path: str
@@ -66,6 +74,10 @@ class QueueInspectSummaryV1:
     done: int
     failed: int
     poison: int
+    listed_tasks: int = 0
+    governance_problem_tasks: int = 0
+    visible_requeue_history_tasks: int = 0
+    recovery_audit_support: QueueInspectSummaryAuditSupport = "none"
 
     def to_dict(self) -> QueueInspectSummaryDict:
         return {
@@ -74,6 +86,10 @@ class QueueInspectSummaryV1:
             "done": self.done,
             "failed": self.failed,
             "poison": self.poison,
+            "listed_tasks": self.listed_tasks,
+            "governance_problem_tasks": self.governance_problem_tasks,
+            "visible_requeue_history_tasks": self.visible_requeue_history_tasks,
+            "recovery_audit_support": self.recovery_audit_support,
         }
 
 
@@ -84,6 +100,7 @@ class QueueInspectTaskV1:
     governance_labels: tuple[QueueGovernanceLabel, ...]
     poison_kind: QueuePoisonKind
     handling_expectation: QueueHandlingExpectation
+    recovery_audit_support: QueueGovernanceActionAuditSupport
     task_id: str
     kind: str
     record_path: str
@@ -104,6 +121,16 @@ class QueueInspectTaskV1:
         return "persisted_in_history"
 
     @property
+    def governance_problem(self) -> QueueGovernanceProblem:
+        if self.poison_kind == "attempts_exhausted":
+            return "poison_attempts_exhausted"
+        if self.poison_kind == "orphaned" and self.state == "poison":
+            return "poison_orphaned"
+        if self.orphan_count > 0:
+            return "orphaned"
+        return "none"
+
+    @property
     def latest_governance_action(self) -> QueueGovernanceActionV1 | None:
         if self.latest_recovery is None:
             return None
@@ -120,8 +147,10 @@ class QueueInspectTaskV1:
             "bucket": self.bucket,
             "state": self.state,
             "governance_labels": list(self.governance_labels),
+            "governance_problem": self.governance_problem,
             "poison_kind": self.poison_kind,
             "handling_expectation": self.handling_expectation,
+            "recovery_audit_support": self.recovery_audit_support,
             "task_id": self.task_id,
             "kind": self.kind,
             "record_path": self.record_path,
@@ -189,6 +218,7 @@ def inspect_local_spool_queue(
         if limit is not None:
             selected_paths = selected_paths[:limit]
         tasks = [_build_task_inspection(bucket=bucket, path=path) for path in selected_paths]
+        summary = _summary_with_task_view(summary=summary, tasks=tasks)
 
     return QueueInspectResultV1(
         root=str(resolved_root),
@@ -217,6 +247,7 @@ def _build_task_inspection(*, bucket: SpoolBucket, path: Path) -> QueueInspectTa
             orphan_count=record.governance.orphan_count,
         ),
         handling_expectation=_queue_handling_expectation(bucket=bucket),
+        recovery_audit_support="persisted_in_history",
         task_id=task.task_id,
         kind=task.kind,
         record_path=str(path.resolve()),
@@ -275,15 +306,19 @@ def inspect_local_sqlite_queue(
     if bucket is not None and db_path.exists():
         tasks = _list_sqlite_bucket_tasks(db_path=db_path, bucket=bucket, limit=limit)
 
+    summary = QueueInspectSummaryV1(
+        pending=counts["pending"],
+        inflight=counts["inflight"],
+        done=counts["done"],
+        failed=counts["failed"],
+        poison=counts["poison"],
+    )
+    if bucket is not None:
+        summary = _summary_with_task_view(summary=summary, tasks=tasks)
+
     return QueueInspectResultV1(
         root=str(resolved_root),
-        summary=QueueInspectSummaryV1(
-            pending=counts["pending"],
-            inflight=counts["inflight"],
-            done=counts["done"],
-            failed=counts["failed"],
-            poison=counts["poison"],
-        ),
+        summary=summary,
         bucket=bucket,
         tasks=tuple(tasks),
     )
@@ -336,6 +371,7 @@ def _build_sqlite_task_inspection(
             orphan_count=_read_sqlite_int(row=row, key="orphan_count"),
         ),
         handling_expectation=_queue_handling_expectation(bucket=bucket),
+        recovery_audit_support="result_only",
         task_id=task.task_id,
         kind=task.kind,
         record_path=_sqlite_queue_locator(
@@ -391,6 +427,32 @@ def _queue_handling_expectation(*, bucket: SpoolBucket) -> QueueHandlingExpectat
     if bucket in ("poison", "inflight"):
         return "requeue_supported"
     return "none"
+
+
+def _summary_with_task_view(
+    *,
+    summary: QueueInspectSummaryV1,
+    tasks: list[QueueInspectTaskV1],
+) -> QueueInspectSummaryV1:
+    visible_requeue_history_tasks = sum(1 for task in tasks if task.latest_recovery is not None)
+    if not tasks:
+        recovery_audit_support: QueueInspectSummaryAuditSupport = "none"
+    elif visible_requeue_history_tasks > 0:
+        recovery_audit_support = "persisted_in_history"
+    else:
+        recovery_audit_support = tasks[0].recovery_audit_support
+
+    return QueueInspectSummaryV1(
+        pending=summary.pending,
+        inflight=summary.inflight,
+        done=summary.done,
+        failed=summary.failed,
+        poison=summary.poison,
+        listed_tasks=len(tasks),
+        governance_problem_tasks=sum(1 for task in tasks if task.governance_problem != "none"),
+        visible_requeue_history_tasks=visible_requeue_history_tasks,
+        recovery_audit_support=recovery_audit_support,
+    )
 
 
 def _connect_sqlite_queue(db_path: Path) -> sqlite3.Connection:

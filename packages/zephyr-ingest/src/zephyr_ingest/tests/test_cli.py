@@ -345,6 +345,10 @@ def test_cli_queue_inspect_prints_summary_and_bucket_tasks(
         "done": 0,
         "failed": 0,
         "poison": 1,
+        "listed_tasks": 1,
+        "governance_problem_tasks": 1,
+        "visible_requeue_history_tasks": 0,
+        "recovery_audit_support": "persisted_in_history",
     }
     assert payload["bucket"] == "poison"
     assert payload["tasks"] == [
@@ -352,8 +356,10 @@ def test_cli_queue_inspect_prints_summary_and_bucket_tasks(
             "bucket": "poison",
             "state": "poison",
             "governance_labels": [],
+            "governance_problem": "poison_attempts_exhausted",
             "poison_kind": "attempts_exhausted",
             "handling_expectation": "requeue_supported",
+            "recovery_audit_support": "persisted_in_history",
             "task_id": "task-cli",
             "kind": "it",
             "record_path": str((queue.poison_dir / "task-cli.json").resolve()),
@@ -399,6 +405,10 @@ def test_cli_queue_requeue_prints_recovery_result(
     payload = json.loads(capsys.readouterr().out)
     assert payload == {
         "action": "requeue",
+        "support_status": "supported",
+        "governance_result": "moved_to_pending",
+        "redrive_support": "not_modeled",
+        "audit_support": "persisted_in_history",
         "root": str(queue.root.resolve()),
         "task_id": "task-recover-cli",
         "kind": "it",
@@ -445,11 +455,17 @@ def test_cli_queue_sqlite_backend_supports_shared_inspection_and_requeue_subset(
         "done": 0,
         "failed": 0,
         "poison": 1,
+        "listed_tasks": 1,
+        "governance_problem_tasks": 1,
+        "visible_requeue_history_tasks": 0,
+        "recovery_audit_support": "result_only",
     }
     assert inspect_payload["tasks"][0]["task_id"] == "task-sqlite-cli"
     assert inspect_payload["tasks"][0]["record_path"] == (
         f"{queue.db_path.resolve()}#bucket=poison,task_id=task-sqlite-cli"
     )
+    assert inspect_payload["tasks"][0]["governance_problem"] == "poison_attempts_exhausted"
+    assert inspect_payload["tasks"][0]["recovery_audit_support"] == "result_only"
     assert inspect_payload["tasks"][0]["latest_recovery"] is None
 
     requeue_rc = cli.main(
@@ -471,6 +487,10 @@ def test_cli_queue_sqlite_backend_supports_shared_inspection_and_requeue_subset(
     requeue_payload = json.loads(capsys.readouterr().out)
     assert requeue_payload == {
         "action": "requeue",
+        "support_status": "supported",
+        "governance_result": "moved_to_pending",
+        "redrive_support": "not_modeled",
+        "audit_support": "result_only",
         "root": str(queue.root.resolve()),
         "task_id": "task-sqlite-cli",
         "kind": "it",
