@@ -422,6 +422,7 @@ def test_queue_backend_work_source_requeues_when_lock_is_unavailable(tmp_path: P
     assert work is None
     assert (backend.pending_dir / "task-locked.json").exists()
     assert not (backend.inflight_dir / "task-locked.json").exists()
+    assert source.work_source_metrics_snapshot().lock_contention_total == 1
 
 
 def test_queue_backend_work_source_accepts_it_task_with_lock_provider(tmp_path: Path) -> None:

@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
-from zephyr_ingest.lock_provider import AcquiredLock, LockProvider
+from zephyr_ingest.lock_provider import AcquiredLock, LockProvider, acquire_lock
 from zephyr_ingest.task_idempotency import normalize_task_idempotency_key
 from zephyr_ingest.task_v1 import TaskV1
 
@@ -71,11 +71,12 @@ class QueueBackendWorkSource:
             return None
         acquired_lock = None
         if self.lock_provider is not None:
-            acquired_lock = self.lock_provider.acquire(
+            acquisition = acquire_lock(
+                provider=self.lock_provider,
                 key=normalize_task_idempotency_key(claimed.task),
                 owner=self.lock_owner,
             )
-            if acquired_lock is None:
+            if acquisition.is_contended:
                 object.__setattr__(
                     self,
                     "_lock_contention_total",
@@ -83,6 +84,7 @@ class QueueBackendWorkSource:
                 )
                 self.backend.requeue_orphaned(claimed)
                 return None
+            acquired_lock = acquisition.acquired_lock
         return QueueWorkItem(
             backend=self.backend,
             claimed=claimed,

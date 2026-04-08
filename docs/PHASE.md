@@ -374,3 +374,207 @@ connector 扩展
 企业级运营面增强
 
 还是 API/service 化进一步深入
+
+
+
+
+
+
+
+
+
+正式版 P4 总纲
+P4：规模化铺路与平台深化阶段
+总目标
+在不破坏 P3 已经收束好的边界前提下，把 Zephyr 从：
+
+双 flow 已成立
+
+主执行链已统一
+
+queue / lock / governance / provenance 已成形
+
+第二 backend 已验证
+
+推进到：
+
+connector 扩展模式被验证
+
+it-stream 治理更成熟
+
+queue / lock / operator 面更稳
+
+delivery 语义更适合大规模扩展
+
+为 P5 真生产化落地 做完关键铺路
+
+P4 的阶段定位
+P4 不是最终生产化阶段。
+P4 是：
+
+为了 P5 真生产化而进行的超长铺路阶段。
+
+P4-M1 到 P4-M18 的结构化定义
+第一段：connector 扩展模式与 onboarding 基础
+P4-M1：source connector 扩展模式固化
+目标：
+
+明确 uns-stream 与 it-stream 各自适合扩什么 source
+
+建立 source connector onboarding 原则
+
+先定模式，不先拼数量
+
+P4-M2：destination connector 扩展模式固化
+目标：
+
+建立 destination onboarding 原则
+
+明确所有新 destination 必须复用现有 hardened delivery semantics
+
+把 receipt / retryable / failure_kind / idempotency / metrics / provenance 规则钉死
+
+P4-M3：首批 connector 扩展示范
+目标：
+
+首批增加少量 source / destination
+
+同时覆盖 uns 与 it
+
+验证 connector onboarding 模式真的可行
+
+第二段：it-stream 治理深化
+P4-M4：checkpoint lineage / compatibility
+目标：
+
+lineage
+
+compatibility checks
+
+version-aware behavior
+
+P4-M5：richer progress shape
+目标：
+
+让 it 的 progress / checkpoint 语义更丰富
+
+但不复制 Airbyte 全栈
+
+P4-M6：resume provenance / recovery semantics 深化
+目标：
+
+让 resume / recovery 更可治理、更可审计
+
+P4-M7：it-stream focused integration & corruption tests
+目标：
+
+corrupted checkpoint
+
+incompatible version
+
+partial write / partial recovery
+
+resume provenance 边界测试
+
+第三段：queue / lock / governance / operator 面深化
+P4-M8：second backend parity 补齐
+目标：
+
+第二 queue backend / 第二 lock backend 在 inspection / recovery / metrics / provenance 上补对齐
+
+P4-M9：lock 语义增强
+目标：
+
+stale / owner / lease 等语义更清楚
+
+不做完整 distributed coordination platform
+
+P4-M10：task governance 升级
+目标：
+
+poison/orphan 从止损型继续走向可治理型
+
+更好的 retry / re-drive 规则
+
+更清楚的 operator-facing summaries
+
+P4-M11：operator-facing surfaces 深化
+目标：
+
+inspect / recover / metrics / provenance 更可运维
+
+但不做 UI 管理平台
+
+第四段：delivery / destination 继续生产化铺路
+P4-M12：cross-destination 稳定语义收束
+目标：
+
+不统一执行机制
+
+只统一少量稳定语义：
+
+retryable
+
+failure_kind
+
+error_code
+
+details naming
+
+P4-M13：destination connector 扩展第二轮
+目标：
+
+在规则已经稳定后，真正增加一批 destination
+
+P4-M14：source connector 扩展第二轮
+目标：
+
+真正增加一批 source
+
+尤其加强 it-stream 侧
+
+P4-M15：expanded connector focused integration tests
+目标：
+
+验证 onboarding 模式和主治理面没有被新 connector 拉坏
+
+第五段：P5 生产化准备收口
+P4-M16：部署形态准备
+目标：
+
+为 P5 的 K8s / Helm / 云端部署扫清结构阻碍
+
+先不正式进入生产化落地
+
+P4-M17：规模化验证准备
+目标：
+
+为 P5 压测 / SLO / 故障演练准备 bench、指标、验证入口
+
+P4-M18：P4 收官与 P5 起步判断
+目标：
+
+正式确认：
+
+哪些模块已经够稳
+
+哪些 connector 模式已验证
+
+P5 可以开始真正生产化落地
+
+这样安排的含义
+P4 里 connector 扩展不是没有，而是有节奏地放进去
+不是拖到很后面才做，而是：
+
+P4-M3：首批扩展
+
+P4-M13 / M14：第二轮系统扩展
+
+这样你既不会太早扩炸，也不会拖得过头。
+
+P4 里平台治理也继续做
+所以不是“只扩 connector”或者“只做治理”，而是：
+
+connector 扩张和平台治理一起推进，但按段落推进。
+
+这正符合你要的路线。

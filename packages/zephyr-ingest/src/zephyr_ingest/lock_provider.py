@@ -6,7 +6,7 @@ import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Protocol, runtime_checkable
+from typing import Literal, Protocol, runtime_checkable
 
 
 @dataclass(frozen=True, slots=True)
@@ -14,6 +14,74 @@ class AcquiredLock:
     key: str
     owner: str
     lock_ref: Path
+
+
+LockAcquireStatus = Literal["acquired", "contended"]
+LockLeaseLikeStatus = Literal["not_modeled"]
+
+
+@dataclass(frozen=True, slots=True)
+class LockHolderFactsV1:
+    key: str
+    owner: str
+    holder: str | None
+    lease_like_status: LockLeaseLikeStatus = "not_modeled"
+
+
+@dataclass(frozen=True, slots=True)
+class LockAcquireResultV1:
+    key: str
+    owner: str
+    status: LockAcquireStatus
+    acquired_lock: AcquiredLock | None = None
+    stale_recovered: bool = False
+
+    @property
+    def holder_facts(self) -> LockHolderFactsV1:
+        holder = None if self.acquired_lock is None else self.acquired_lock.owner
+        return LockHolderFactsV1(
+            key=self.key,
+            owner=self.owner,
+            holder=holder,
+        )
+
+    @property
+    def is_acquired(self) -> bool:
+        return self.status == "acquired"
+
+    @property
+    def is_contended(self) -> bool:
+        return self.status == "contended"
+
+
+def acquire_lock(
+    *,
+    provider: "LockProvider",
+    key: str,
+    owner: str,
+) -> LockAcquireResultV1:
+    stale_recovery_total_before: int | None = None
+    if isinstance(provider, SupportsLockMetricsSnapshot):
+        stale_recovery_total_before = provider.lock_metrics_snapshot().stale_recovery_total
+
+    acquired_lock = provider.acquire(key=key, owner=owner)
+    if acquired_lock is None:
+        return LockAcquireResultV1(key=key, owner=owner, status="contended")
+
+    stale_recovered = False
+    if stale_recovery_total_before is not None and isinstance(
+        provider, SupportsLockMetricsSnapshot
+    ):
+        stale_recovery_total_after = provider.lock_metrics_snapshot().stale_recovery_total
+        stale_recovered = stale_recovery_total_after > stale_recovery_total_before
+
+    return LockAcquireResultV1(
+        key=key,
+        owner=owner,
+        status="acquired",
+        acquired_lock=acquired_lock,
+        stale_recovered=stale_recovered,
+    )
 
 
 @runtime_checkable
