@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import json
+import sqlite3
+import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, TypedDict
+from typing import Literal, TypedDict, cast
 
 from zephyr_core.contracts.v1.run_meta import RunProvenanceV1
+from zephyr_ingest.queue_backend_factory import LocalQueueBackendKind
 from zephyr_ingest.spool_queue import (
     QueueRecoveryProvenanceV1,
     load_spool_record,
@@ -13,6 +17,7 @@ from zephyr_ingest.spool_queue import (
     write_spool_record,
 )
 from zephyr_ingest.task_idempotency import normalize_task_idempotency_key
+from zephyr_ingest.task_v1 import TaskV1
 
 RecoverableSpoolBucket = Literal["poison", "inflight"]
 
@@ -73,6 +78,26 @@ class QueueRecoveryResultV1:
         )
 
 
+def requeue_local_task(
+    *,
+    root: Path,
+    source_bucket: RecoverableSpoolBucket,
+    task_id: str,
+    backend_kind: LocalQueueBackendKind = "spool",
+) -> QueueRecoveryResultV1:
+    if backend_kind == "spool":
+        return requeue_local_spool_task(
+            root=root,
+            source_bucket=source_bucket,
+            task_id=task_id,
+        )
+    return requeue_local_sqlite_task(
+        root=root,
+        source_bucket=source_bucket,
+        task_id=task_id,
+    )
+
+
 def requeue_local_spool_task(
     *,
     root: Path,
@@ -126,3 +151,104 @@ def requeue_local_spool_task(
         recorded_at_utc=recorded_at_utc,
         task_identity_key=task_identity_key,
     )
+
+
+def requeue_local_sqlite_task(
+    *,
+    root: Path,
+    source_bucket: RecoverableSpoolBucket,
+    task_id: str,
+) -> QueueRecoveryResultV1:
+    resolved_root = root.expanduser().resolve()
+    db_path = resolved_root / "queue.sqlite3"
+    if not db_path.exists():
+        raise QueueRecoveryError(f"Task not found in {source_bucket}: {task_id}")
+
+    with _connect_sqlite_queue(db_path) as conn:
+        row = conn.execute(
+            """
+            SELECT task_id, task_json, failure_count, orphan_count
+            FROM queue_tasks
+            WHERE task_id = ?
+              AND bucket = ?
+            """,
+            (task_id, source_bucket),
+        ).fetchone()
+        if row is None:
+            raise QueueRecoveryError(f"Task not found in {source_bucket}: {task_id}")
+
+        now_epoch_s = _recorded_epoch_s()
+        updated = conn.execute(
+            """
+            UPDATE queue_tasks
+            SET bucket = 'pending',
+                claimed_at = NULL,
+                updated_at = ?
+            WHERE task_id = ?
+              AND bucket = ?
+            """,
+            (now_epoch_s, task_id, source_bucket),
+        ).rowcount
+        if updated == 0:
+            raise QueueRecoveryError(f"Task not found in {source_bucket}: {task_id}")
+
+    task = _load_sqlite_task(payload=_read_sqlite_str(row=row, key="task_json"))
+    task_identity_key = None
+    if task.identity is not None:
+        task_identity_key = normalize_task_idempotency_key(task)
+    recorded_at_utc = now_utc_isoformat()
+    return QueueRecoveryResultV1(
+        root=str(resolved_root),
+        task_id=task.task_id,
+        kind=task.kind,
+        source_bucket=source_bucket,
+        source_path=_sqlite_queue_locator(
+            db_path=db_path,
+            bucket=source_bucket,
+            task_id=task_id,
+        ),
+        target_path=_sqlite_queue_locator(
+            db_path=db_path,
+            bucket="pending",
+            task_id=task_id,
+        ),
+        failure_count=_read_sqlite_int(row=row, key="failure_count"),
+        orphan_count=_read_sqlite_int(row=row, key="orphan_count"),
+        recorded_at_utc=recorded_at_utc,
+        task_identity_key=task_identity_key,
+    )
+
+
+def _connect_sqlite_queue(db_path: Path) -> sqlite3.Connection:
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def _load_sqlite_task(*, payload: str) -> TaskV1:
+    obj = json.loads(payload)
+    if not isinstance(obj, dict):
+        raise ValueError("sqlite queue task payload must be a JSON object")
+    return TaskV1.from_dict(cast("dict[str, object]", obj))
+
+
+def _read_sqlite_str(*, row: sqlite3.Row, key: str) -> str:
+    value = row[key]
+    if not isinstance(value, str):
+        raise TypeError(f"sqlite queue field '{key}' must be a string")
+    return value
+
+
+def _read_sqlite_int(*, row: sqlite3.Row, key: str) -> int:
+    value = row[key]
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise TypeError(f"sqlite queue field '{key}' must be an integer")
+    return value
+
+
+def _sqlite_queue_locator(*, db_path: Path, bucket: str, task_id: str) -> str:
+    return f"{db_path.resolve()}#bucket={bucket},task_id={task_id}"
+
+
+def _recorded_epoch_s() -> float:
+    return time.time()

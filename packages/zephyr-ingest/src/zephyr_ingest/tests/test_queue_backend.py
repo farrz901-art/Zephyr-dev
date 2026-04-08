@@ -5,6 +5,8 @@ import sqlite3
 from pathlib import Path
 from typing import Literal
 
+import pytest
+
 from zephyr_core import RunContext
 from zephyr_core.contracts.v2.lifecycle import WorkerPhase
 from zephyr_ingest.lock_provider import FileLockProvider, LockProvider
@@ -12,10 +14,12 @@ from zephyr_ingest.lock_provider_factory import build_local_lock_provider
 from zephyr_ingest.obs.prom_export import build_worker_prom_families, render_prometheus_text
 from zephyr_ingest.queue_backend import QueueBackend, QueueBackendWorkSource
 from zephyr_ingest.queue_backend_factory import build_local_queue_backend
-from zephyr_ingest.queue_inspect import inspect_local_spool_queue
-from zephyr_ingest.queue_recover import requeue_local_spool_task
+from zephyr_ingest.queue_inspect import inspect_local_queue, inspect_local_spool_queue
+from zephyr_ingest.queue_recover import requeue_local_spool_task, requeue_local_task
 from zephyr_ingest.spool_queue import LocalSpoolQueue
+from zephyr_ingest.sqlite_lock_provider import SqliteLockProvider
 from zephyr_ingest.sqlite_queue import SqliteQueueBackend
+from zephyr_ingest.task_idempotency import normalize_task_idempotency_key
 from zephyr_ingest.task_v1 import (
     TaskDocumentInputV1,
     TaskExecutionV1,
@@ -151,6 +155,147 @@ def test_sqlite_queue_backend_work_source_handles_lock_contention_and_stale_infl
     assert recovered == 1
     assert recovered_claim is not None
     assert recovered_claim.task.task_id == "task-sqlite-recover"
+
+
+def test_sqlite_queue_metrics_render_shared_queue_governance_subset(tmp_path: Path) -> None:
+    backend = SqliteQueueBackend(root=tmp_path / "sqlite-queue", max_orphan_requeues=3)
+    backend.enqueue(_make_task("task-sqlite-stale-metrics"))
+    claimed = backend.claim_next()
+    assert claimed is not None
+
+    with sqlite3.connect(backend.db_path) as conn:
+        conn.execute(
+            "UPDATE queue_tasks SET claimed_at = ?, updated_at = ? WHERE task_id = ?",
+            (25.0, 25.0, "task-sqlite-stale-metrics"),
+        )
+
+    class BusyLockProvider:
+        def acquire(self, *, key: str, owner: str) -> None:
+            return None
+
+        def release(self, lock: object) -> None:
+            raise AssertionError("release should not be called")
+
+    source = QueueBackendWorkSource(
+        backend=backend,
+        handler=lambda task: None,
+        recover_inflight_after_s=10,
+        lock_provider=BusyLockProvider(),
+        lock_owner="worker-sqlite",
+    )
+    runtime = WorkerRuntime(
+        ctx=RunContext.new(
+            pipeline_version="p-worker",
+            run_id="r-worker",
+            timestamp_utc="2026-04-05T00:00:00Z",
+        ),
+        poll_interval_ms=1,
+    )
+
+    work = source.poll()
+
+    assert work is None
+    text = render_prometheus_text(
+        families=build_worker_prom_families(ctx=runtime.ctx, lifecycle=runtime, work_source=source)
+    )
+    assert 'zephyr_ingest_queue_tasks{pipeline_version="p-worker",bucket="pending"} 1.0' in text
+    assert 'zephyr_ingest_queue_tasks{pipeline_version="p-worker",bucket="inflight"} 0.0' in text
+    assert 'zephyr_ingest_queue_orphan_requeues_total{pipeline_version="p-worker"} 2.0' in text
+    assert (
+        'zephyr_ingest_queue_stale_inflight_recoveries_total{pipeline_version="p-worker"} 1.0'
+        in text
+    )
+    assert 'zephyr_ingest_queue_poison_transitions_total{pipeline_version="p-worker"} 0.0' in text
+    assert 'zephyr_ingest_queue_lock_contention_total{pipeline_version="p-worker"} 1.0' in text
+
+
+def test_sqlite_queue_participates_in_shared_inspection_and_requeue_subset(
+    tmp_path: Path,
+) -> None:
+    backend = SqliteQueueBackend(root=tmp_path / "sqlite-queue", max_task_attempts=1)
+    task = _make_task("task-sqlite-governed", kind="it")
+    backend.enqueue(task)
+    claimed = backend.claim_next()
+    assert claimed is not None
+    backend.ack_failure(claimed)
+
+    poison_view = inspect_local_queue(
+        root=backend.root,
+        backend_kind="sqlite",
+        bucket="poison",
+    ).to_dict()
+    assert poison_view["summary"] == {
+        "pending": 0,
+        "inflight": 0,
+        "done": 0,
+        "failed": 0,
+        "poison": 1,
+    }
+    assert poison_view["tasks"] == [
+        {
+            "bucket": "poison",
+            "task_id": "task-sqlite-governed",
+            "kind": "it",
+            "record_path": (
+                f"{backend.db_path.resolve()}#bucket=poison,task_id=task-sqlite-governed"
+            ),
+            "updated_at_utc": poison_view["tasks"][0]["updated_at_utc"],
+            "uri": "/tmp/task-sqlite-governed.json",
+            "source": "airbyte",
+            "filename": "task-sqlite-governed.json",
+            "discovered_at_utc": "2026-04-05T00:00:00Z",
+            "identity": {
+                "pipeline_version": "p-worker",
+                "sha256": "sha-task-sqlite-governed",
+            },
+            "failure_count": 1,
+            "orphan_count": 0,
+            "latest_recovery": None,
+        }
+    ]
+
+    recovery = requeue_local_task(
+        root=backend.root,
+        backend_kind="sqlite",
+        source_bucket="poison",
+        task_id="task-sqlite-governed",
+    )
+    assert recovery.to_dict() == {
+        "action": "requeue",
+        "root": str(backend.root.resolve()),
+        "task_id": "task-sqlite-governed",
+        "kind": "it",
+        "source_bucket": "poison",
+        "target_bucket": "pending",
+        "source_path": f"{backend.db_path.resolve()}#bucket=poison,task_id=task-sqlite-governed",
+        "target_path": f"{backend.db_path.resolve()}#bucket=pending,task_id=task-sqlite-governed",
+        "failure_count": 1,
+        "orphan_count": 0,
+        "recorded_at_utc": recovery.recorded_at_utc,
+    }
+    assert recovery.to_run_provenance().to_dict() == {
+        "run_origin": "requeue",
+        "delivery_origin": "primary",
+        "execution_mode": "worker",
+        "task_id": "task-sqlite-governed",
+        "task_identity_key": (
+            '{"kind":"it","pipeline_version":"p-worker","sha256":"sha-task-sqlite-governed"}'
+        ),
+    }
+
+    pending_view = inspect_local_queue(
+        root=backend.root,
+        backend_kind="sqlite",
+        bucket="pending",
+    ).to_dict()
+    assert pending_view["summary"] == {
+        "pending": 1,
+        "inflight": 0,
+        "done": 0,
+        "failed": 0,
+        "poison": 0,
+    }
+    assert pending_view["tasks"][0]["latest_recovery"] is None
 
 
 def test_worker_runtime_consumes_sqlite_queue_backend_work_source(tmp_path: Path) -> None:
@@ -514,3 +659,148 @@ def test_governance_recovery_runtime_metrics_and_inspection_stay_coherent(
     assert 'zephyr_ingest_queue_tasks{pipeline_version="p-worker",bucket="done"} 1.0' in text
     assert 'zephyr_ingest_queue_tasks{pipeline_version="p-worker",bucket="poison"} 0.0' in text
     assert 'zephyr_ingest_queue_poison_transitions_total{pipeline_version="p-worker"} 1.0' in text
+
+
+@pytest.mark.parametrize(
+    ("queue_kind", "lock_kind", "expects_recovery_history"),
+    [
+        ("spool", "file", True),
+        ("sqlite", "sqlite", False),
+    ],
+)
+def test_supported_backend_pairs_keep_governance_surfaces_coherent(
+    tmp_path: Path,
+    queue_kind: Literal["spool", "sqlite"],
+    lock_kind: Literal["file", "sqlite"],
+    expects_recovery_history: bool,
+) -> None:
+    backend = build_local_queue_backend(kind=queue_kind, root=tmp_path / f"{queue_kind}-queue")
+    lock_provider = build_local_lock_provider(
+        kind=lock_kind,
+        root=tmp_path / f"{lock_kind}-locks",
+        stale_after_s=10,
+    )
+    task = _make_task(f"task-governed-{queue_kind}", kind="it")
+    backend.enqueue(task)
+    claimed = backend.claim_next()
+    assert claimed is not None
+    backend.ack_failure(claimed)
+
+    poison_view = inspect_local_queue(
+        root=tmp_path / f"{queue_kind}-queue",
+        backend_kind=queue_kind,
+        bucket="poison",
+    ).to_dict()
+    assert poison_view["summary"]["poison"] == 1
+    assert poison_view["tasks"][0]["task_id"] == task.task_id
+    assert poison_view["tasks"][0]["identity"] == {
+        "pipeline_version": "p-worker",
+        "sha256": f"sha-{task.task_id}",
+    }
+    assert poison_view["tasks"][0]["latest_recovery"] is None
+
+    recovery = requeue_local_task(
+        root=tmp_path / f"{queue_kind}-queue",
+        backend_kind=queue_kind,
+        source_bucket="poison",
+        task_id=task.task_id,
+    )
+    assert recovery.to_run_provenance().to_dict() == {
+        "run_origin": "requeue",
+        "delivery_origin": "primary",
+        "execution_mode": "worker",
+        "task_id": task.task_id,
+        "task_identity_key": (
+            '{"kind":"it","pipeline_version":"p-worker","sha256":"' + f"sha-{task.task_id}" + '"}'
+        ),
+    }
+
+    pending_view = inspect_local_queue(
+        root=tmp_path / f"{queue_kind}-queue",
+        backend_kind=queue_kind,
+        bucket="pending",
+    ).to_dict()
+    assert pending_view["summary"] == {
+        "pending": 1,
+        "inflight": 0,
+        "done": 0,
+        "failed": 0,
+        "poison": 0,
+    }
+    if expects_recovery_history:
+        assert pending_view["tasks"][0]["latest_recovery"] == {
+            "action": "requeue",
+            "source_bucket": "poison",
+            "target_bucket": "pending",
+            "recorded_at_utc": recovery.recorded_at_utc,
+        }
+    else:
+        assert pending_view["tasks"][0]["latest_recovery"] is None
+
+    lock_key = normalize_task_idempotency_key(task)
+    stale_lock = lock_provider.acquire(key=lock_key, owner="worker-stale")
+    assert stale_lock is not None
+    assert stale_lock.owner == "worker-stale"
+    if lock_kind == "file":
+        os.utime(stale_lock.lock_ref, (25, 25))
+    else:
+        assert isinstance(lock_provider, SqliteLockProvider)
+        with sqlite3.connect(lock_provider.db_path) as conn:
+            conn.execute(
+                "UPDATE task_locks SET acquired_at_epoch_s = ? WHERE key = ?",
+                (25, lock_key),
+            )
+
+    handled: list[str] = []
+    runtime = WorkerRuntime(
+        ctx=RunContext.new(
+            pipeline_version="p-worker",
+            run_id=f"r-governed-{queue_kind}-{lock_kind}",
+            timestamp_utc="2026-04-05T00:00:00Z",
+        ),
+        poll_interval_ms=1,
+    )
+
+    def handle_task(task: TaskV1) -> None:
+        handled.append(task.task_id)
+        runtime.request_draining()
+
+    source = QueueBackendWorkSource(
+        backend=backend,
+        handler=handle_task,
+        lock_provider=lock_provider,
+        lock_owner="worker-runtime",
+    )
+
+    rc = runtime.run(work_source=source, sleep_fn=lambda _: None)
+
+    assert rc == 0
+    assert runtime.phase == WorkerPhase.STOPPED
+    assert handled == [task.task_id]
+
+    done_view = inspect_local_queue(
+        root=tmp_path / f"{queue_kind}-queue",
+        backend_kind=queue_kind,
+        bucket="done",
+    ).to_dict()
+    assert done_view["summary"] == {
+        "pending": 0,
+        "inflight": 0,
+        "done": 1,
+        "failed": 0,
+        "poison": 0,
+    }
+    if expects_recovery_history:
+        assert (
+            done_view["tasks"][0]["latest_recovery"] == pending_view["tasks"][0]["latest_recovery"]
+        )
+    else:
+        assert done_view["tasks"][0]["latest_recovery"] is None
+
+    text = render_prometheus_text(
+        families=build_worker_prom_families(ctx=runtime.ctx, lifecycle=runtime, work_source=source)
+    )
+    assert 'zephyr_ingest_queue_tasks{pipeline_version="p-worker",bucket="done"} 1.0' in text
+    assert 'zephyr_ingest_queue_tasks{pipeline_version="p-worker",bucket="poison"} 0.0' in text
+    assert 'zephyr_ingest_queue_poison_transitions_total{pipeline_version="p-worker"} 1.0' in text
+    assert 'zephyr_ingest_lock_stale_recoveries_total{pipeline_version="p-worker"} 1.0' in text

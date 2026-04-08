@@ -3,11 +3,12 @@ from __future__ import annotations
 import json
 import sqlite3
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal, cast
 
 from zephyr_ingest.queue_backend import ClaimedTask
+from zephyr_ingest.spool_queue import QueueMetricsSnapshotV1
 from zephyr_ingest.task_v1 import TaskV1
 
 SqliteQueueBucket = Literal["pending", "inflight", "done", "failed", "poison"]
@@ -19,6 +20,9 @@ class SqliteQueueBackend:
     max_task_attempts: int = 1
     max_orphan_requeues: int = 1
     db_filename: str = "queue.sqlite3"
+    _poison_transition_total: int = field(default=0, init=False, repr=False)
+    _orphan_requeue_total: int = field(default=0, init=False, repr=False)
+    _stale_inflight_recovery_total: int = field(default=0, init=False, repr=False)
 
     def __post_init__(self) -> None:
         if self.max_task_attempts <= 0:
@@ -31,6 +35,19 @@ class SqliteQueueBackend:
     @property
     def db_path(self) -> Path:
         return self.root / self.db_filename
+
+    def queue_metrics_snapshot(self) -> QueueMetricsSnapshotV1:
+        counts = self._bucket_counts()
+        return QueueMetricsSnapshotV1(
+            pending=counts["pending"],
+            inflight=counts["inflight"],
+            done=counts["done"],
+            failed=counts["failed"],
+            poison=counts["poison"],
+            poison_transition_total=self._poison_transition_total,
+            orphan_requeue_total=self._orphan_requeue_total,
+            stale_inflight_recovery_total=self._stale_inflight_recovery_total,
+        )
 
     def enqueue(self, task: TaskV1) -> str:
         now = time.time()
@@ -106,6 +123,8 @@ class SqliteQueueBackend:
         target_bucket: SqliteQueueBucket = (
             "poison" if failure_count >= self.max_task_attempts else "pending"
         )
+        if target_bucket == "poison":
+            self._bump_counter("_poison_transition_total")
         self._set_bucket(
             task_id=task_id,
             expected_bucket="inflight",
@@ -149,6 +168,8 @@ class SqliteQueueBackend:
             except FileNotFoundError:
                 continue
             recovered += 1
+        if recovered > 0:
+            self._bump_counter("_stale_inflight_recovery_total", recovered)
         return recovered
 
     def _requeue_orphaned_task_id(self, *, task_id: str) -> str:
@@ -157,6 +178,10 @@ class SqliteQueueBackend:
         target_bucket: SqliteQueueBucket = (
             "poison" if orphan_count >= self.max_orphan_requeues else "pending"
         )
+        if target_bucket == "pending":
+            self._bump_counter("_orphan_requeue_total")
+        else:
+            self._bump_counter("_poison_transition_total")
         self._set_bucket(
             task_id=task_id,
             expected_bucket="inflight",
@@ -272,3 +297,40 @@ class SqliteQueueBackend:
                 ON queue_tasks(bucket, updated_at, task_id)
                 """
             )
+
+    def _bucket_counts(self) -> dict[SqliteQueueBucket, int]:
+        counts: dict[SqliteQueueBucket, int] = {
+            "pending": 0,
+            "inflight": 0,
+            "done": 0,
+            "failed": 0,
+            "poison": 0,
+        }
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT bucket, COUNT(*) AS count
+                FROM queue_tasks
+                GROUP BY bucket
+                """
+            ).fetchall()
+        for row in rows:
+            bucket = row["bucket"]
+            normalized_bucket: SqliteQueueBucket
+            if bucket == "pending":
+                normalized_bucket = "pending"
+            elif bucket == "inflight":
+                normalized_bucket = "inflight"
+            elif bucket == "done":
+                normalized_bucket = "done"
+            elif bucket == "failed":
+                normalized_bucket = "failed"
+            elif bucket == "poison":
+                normalized_bucket = "poison"
+            else:
+                continue
+            counts[normalized_bucket] = self._read_int(row, "count")
+        return counts
+
+    def _bump_counter(self, attr: str, value: int = 1) -> None:
+        object.__setattr__(self, attr, getattr(self, attr) + value)

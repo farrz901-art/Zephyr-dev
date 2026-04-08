@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from zephyr_ingest.lock_provider import FileLockProvider
-from zephyr_ingest.lock_provider_factory import build_local_lock_provider
+from zephyr_ingest.lock_provider_factory import LocalLockProviderKind, build_local_lock_provider
 from zephyr_ingest.sqlite_lock_provider import SqliteLockProvider
 
 
@@ -117,3 +117,59 @@ def test_sqlite_lock_provider_breaks_stale_lock(tmp_path: Path) -> None:
 def test_sqlite_lock_provider_rejects_non_positive_stale_ttl(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="stale_after_s must be > 0"):
         SqliteLockProvider(root=tmp_path / "sqlite-locks", stale_after_s=0)
+
+
+def _make_stale_lock(
+    *,
+    provider: FileLockProvider | SqliteLockProvider,
+    key: str,
+) -> None:
+    if isinstance(provider, FileLockProvider):
+        acquired = provider.acquire(key=key, owner="worker-a")
+        assert acquired is not None
+        os.utime(acquired.lock_ref, (25, 25))
+        return
+
+    acquired = provider.acquire(key=key, owner="worker-a")
+    assert acquired is not None
+    with sqlite3.connect(provider.db_path) as conn:
+        conn.execute(
+            "UPDATE task_locks SET acquired_at_epoch_s = ? WHERE key = ?",
+            (25, key),
+        )
+
+
+@pytest.mark.parametrize("kind", ["file", "sqlite"])
+def test_lock_provider_shared_contention_stale_and_owner_governance(
+    tmp_path: Path,
+    kind: LocalLockProviderKind,
+) -> None:
+    if kind == "file":
+        provider: FileLockProvider | SqliteLockProvider = FileLockProvider(
+            root=tmp_path / "locks",
+            stale_after_s=10,
+        )
+    else:
+        provider = SqliteLockProvider(
+            root=tmp_path / "sqlite-locks",
+            stale_after_s=10,
+        )
+
+    first = provider.acquire(key="task-key", owner="worker-a")
+
+    assert first is not None
+    assert first.key == "task-key"
+    assert first.owner == "worker-a"
+
+    contended = provider.acquire(key="task-key", owner="worker-b")
+
+    assert contended is None
+
+    _make_stale_lock(provider=provider, key="task-stale")
+
+    recovered = provider.acquire(key="task-stale", owner="worker-c")
+
+    assert recovered is not None
+    assert recovered.key == "task-stale"
+    assert recovered.owner == "worker-c"
+    assert provider.lock_metrics_snapshot().stale_recovery_total == 1

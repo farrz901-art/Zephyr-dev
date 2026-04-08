@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import sqlite3
 from http.client import HTTPConnection
 from pathlib import Path
 from typing import Any
@@ -32,6 +34,8 @@ from zephyr_ingest.queue_backend_factory import (
     build_local_queue_backend,
 )
 from zephyr_ingest.runner import RunnerConfig, build_task_execution_handler, run_documents
+from zephyr_ingest.sqlite_lock_provider import SqliteLockProvider
+from zephyr_ingest.task_idempotency import normalize_task_idempotency_key
 from zephyr_ingest.task_v1 import (
     TaskDocumentInputV1,
     TaskExecutionV1,
@@ -594,7 +598,67 @@ def test_runtime_supports_supported_queue_and_lock_backend_pairs(
         families=build_worker_prom_families(ctx=runtime.ctx, lifecycle=runtime, work_source=source)
     )
     assert 'zephyr_ingest_lock_stale_recoveries_total{pipeline_version="p-worker"} 0.0' in text
-    if queue_kind == "spool":
-        assert 'zephyr_ingest_queue_tasks{pipeline_version="p-worker",bucket="done"} 1.0' in text
+    assert 'zephyr_ingest_queue_tasks{pipeline_version="p-worker",bucket="done"} 1.0' in text
+
+
+@pytest.mark.parametrize("lock_kind", ["file", "sqlite"])
+def test_runtime_supports_stale_lock_recovery_for_supported_lock_backends(
+    tmp_path: Path,
+    lock_kind: LocalLockProviderKind,
+) -> None:
+    queue_backend = build_local_queue_backend(
+        kind="sqlite",
+        root=tmp_path / "sqlite-queue",
+    )
+    task = make_task(f"task-stale-{lock_kind}", kind="it")
+    queue_backend.enqueue(task)
+    lock_provider = build_local_lock_provider(
+        kind=lock_kind,
+        root=tmp_path / f"{lock_kind}-locks",
+        stale_after_s=10,
+    )
+    lock_key = normalize_task_idempotency_key(task)
+    stale_lock = lock_provider.acquire(key=lock_key, owner="worker-stale")
+    assert stale_lock is not None
+    if lock_kind == "file":
+        os.utime(stale_lock.lock_ref, (25, 25))
     else:
-        assert "zephyr_ingest_queue_tasks" not in text
+        assert isinstance(lock_provider, SqliteLockProvider)
+        with sqlite3.connect(lock_provider.db_path) as conn:
+            conn.execute(
+                "UPDATE task_locks SET acquired_at_epoch_s = ? WHERE key = ?",
+                (25, lock_key),
+            )
+
+    handled: list[str] = []
+    runtime = WorkerRuntime(
+        ctx=RunContext.new(
+            pipeline_version="p-worker",
+            run_id=f"r-stale-{lock_kind}",
+            timestamp_utc="2026-04-04T00:00:00Z",
+        ),
+        poll_interval_ms=1,
+    )
+
+    def handle_task(task: Any) -> None:
+        handled.append(task.task_id)
+        runtime.request_draining()
+
+    source = QueueBackendWorkSource(
+        backend=queue_backend,
+        handler=handle_task,
+        lock_provider=lock_provider,
+        lock_owner="worker-pair",
+    )
+
+    rc = runtime.run(work_source=source, sleep_fn=lambda _: None)
+
+    assert rc == 0
+    assert runtime.phase == WorkerPhase.STOPPED
+    assert handled == [f"task-stale-{lock_kind}"]
+
+    text = render_prometheus_text(
+        families=build_worker_prom_families(ctx=runtime.ctx, lifecycle=runtime, work_source=source)
+    )
+    assert 'zephyr_ingest_lock_stale_recoveries_total{pipeline_version="p-worker"} 1.0' in text
+    assert 'zephyr_ingest_queue_tasks{pipeline_version="p-worker",bucket="done"} 1.0' in text

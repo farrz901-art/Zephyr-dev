@@ -10,6 +10,7 @@ from zephyr_core import DocumentRef, PartitionStrategy
 from zephyr_ingest import cli
 from zephyr_ingest.config.snapshot_v1 import ConfigSnapshotV1
 from zephyr_ingest.spool_queue import LocalSpoolQueue
+from zephyr_ingest.sqlite_queue import SqliteQueueBackend
 from zephyr_ingest.task_v1 import (
     TaskDocumentInputV1,
     TaskExecutionV1,
@@ -407,3 +408,73 @@ def test_cli_queue_requeue_prints_recovery_result(
     }
     assert (queue.pending_dir / "task-recover-cli.json").exists()
     assert not (queue.poison_dir / "task-recover-cli.json").exists()
+
+
+def test_cli_queue_sqlite_backend_supports_shared_inspection_and_requeue_subset(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    queue = SqliteQueueBackend(root=tmp_path / "sqlite-queue", max_task_attempts=1)
+    queue.enqueue(_make_queue_task("task-sqlite-cli"))
+    claimed = queue.claim_next()
+    assert claimed is not None
+    queue.ack_failure(claimed)
+
+    inspect_rc = cli.main(
+        [
+            "queue",
+            "inspect",
+            "--backend",
+            "sqlite",
+            "--root",
+            str(queue.root),
+            "--bucket",
+            "poison",
+        ]
+    )
+
+    assert inspect_rc == 0
+    inspect_payload = json.loads(capsys.readouterr().out)
+    assert inspect_payload["summary"] == {
+        "pending": 0,
+        "inflight": 0,
+        "done": 0,
+        "failed": 0,
+        "poison": 1,
+    }
+    assert inspect_payload["tasks"][0]["task_id"] == "task-sqlite-cli"
+    assert inspect_payload["tasks"][0]["record_path"] == (
+        f"{queue.db_path.resolve()}#bucket=poison,task_id=task-sqlite-cli"
+    )
+    assert inspect_payload["tasks"][0]["latest_recovery"] is None
+
+    requeue_rc = cli.main(
+        [
+            "queue",
+            "requeue",
+            "--backend",
+            "sqlite",
+            "--root",
+            str(queue.root),
+            "--bucket",
+            "poison",
+            "--task-id",
+            "task-sqlite-cli",
+        ]
+    )
+
+    assert requeue_rc == 0
+    requeue_payload = json.loads(capsys.readouterr().out)
+    assert requeue_payload == {
+        "action": "requeue",
+        "root": str(queue.root.resolve()),
+        "task_id": "task-sqlite-cli",
+        "kind": "it",
+        "source_bucket": "poison",
+        "target_bucket": "pending",
+        "source_path": f"{queue.db_path.resolve()}#bucket=poison,task_id=task-sqlite-cli",
+        "target_path": f"{queue.db_path.resolve()}#bucket=pending,task_id=task-sqlite-cli",
+        "failure_count": 1,
+        "orphan_count": 0,
+        "recorded_at_utc": requeue_payload["recorded_at_utc"],
+    }

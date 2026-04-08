@@ -57,11 +57,12 @@ from zephyr_ingest.obs.prom_export import (
     load_batch_report_v1,
     render_prometheus_text,
 )
-from zephyr_ingest.queue_inspect import SPOOL_BUCKETS, inspect_local_spool_queue
+from zephyr_ingest.queue_backend_factory import LocalQueueBackendKind
+from zephyr_ingest.queue_inspect import SPOOL_BUCKETS, inspect_local_queue
 from zephyr_ingest.queue_recover import (
     QueueRecoveryError,
     RecoverableSpoolBucket,
-    requeue_local_spool_task,
+    requeue_local_task,
 )
 from zephyr_ingest.replay_delivery import (
     FanoutReplaySink,
@@ -195,6 +196,7 @@ class MetricsExportPromCmd:
 
 @dataclass(frozen=True, slots=True)
 class QueueInspectCmd:
+    backend: LocalQueueBackendKind
     root: str
     bucket: SpoolBucket | None
     limit: int | None
@@ -202,6 +204,7 @@ class QueueInspectCmd:
 
 @dataclass(frozen=True, slots=True)
 class QueueRequeueCmd:
+    backend: LocalQueueBackendKind
     root: str
     bucket: RecoverableSpoolBucket
     task_id: str
@@ -467,11 +470,17 @@ def _build_parser() -> argparse.ArgumentParser:
 
     queue = sub.add_parser("queue", help="Queue inspection and recovery utilities")
     queue_sub = queue.add_subparsers(dest="queue_cmd", required=True)
-    inspect = queue_sub.add_parser("inspect", help="Inspect local spool queue state")
+    inspect = queue_sub.add_parser("inspect", help="Inspect local queue state")
+    inspect.add_argument(
+        "--backend",
+        choices=("spool", "sqlite"),
+        default="spool",
+        help="Local queue backend kind",
+    )
     inspect.add_argument(
         "--root",
         required=True,
-        help="Spool queue root directory",
+        help="Local queue backend root directory",
     )
     inspect.add_argument(
         "--bucket",
@@ -487,9 +496,15 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     requeue = queue_sub.add_parser("requeue", help="Requeue a poison or inflight task")
     requeue.add_argument(
+        "--backend",
+        choices=("spool", "sqlite"),
+        default="spool",
+        help="Local queue backend kind",
+    )
+    requeue.add_argument(
         "--root",
         required=True,
-        help="Spool queue root directory",
+        help="Local queue backend root directory",
     )
     requeue.add_argument(
         "--bucket",
@@ -1196,6 +1211,7 @@ def _parse_cmd(
         if limit is not None and limit <= 0:
             raise ConfigError("--limit must be > 0")
         return QueueInspectCmd(
+            backend=cast("LocalQueueBackendKind", get_req_str(ns, "backend")),
             root=get_req_str(ns, "root"),
             bucket=cast("SpoolBucket | None", get_opt_str(ns, "bucket")),
             limit=limit,
@@ -1203,6 +1219,7 @@ def _parse_cmd(
 
     if ns.cmd == "queue" and ns.queue_cmd == "requeue":
         return QueueRequeueCmd(
+            backend=cast("LocalQueueBackendKind", get_req_str(ns, "backend")),
             root=get_req_str(ns, "root"),
             bucket=cast("RecoverableSpoolBucket", get_req_str(ns, "bucket")),
             task_id=get_req_str(ns, "task_id"),
@@ -1740,10 +1757,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     if isinstance(cmd, QueueInspectCmd):
-        inspect_result = inspect_local_spool_queue(
+        inspect_result = inspect_local_queue(
             root=Path(cmd.root),
             bucket=cmd.bucket,
             limit=cmd.limit,
+            backend_kind=cmd.backend,
         )
         sys.stdout.write(json.dumps(inspect_result.to_dict(), ensure_ascii=False, indent=2))
         sys.stdout.write("\n")
@@ -1751,10 +1769,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if isinstance(cmd, QueueRequeueCmd):
         try:
-            recovery_result = requeue_local_spool_task(
+            recovery_result = requeue_local_task(
                 root=Path(cmd.root),
                 source_bucket=cmd.bucket,
                 task_id=cmd.task_id,
+                backend_kind=cmd.backend,
             )
         except QueueRecoveryError as e:
             logging.error("queue recovery error: %s", e)
