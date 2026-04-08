@@ -5,9 +5,10 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TypedDict, cast
+from typing import Literal, TypedDict, cast
 
 from zephyr_ingest.queue_backend_factory import LocalQueueBackendKind
+from zephyr_ingest.queue_recover import QueueGovernanceActionAuditSupport, QueueGovernanceActionV1
 from zephyr_ingest.spool_queue import (
     QueueRecoveryProvenanceV1Dict,
     SpoolBucket,
@@ -17,6 +18,10 @@ from zephyr_ingest.spool_queue import (
 from zephyr_ingest.task_v1 import TaskIdentityV1Dict, TaskV1
 
 SPOOL_BUCKETS: tuple[SpoolBucket, ...] = ("pending", "inflight", "done", "failed", "poison")
+QueueTaskState = Literal["pending", "inflight", "done", "failed", "poison"]
+QueueGovernanceLabel = Literal["orphaned", "requeued"]
+QueuePoisonKind = Literal["attempts_exhausted", "orphaned", "not_poison"]
+QueueHandlingExpectation = Literal["requeue_supported", "none"]
 
 
 class QueueInspectSummaryDict(TypedDict):
@@ -29,6 +34,10 @@ class QueueInspectSummaryDict(TypedDict):
 
 class QueueInspectTaskDict(TypedDict):
     bucket: SpoolBucket
+    state: QueueTaskState
+    governance_labels: list[QueueGovernanceLabel]
+    poison_kind: QueuePoisonKind
+    handling_expectation: QueueHandlingExpectation
     task_id: str
     kind: str
     record_path: str
@@ -71,6 +80,10 @@ class QueueInspectSummaryV1:
 @dataclass(frozen=True, slots=True)
 class QueueInspectTaskV1:
     bucket: SpoolBucket
+    state: QueueTaskState
+    governance_labels: tuple[QueueGovernanceLabel, ...]
+    poison_kind: QueuePoisonKind
+    handling_expectation: QueueHandlingExpectation
     task_id: str
     kind: str
     record_path: str
@@ -84,9 +97,31 @@ class QueueInspectTaskV1:
     orphan_count: int
     latest_recovery: QueueRecoveryProvenanceV1Dict | None
 
+    @property
+    def governance_action_audit_support(self) -> QueueGovernanceActionAuditSupport:
+        if self.latest_recovery is None:
+            return "result_only"
+        return "persisted_in_history"
+
+    @property
+    def latest_governance_action(self) -> QueueGovernanceActionV1 | None:
+        if self.latest_recovery is None:
+            return None
+        return QueueGovernanceActionV1(
+            action="requeue",
+            source_state=self.latest_recovery["source_bucket"],
+            target_state="pending",
+            recorded_at_utc=self.latest_recovery["recorded_at_utc"],
+            audit_support="persisted_in_history",
+        )
+
     def to_dict(self) -> QueueInspectTaskDict:
         return {
             "bucket": self.bucket,
+            "state": self.state,
+            "governance_labels": list(self.governance_labels),
+            "poison_kind": self.poison_kind,
+            "handling_expectation": self.handling_expectation,
             "task_id": self.task_id,
             "kind": self.kind,
             "record_path": self.record_path,
@@ -171,6 +206,17 @@ def _build_task_inspection(*, bucket: SpoolBucket, path: Path) -> QueueInspectTa
     latest_recovery = None if not record.provenance else record.provenance[-1].to_dict()
     return QueueInspectTaskV1(
         bucket=bucket,
+        state=_queue_task_state(bucket=bucket),
+        governance_labels=_queue_governance_labels(
+            orphan_count=record.governance.orphan_count,
+            latest_recovery=latest_recovery,
+        ),
+        poison_kind=_queue_poison_kind(
+            bucket=bucket,
+            failure_count=record.governance.failure_count,
+            orphan_count=record.governance.orphan_count,
+        ),
+        handling_expectation=_queue_handling_expectation(bucket=bucket),
         task_id=task.task_id,
         kind=task.kind,
         record_path=str(path.resolve()),
@@ -279,6 +325,17 @@ def _build_sqlite_task_inspection(
     identity = None if task.identity is None else task.identity.to_dict()
     return QueueInspectTaskV1(
         bucket=bucket,
+        state=_queue_task_state(bucket=bucket),
+        governance_labels=_queue_governance_labels(
+            orphan_count=_read_sqlite_int(row=row, key="orphan_count"),
+            latest_recovery=None,
+        ),
+        poison_kind=_queue_poison_kind(
+            bucket=bucket,
+            failure_count=_read_sqlite_int(row=row, key="failure_count"),
+            orphan_count=_read_sqlite_int(row=row, key="orphan_count"),
+        ),
+        handling_expectation=_queue_handling_expectation(bucket=bucket),
         task_id=task.task_id,
         kind=task.kind,
         record_path=_sqlite_queue_locator(
@@ -296,6 +353,44 @@ def _build_sqlite_task_inspection(
         orphan_count=_read_sqlite_int(row=row, key="orphan_count"),
         latest_recovery=None,
     )
+
+
+def _queue_task_state(*, bucket: SpoolBucket) -> QueueTaskState:
+    return bucket
+
+
+def _queue_governance_labels(
+    *,
+    orphan_count: int,
+    latest_recovery: QueueRecoveryProvenanceV1Dict | None,
+) -> tuple[QueueGovernanceLabel, ...]:
+    labels: list[QueueGovernanceLabel] = []
+    if orphan_count > 0:
+        labels.append("orphaned")
+    if latest_recovery is not None and latest_recovery.get("action") == "requeue":
+        labels.append("requeued")
+    return tuple(labels)
+
+
+def _queue_poison_kind(
+    *,
+    bucket: SpoolBucket,
+    failure_count: int,
+    orphan_count: int,
+) -> QueuePoisonKind:
+    if bucket != "poison":
+        return "not_poison"
+    if orphan_count > 0:
+        return "orphaned"
+    if failure_count > 0:
+        return "attempts_exhausted"
+    return "attempts_exhausted"
+
+
+def _queue_handling_expectation(*, bucket: SpoolBucket) -> QueueHandlingExpectation:
+    if bucket in ("poison", "inflight"):
+        return "requeue_supported"
+    return "none"
 
 
 def _connect_sqlite_queue(db_path: Path) -> sqlite3.Connection:

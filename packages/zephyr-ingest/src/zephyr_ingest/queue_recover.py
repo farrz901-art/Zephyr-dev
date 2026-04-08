@@ -20,6 +20,9 @@ from zephyr_ingest.task_idempotency import normalize_task_idempotency_key
 from zephyr_ingest.task_v1 import TaskV1
 
 RecoverableSpoolBucket = Literal["poison", "inflight"]
+QueueGovernanceActionKind = Literal["requeue"]
+QueueGovernanceActionAuditSupport = Literal["persisted_in_history", "result_only"]
+QueueGovernanceActionRedriveSemantics = Literal["not_modeled"]
 
 
 class QueueRecoveryResultDict(TypedDict):
@@ -41,6 +44,16 @@ class QueueRecoveryError(ValueError):
 
 
 @dataclass(frozen=True, slots=True)
+class QueueGovernanceActionV1:
+    action: QueueGovernanceActionKind
+    source_state: RecoverableSpoolBucket
+    target_state: Literal["pending"]
+    recorded_at_utc: str
+    audit_support: QueueGovernanceActionAuditSupport
+    redrive_semantics: QueueGovernanceActionRedriveSemantics = "not_modeled"
+
+
+@dataclass(frozen=True, slots=True)
 class QueueRecoveryResultV1:
     root: str
     task_id: str
@@ -52,6 +65,7 @@ class QueueRecoveryResultV1:
     orphan_count: int
     recorded_at_utc: str
     task_identity_key: str | None = None
+    audit_support: QueueGovernanceActionAuditSupport = "result_only"
 
     def to_dict(self) -> QueueRecoveryResultDict:
         return {
@@ -75,6 +89,16 @@ class QueueRecoveryResultV1:
             execution_mode="worker",
             task_id=self.task_id,
             task_identity_key=self.task_identity_key,
+        )
+
+    @property
+    def governance_action(self) -> QueueGovernanceActionV1:
+        return QueueGovernanceActionV1(
+            action="requeue",
+            source_state=self.source_bucket,
+            target_state="pending",
+            recorded_at_utc=self.recorded_at_utc,
+            audit_support=self.audit_support,
         )
 
 
@@ -150,6 +174,7 @@ def requeue_local_spool_task(
         orphan_count=record.governance.orphan_count,
         recorded_at_utc=recorded_at_utc,
         task_identity_key=task_identity_key,
+        audit_support="persisted_in_history",
     )
 
 
@@ -216,6 +241,7 @@ def requeue_local_sqlite_task(
         orphan_count=_read_sqlite_int(row=row, key="orphan_count"),
         recorded_at_utc=recorded_at_utc,
         task_identity_key=task_identity_key,
+        audit_support="result_only",
     )
 
 

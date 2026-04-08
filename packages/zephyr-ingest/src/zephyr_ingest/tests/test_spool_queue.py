@@ -236,6 +236,10 @@ def test_inspect_queue_bucket_list_surfaces_governance_and_identity_metadata(
     assert payload["summary"]["poison"] == 1
     assert payload["tasks"][0] == {
         "bucket": "poison",
+        "state": "poison",
+        "governance_labels": [],
+        "poison_kind": "attempts_exhausted",
+        "handling_expectation": "requeue_supported",
         "task_id": "task-identity",
         "kind": "it",
         "record_path": str((queue.poison_dir / "task-identity.json").resolve()),

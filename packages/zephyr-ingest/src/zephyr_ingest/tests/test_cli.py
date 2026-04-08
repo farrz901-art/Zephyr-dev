@@ -350,6 +350,10 @@ def test_cli_queue_inspect_prints_summary_and_bucket_tasks(
     assert payload["tasks"] == [
         {
             "bucket": "poison",
+            "state": "poison",
+            "governance_labels": [],
+            "poison_kind": "attempts_exhausted",
+            "handling_expectation": "requeue_supported",
             "task_id": "task-cli",
             "kind": "it",
             "record_path": str((queue.poison_dir / "task-cli.json").resolve()),
