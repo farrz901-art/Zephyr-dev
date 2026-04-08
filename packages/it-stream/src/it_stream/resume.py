@@ -2,9 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal, NoReturn
 
 from it_stream.artifacts import (
+    ItCheckpointCompatibilityError,
     ItCheckpointEntryV1,
+    ItCheckpointProgressKind,
+    ItCheckpointResumeCursorContinuationV1,
+    ItCheckpointResumeProvenanceV1,
     ItCheckpointV1,
     load_it_checkpoint,
 )
@@ -19,11 +24,66 @@ from it_stream.service import (
 from zephyr_core import PartitionResult, PartitionStrategy
 from zephyr_core.contracts.v1.run_meta import ExecutionModeV1, RunProvenanceV1
 
+ItResumeSelectionModeV1 = Literal["latest_checkpoint", "explicit_checkpoint_identity"]
+ItResumeRecoveryStatusV1 = Literal["malformed", "incompatible", "unsupported", "blocked"]
+ItResumeRecoveryCodeV1 = Literal[
+    "checkpoint_malformed",
+    "checkpoint_incompatible",
+    "task_identity_mismatch",
+    "empty_checkpoint_set",
+    "unknown_checkpoint_identity",
+    "unsupported_progress_kind",
+    "missing_checkpoint_cursor",
+    "missing_record_emitted_at",
+    "missing_state_cursor",
+]
+
+
+@dataclass(frozen=True, slots=True)
+class ItResumeRecoveryIssueV1:
+    status: ItResumeRecoveryStatusV1
+    code: ItResumeRecoveryCodeV1
+    message: str
+    checkpoint_identity_key: str | None = None
+    progress_kind: ItCheckpointProgressKind | None = None
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "status": self.status,
+            "code": self.code,
+            "message": self.message,
+            "checkpoint_identity_key": self.checkpoint_identity_key,
+            "progress_kind": self.progress_kind,
+        }
+
+
+class ItResumeRecoveryError(ValueError):
+    def __init__(self, *, issue: ItResumeRecoveryIssueV1) -> None:
+        self.issue = issue
+        super().__init__(issue.message)
+
+
+@dataclass(frozen=True, slots=True)
+class ItResumeCheckpointSelectionV1:
+    mode: ItResumeSelectionModeV1
+    checkpoint_identity_key: str
+    checkpoint_index: int
+    parent_checkpoint_identity_key: str | None
+    progress_kind: ItCheckpointProgressKind
+
+
+@dataclass(frozen=True, slots=True)
+class ItResumeCursorContinuationV1:
+    progress_kind: Literal["cursor_v1"]
+    exclusive_after_cursor: str
+
 
 @dataclass(frozen=True, slots=True)
 class ItResumeSelectionV1:
     checkpoint: ItCheckpointV1
     entry: ItCheckpointEntryV1
+    selected_checkpoint: ItResumeCheckpointSelectionV1
+    continuation: ItResumeCursorContinuationV1 | None
 
     def to_run_provenance(
         self,
@@ -36,9 +96,57 @@ class ItResumeSelectionV1:
             delivery_origin="primary",
             execution_mode=execution_mode,
             task_id=task_id,
-            checkpoint_identity_key=self.entry.checkpoint_identity_key,
+            checkpoint_identity_key=self.selected_checkpoint.checkpoint_identity_key,
             task_identity_key=self.checkpoint.task_identity_key,
         )
+
+    def to_checkpoint_resume_provenance(self) -> ItCheckpointResumeProvenanceV1:
+        continuation: ItCheckpointResumeCursorContinuationV1 | None = None
+        if self.continuation is not None:
+            continuation = ItCheckpointResumeCursorContinuationV1(
+                exclusive_after_cursor=self.continuation.exclusive_after_cursor
+            )
+        return ItCheckpointResumeProvenanceV1(
+            checkpoint_identity_key=self.selected_checkpoint.checkpoint_identity_key,
+            progress_kind=self.selected_checkpoint.progress_kind,
+            continuation=continuation,
+        )
+
+
+def _raise_resume_recovery_error(
+    *,
+    status: ItResumeRecoveryStatusV1,
+    code: ItResumeRecoveryCodeV1,
+    message: str,
+    checkpoint_identity_key: str | None = None,
+    progress_kind: ItCheckpointProgressKind | None = None,
+) -> NoReturn:
+    raise ItResumeRecoveryError(
+        issue=ItResumeRecoveryIssueV1(
+            status=status,
+            code=code,
+            message=message,
+            checkpoint_identity_key=checkpoint_identity_key,
+            progress_kind=progress_kind,
+        )
+    )
+
+
+def _raise_resume_recovery_error_from_compatibility(
+    err: ItCheckpointCompatibilityError,
+) -> NoReturn:
+    compatibility = err.compatibility
+    if compatibility.status == "malformed":
+        _raise_resume_recovery_error(
+            status="malformed",
+            code="checkpoint_malformed",
+            message=compatibility.reason or "Malformed it-stream checkpoint artifact",
+        )
+    _raise_resume_recovery_error(
+        status="incompatible",
+        code="checkpoint_incompatible",
+        message=compatibility.reason or "Incompatible it-stream checkpoint artifact",
+    )
 
 
 def _read_cursor(*, progress: dict[str, object], context: str) -> str:
@@ -48,6 +156,68 @@ def _read_cursor(*, progress: dict[str, object], context: str) -> str:
     return cursor
 
 
+def _read_checkpoint_cursor_or_raise(*, entry: ItCheckpointEntryV1) -> str:
+    try:
+        return _read_cursor(
+            progress=entry.progress,
+            context="it-stream resume checkpoint progress",
+        )
+    except ValueError as err:
+        _raise_resume_recovery_error(
+            status="blocked",
+            code="missing_checkpoint_cursor",
+            message=str(err),
+            checkpoint_identity_key=entry.checkpoint_identity_key,
+            progress_kind=entry.progress_kind,
+        )
+
+
+def _read_state_cursor_or_raise(
+    *,
+    state: ItStateV1,
+    selection: ItResumeSelectionV1,
+) -> str:
+    try:
+        return _read_cursor(
+            progress=state.data,
+            context="it-stream resume state progress",
+        )
+    except ValueError as err:
+        _raise_resume_recovery_error(
+            status="blocked",
+            code="missing_state_cursor",
+            message=str(err),
+            checkpoint_identity_key=selection.selected_checkpoint.checkpoint_identity_key,
+            progress_kind=selection.selected_checkpoint.progress_kind,
+        )
+
+
+def _build_resume_selection(
+    *,
+    checkpoint: ItCheckpointV1,
+    entry: ItCheckpointEntryV1,
+    mode: ItResumeSelectionModeV1,
+) -> ItResumeSelectionV1:
+    continuation: ItResumeCursorContinuationV1 | None = None
+    if entry.progress_kind == "cursor_v1":
+        continuation = ItResumeCursorContinuationV1(
+            progress_kind="cursor_v1",
+            exclusive_after_cursor=_read_checkpoint_cursor_or_raise(entry=entry),
+        )
+    return ItResumeSelectionV1(
+        checkpoint=checkpoint,
+        entry=entry,
+        selected_checkpoint=ItResumeCheckpointSelectionV1(
+            mode=mode,
+            checkpoint_identity_key=entry.checkpoint_identity_key,
+            checkpoint_index=entry.checkpoint_index,
+            parent_checkpoint_identity_key=entry.parent_checkpoint_identity_key,
+            progress_kind=entry.progress_kind,
+        ),
+        continuation=continuation,
+    )
+
+
 def load_it_resume_selection(
     *,
     checkpoint_path: Path,
@@ -55,7 +225,10 @@ def load_it_resume_selection(
     sha256: str,
     checkpoint_identity_key: str | None = None,
 ) -> ItResumeSelectionV1:
-    checkpoint = load_it_checkpoint(path=checkpoint_path)
+    try:
+        checkpoint = load_it_checkpoint(path=checkpoint_path)
+    except ItCheckpointCompatibilityError as err:
+        _raise_resume_recovery_error_from_compatibility(err)
     expected_task_identity_key = normalize_it_task_identity_key(
         identity=ItTaskIdentityV1(
             pipeline_version=pipeline_version,
@@ -63,19 +236,40 @@ def load_it_resume_selection(
         )
     )
     if checkpoint.task_identity_key != expected_task_identity_key:
-        raise ValueError("it-stream checkpoint task identity does not match the requested work")
+        _raise_resume_recovery_error(
+            status="incompatible",
+            code="task_identity_mismatch",
+            message="it-stream checkpoint task identity does not match the requested work",
+        )
 
     if not checkpoint.checkpoints:
-        raise ValueError("it-stream checkpoint artifact does not contain any checkpoints")
+        _raise_resume_recovery_error(
+            status="blocked",
+            code="empty_checkpoint_set",
+            message="it-stream checkpoint artifact does not contain any checkpoints",
+        )
 
     if checkpoint_identity_key is None:
-        return ItResumeSelectionV1(checkpoint=checkpoint, entry=checkpoint.checkpoints[-1])
+        return _build_resume_selection(
+            checkpoint=checkpoint,
+            entry=checkpoint.checkpoints[-1],
+            mode="latest_checkpoint",
+        )
 
     for entry in checkpoint.checkpoints:
         if entry.checkpoint_identity_key == checkpoint_identity_key:
-            return ItResumeSelectionV1(checkpoint=checkpoint, entry=entry)
+            return _build_resume_selection(
+                checkpoint=checkpoint,
+                entry=entry,
+                mode="explicit_checkpoint_identity",
+            )
 
-    raise ValueError(f"Unknown it-stream checkpoint identity key: {checkpoint_identity_key!r}")
+    _raise_resume_recovery_error(
+        status="blocked",
+        code="unknown_checkpoint_identity",
+        message=f"Unknown it-stream checkpoint identity key: {checkpoint_identity_key!r}",
+        checkpoint_identity_key=checkpoint_identity_key,
+    )
 
 
 def _resume_input_document(
@@ -83,27 +277,34 @@ def _resume_input_document(
     doc: ItNormalizedInputDocumentV1,
     selection: ItResumeSelectionV1,
 ) -> ItNormalizedInputDocumentV1:
-    if selection.entry.progress_kind != "cursor_v1":
-        raise ValueError("it-stream resume currently requires 'cursor_v1' checkpoint progress")
-
-    checkpoint_cursor = _read_cursor(
-        progress=selection.entry.progress,
-        context="it-stream resume checkpoint progress",
-    )
+    continuation = selection.continuation
+    if continuation is None:
+        _raise_resume_recovery_error(
+            status="unsupported",
+            code="unsupported_progress_kind",
+            message="it-stream resume currently requires 'cursor_v1' checkpoint progress",
+            checkpoint_identity_key=selection.selected_checkpoint.checkpoint_identity_key,
+            progress_kind=selection.selected_checkpoint.progress_kind,
+        )
+    checkpoint_cursor = continuation.exclusive_after_cursor
 
     resumed_records: list[ItRecordV1] = []
     for record in doc.records:
         if record.emitted_at is None:
-            raise ValueError("it-stream resume currently requires 'record.emitted_at' for records")
-        if record.emitted_at > checkpoint_cursor:
+            _raise_resume_recovery_error(
+                status="blocked",
+                code="missing_record_emitted_at",
+                message="it-stream resume currently requires 'record.emitted_at' for records",
+                checkpoint_identity_key=selection.selected_checkpoint.checkpoint_identity_key,
+                progress_kind=selection.selected_checkpoint.progress_kind,
+            )
+        emitted_at = record.emitted_at
+        if emitted_at > checkpoint_cursor:
             resumed_records.append(record)
 
     resumed_states: list[ItStateV1] = []
     for state in doc.states:
-        state_cursor = _read_cursor(
-            progress=state.data,
-            context="it-stream resume state progress",
-        )
+        state_cursor = _read_state_cursor_or_raise(state=state, selection=selection)
         if state_cursor > checkpoint_cursor:
             resumed_states.append(state)
 

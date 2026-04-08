@@ -25,6 +25,87 @@ ItCheckpointProgressKind = Literal["cursor_v1", "token_v1", "page_v1", "state_di
 
 
 @dataclass(frozen=True, slots=True)
+class ItCheckpointResumeCursorContinuationV1:
+    exclusive_after_cursor: str
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "exclusive_after_cursor": self.exclusive_after_cursor,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, object]) -> ItCheckpointResumeCursorContinuationV1:
+        exclusive_after_cursor = data.get("exclusive_after_cursor")
+        if not isinstance(exclusive_after_cursor, str) or not exclusive_after_cursor:
+            raise ValueError(
+                "it-stream checkpoint resume continuation field 'exclusive_after_cursor' "
+                "must be a non-empty string"
+            )
+        return cls(exclusive_after_cursor=exclusive_after_cursor)
+
+
+@dataclass(frozen=True, slots=True)
+class ItCheckpointResumeProvenanceV1:
+    checkpoint_identity_key: str
+    progress_kind: ItCheckpointProgressKind
+    continuation: ItCheckpointResumeCursorContinuationV1 | None = None
+
+    def to_dict(self) -> dict[str, object]:
+        data: dict[str, object] = {
+            "checkpoint_identity_key": self.checkpoint_identity_key,
+            "progress_kind": self.progress_kind,
+        }
+        if self.continuation is not None:
+            data["continuation"] = self.continuation.to_dict()
+        return data
+
+    @classmethod
+    def from_dict(cls, data: dict[str, object]) -> ItCheckpointResumeProvenanceV1:
+        checkpoint_identity_key = data.get("checkpoint_identity_key")
+        if not isinstance(checkpoint_identity_key, str) or not checkpoint_identity_key:
+            raise ValueError(
+                "it-stream checkpoint resume provenance field 'checkpoint_identity_key' "
+                "must be a non-empty string"
+            )
+
+        progress_kind_raw = data.get("progress_kind")
+        progress_kind: ItCheckpointProgressKind
+        if progress_kind_raw == "cursor_v1":
+            progress_kind = "cursor_v1"
+        elif progress_kind_raw == "token_v1":
+            progress_kind = "token_v1"
+        elif progress_kind_raw == "page_v1":
+            progress_kind = "page_v1"
+        elif progress_kind_raw == "state_dict_v1":
+            progress_kind = "state_dict_v1"
+        else:
+            raise ValueError(
+                "it-stream checkpoint resume provenance field 'progress_kind' "
+                "must be a supported progress kind"
+            )
+
+        continuation_raw = data.get("continuation")
+        continuation: ItCheckpointResumeCursorContinuationV1 | None
+        if continuation_raw is None:
+            continuation = None
+        elif isinstance(continuation_raw, dict):
+            continuation = ItCheckpointResumeCursorContinuationV1.from_dict(
+                cast(dict[str, object], continuation_raw)
+            )
+        else:
+            raise ValueError(
+                "it-stream checkpoint resume provenance field 'continuation' "
+                "must be an object or null"
+            )
+
+        return cls(
+            checkpoint_identity_key=checkpoint_identity_key,
+            progress_kind=progress_kind,
+            continuation=continuation,
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class ItCheckpointCompatibilityV1:
     status: ItCheckpointCompatibilityStatus
     schema_version: int | None
@@ -48,15 +129,19 @@ class ItCheckpointProvenanceV1:
     delivery_origin: DeliveryOriginV1
     execution_mode: ExecutionModeV1
     resumed_from_checkpoint_identity_key: str | None = None
+    resume: ItCheckpointResumeProvenanceV1 | None = None
 
     def to_dict(self) -> dict[str, object]:
-        return {
+        data: dict[str, object] = {
             "task_identity_key": self.task_identity_key,
             "run_origin": self.run_origin,
             "delivery_origin": self.delivery_origin,
             "execution_mode": self.execution_mode,
             "resumed_from_checkpoint_identity_key": self.resumed_from_checkpoint_identity_key,
         }
+        if self.resume is not None:
+            data["resume"] = self.resume.to_dict()
+        return data
 
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> ItCheckpointProvenanceV1:
@@ -111,12 +196,24 @@ class ItCheckpointProvenanceV1:
                 "must be a non-empty string or null"
             )
 
+        resume_raw = data.get("resume")
+        resume: ItCheckpointResumeProvenanceV1 | None
+        if resume_raw is None:
+            resume = None
+        elif isinstance(resume_raw, dict):
+            resume = ItCheckpointResumeProvenanceV1.from_dict(cast(dict[str, object], resume_raw))
+        else:
+            raise ValueError(
+                "it-stream checkpoint provenance field 'resume' must be an object or null"
+            )
+
         return cls(
             task_identity_key=task_identity_key,
             run_origin=run_origin,
             delivery_origin=delivery_origin,
             execution_mode=execution_mode,
             resumed_from_checkpoint_identity_key=resumed_from_checkpoint_identity_key,
+            resume=resume,
         )
 
 
@@ -330,6 +427,7 @@ def _default_checkpoint_provenance(*, task_identity_key: str) -> ItCheckpointPro
         delivery_origin="primary",
         execution_mode="batch",
         resumed_from_checkpoint_identity_key=None,
+        resume=None,
     )
 
 
@@ -337,6 +435,7 @@ def build_it_checkpoint_provenance(
     *,
     task_identity_key: str,
     run_provenance: RunProvenanceV1 | None,
+    resume_provenance: ItCheckpointResumeProvenanceV1 | None = None,
 ) -> ItCheckpointProvenanceV1:
     if run_provenance is None:
         return _default_checkpoint_provenance(task_identity_key=task_identity_key)
@@ -347,6 +446,7 @@ def build_it_checkpoint_provenance(
         delivery_origin=run_provenance.delivery_origin or "primary",
         execution_mode=run_provenance.execution_mode or "batch",
         resumed_from_checkpoint_identity_key=run_provenance.checkpoint_identity_key,
+        resume=resume_provenance,
     )
 
 
@@ -466,6 +566,7 @@ def build_it_artifacts(
     result: PartitionResult,
     pipeline_version: str,
     run_provenance: RunProvenanceV1 | None = None,
+    resume_provenance: ItCheckpointResumeProvenanceV1 | None = None,
 ) -> ItArtifactsV1:
     records: list[ItArtifactRecordV1] = []
     states: list[ItArtifactStateV1] = []
@@ -544,6 +645,7 @@ def build_it_artifacts(
         provenance=build_it_checkpoint_provenance(
             task_identity_key=task_identity_key,
             run_provenance=run_provenance,
+            resume_provenance=resume_provenance,
         ),
         checkpoints=checkpoint_entries,
     )
@@ -557,12 +659,14 @@ def dump_it_artifacts(
     result: PartitionResult,
     pipeline_version: str,
     run_provenance: RunProvenanceV1 | None = None,
+    resume_provenance: ItCheckpointResumeProvenanceV1 | None = None,
 ) -> ItArtifactsV1:
     out_dir.mkdir(parents=True, exist_ok=True)
     artifacts = build_it_artifacts(
         result=result,
         pipeline_version=pipeline_version,
         run_provenance=run_provenance,
+        resume_provenance=resume_provenance,
     )
     _write_jsonl(out_dir / "records.jsonl", [record.to_dict() for record in artifacts.records])
     _write_jsonl(out_dir / "logs.jsonl", [log.to_dict() for log in artifacts.logs])

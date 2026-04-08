@@ -10,6 +10,9 @@ from it_stream import (
     ItCheckpointCompatibilityError,
     ItCheckpointIdentityV1,
     ItCheckpointProvenanceV1,
+    ItCheckpointResumeCursorContinuationV1,
+    ItCheckpointResumeProvenanceV1,
+    ItResumeRecoveryError,
     ItTaskIdentityV1,
     dump_it_artifacts,
     inspect_it_checkpoint_compatibility,
@@ -323,6 +326,15 @@ def test_load_it_resume_selection_validates_task_identity_and_defaults_to_latest
         sha256="sha-it-004",
     )
 
+    assert selection.selected_checkpoint.mode == "latest_checkpoint"
+    assert selection.selected_checkpoint.checkpoint_identity_key == (
+        artifacts.checkpoint.checkpoints[-1].checkpoint_identity_key
+    )
+    assert selection.selected_checkpoint.checkpoint_index == 1
+    assert selection.selected_checkpoint.parent_checkpoint_identity_key == (
+        artifacts.checkpoint.checkpoints[0].checkpoint_identity_key
+    )
+    assert selection.selected_checkpoint.progress_kind == "cursor_v1"
     assert selection.entry.checkpoint_index == 1
     assert selection.entry.checkpoint_identity_key == (
         artifacts.checkpoint.checkpoints[-1].checkpoint_identity_key
@@ -330,6 +342,9 @@ def test_load_it_resume_selection_validates_task_identity_and_defaults_to_latest
     assert selection.entry.parent_checkpoint_identity_key == (
         artifacts.checkpoint.checkpoints[0].checkpoint_identity_key
     )
+    assert selection.continuation is not None
+    assert selection.continuation.progress_kind == "cursor_v1"
+    assert selection.continuation.exclusive_after_cursor == "2026-01-02T00:00:00Z"
 
 
 def test_it_resume_selection_exposes_run_provenance(tmp_path: Path) -> None:
@@ -387,6 +402,13 @@ def test_it_resume_selection_exposes_run_provenance(tmp_path: Path) -> None:
         "checkpoint_identity_key": artifacts.checkpoint.checkpoints[0].checkpoint_identity_key,
         "task_identity_key": artifacts.checkpoint.task_identity_key,
     }
+    assert selection.to_checkpoint_resume_provenance() == ItCheckpointResumeProvenanceV1(
+        checkpoint_identity_key=artifacts.checkpoint.checkpoints[0].checkpoint_identity_key,
+        progress_kind="cursor_v1",
+        continuation=ItCheckpointResumeCursorContinuationV1(
+            exclusive_after_cursor="2026-01-01T00:00:00Z"
+        ),
+    )
 
 
 def test_load_it_checkpoint_round_trips_zephyr_owned_checkpoint_artifact(tmp_path: Path) -> None:
@@ -663,6 +685,18 @@ def test_dump_it_artifacts_can_record_resume_checkpoint_provenance(tmp_path: Pat
         sha256="sha-it-provenance",
         checkpoint_identity_key=initial_artifacts.checkpoint.checkpoints[0].checkpoint_identity_key,
     )
+
+    assert selection.selected_checkpoint.mode == "explicit_checkpoint_identity"
+    assert selection.selected_checkpoint.checkpoint_identity_key == (
+        initial_artifacts.checkpoint.checkpoints[0].checkpoint_identity_key
+    )
+    assert selection.selected_checkpoint.checkpoint_index == 0
+    assert selection.selected_checkpoint.parent_checkpoint_identity_key is None
+    assert selection.selected_checkpoint.progress_kind == "cursor_v1"
+    assert selection.continuation is not None
+    assert selection.continuation.progress_kind == "cursor_v1"
+    assert selection.continuation.exclusive_after_cursor == "2026-01-01T00:00:00Z"
+
     resumed = resume_file(
         filename=str(path),
         checkpoint_path=tmp_path / "initial-artifacts" / "checkpoint.json",
@@ -681,6 +715,7 @@ def test_dump_it_artifacts_can_record_resume_checkpoint_provenance(tmp_path: Pat
             execution_mode="worker",
             task_id="task-it-provenance",
         ),
+        resume_provenance=selection.to_checkpoint_resume_provenance(),
     )
 
     assert resumed_artifacts.checkpoint.provenance == ItCheckpointProvenanceV1(
@@ -691,6 +726,32 @@ def test_dump_it_artifacts_can_record_resume_checkpoint_provenance(tmp_path: Pat
         resumed_from_checkpoint_identity_key=initial_artifacts.checkpoint.checkpoints[
             0
         ].checkpoint_identity_key,
+        resume=ItCheckpointResumeProvenanceV1(
+            checkpoint_identity_key=initial_artifacts.checkpoint.checkpoints[
+                0
+            ].checkpoint_identity_key,
+            progress_kind="cursor_v1",
+            continuation=ItCheckpointResumeCursorContinuationV1(
+                exclusive_after_cursor="2026-01-01T00:00:00Z"
+            ),
+        ),
+    )
+    loaded_resumed = load_it_checkpoint(path=tmp_path / "resumed-artifacts" / "checkpoint.json")
+    assert loaded_resumed.provenance == resumed_artifacts.checkpoint.provenance
+    resumed_provenance = loaded_resumed.provenance
+    assert resumed_provenance is not None
+    assert resumed_provenance.resume is not None
+    assert resumed_provenance.resume.checkpoint_identity_key == (
+        resumed_provenance.resumed_from_checkpoint_identity_key
+    )
+    assert resumed_provenance.resume.checkpoint_identity_key != loaded_resumed.task_identity_key
+    assert resumed_provenance.resume.progress_kind == selection.selected_checkpoint.progress_kind
+    assert resumed_provenance.resume.continuation is not None
+    assert resumed_provenance.resume.continuation.exclusive_after_cursor == (
+        selection.continuation.exclusive_after_cursor
+    )
+    assert loaded_resumed.checkpoints[0].checkpoint_identity_key != (
+        resumed_provenance.resume.checkpoint_identity_key
     )
 
 
@@ -1142,6 +1203,71 @@ def test_checkpoint_governance_fields_remain_distinct_and_inspectable(tmp_path: 
     assert provenance.resumed_from_checkpoint_identity_key is None
 
 
+def test_load_it_resume_selection_distinguishes_incompatible_checkpoint_contract(
+    tmp_path: Path,
+) -> None:
+    checkpoint_path = tmp_path / "checkpoint.json"
+    checkpoint_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "flow_kind": "uns",
+                "stream": "customers",
+                "task_identity_key": "task-key",
+                "checkpoints": [],
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ItResumeRecoveryError, match="flow kind") as exc_info:
+        load_it_resume_selection(
+            checkpoint_path=checkpoint_path,
+            pipeline_version="p-it",
+            sha256="sha-it-incompatible",
+        )
+
+    assert exc_info.value.issue.to_dict() == {
+        "status": "incompatible",
+        "code": "checkpoint_incompatible",
+        "message": "Unsupported it-stream checkpoint flow kind: 'uns'",
+        "checkpoint_identity_key": None,
+        "progress_kind": None,
+    }
+
+
+def test_load_it_resume_selection_distinguishes_malformed_checkpoint_artifact(
+    tmp_path: Path,
+) -> None:
+    checkpoint_path = tmp_path / "checkpoint.json"
+    checkpoint_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "flow_kind": "it",
+                "stream": "customers",
+                "checkpoints": [],
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ItResumeRecoveryError, match="task_identity_key") as exc_info:
+        load_it_resume_selection(
+            checkpoint_path=checkpoint_path,
+            pipeline_version="p-it",
+            sha256="sha-it-malformed",
+        )
+
+    assert exc_info.value.issue.status == "malformed"
+    assert exc_info.value.issue.code == "checkpoint_malformed"
+    assert exc_info.value.issue.progress_kind is None
+
+
 def test_load_it_resume_selection_rejects_mismatched_task_identity(tmp_path: Path) -> None:
     path = tmp_path / "messages.json"
     path.write_text(
@@ -1180,12 +1306,15 @@ def test_load_it_resume_selection_rejects_mismatched_task_identity(tmp_path: Pat
         pipeline_version="p-it",
     )
 
-    with pytest.raises(ValueError, match="task identity"):
+    with pytest.raises(ItResumeRecoveryError, match="task identity") as exc_info:
         load_it_resume_selection(
             checkpoint_path=tmp_path / "artifacts" / "checkpoint.json",
             pipeline_version="p-it-other",
             sha256="sha-it-008",
         )
+
+    assert exc_info.value.issue.status == "incompatible"
+    assert exc_info.value.issue.code == "task_identity_mismatch"
 
 
 def test_resume_file_continues_it_processing_from_selected_checkpoint(tmp_path: Path) -> None:
@@ -1304,7 +1433,17 @@ def test_resume_file_rejects_checkpoint_progress_outside_supported_cursor_subset
 
     assert checkpoint.checkpoints[0].progress_kind == "state_dict_v1"
 
-    with pytest.raises(ValueError, match="cursor_v1"):
+    selection = load_it_resume_selection(
+        checkpoint_path=tmp_path / "artifacts" / "checkpoint.json",
+        pipeline_version="p-it",
+        sha256="sha-it-009",
+    )
+
+    assert selection.selected_checkpoint.mode == "latest_checkpoint"
+    assert selection.selected_checkpoint.progress_kind == "state_dict_v1"
+    assert selection.continuation is None
+
+    with pytest.raises(ItResumeRecoveryError, match="cursor_v1") as exc_info:
         resume_file(
             filename=str(path),
             checkpoint_path=tmp_path / "artifacts" / "checkpoint.json",
@@ -1313,6 +1452,10 @@ def test_resume_file_rejects_checkpoint_progress_outside_supported_cursor_subset
             sha256="sha-it-009",
             size_bytes=path.stat().st_size,
         )
+
+    assert exc_info.value.issue.status == "unsupported"
+    assert exc_info.value.issue.code == "unsupported_progress_kind"
+    assert exc_info.value.issue.progress_kind == "state_dict_v1"
 
 
 @pytest.mark.parametrize(
@@ -1399,11 +1542,19 @@ def test_resume_file_rejects_explicit_non_cursor_progress_families(
         sha256=sha256,
     )
 
+    assert selection.selected_checkpoint.mode == "latest_checkpoint"
+    assert selection.selected_checkpoint.progress_kind == progress_kind
     assert selection.entry.progress_kind == progress_kind
     assert selection.entry.progress == progress
     assert selection.entry.checkpoint_identity_key != selection.checkpoint.task_identity_key
+    assert selection.continuation is None
+    assert selection.to_checkpoint_resume_provenance() == ItCheckpointResumeProvenanceV1(
+        checkpoint_identity_key=selection.selected_checkpoint.checkpoint_identity_key,
+        progress_kind=progress_kind,
+        continuation=None,
+    )
 
-    with pytest.raises(ValueError, match="cursor_v1"):
+    with pytest.raises(ItResumeRecoveryError, match="cursor_v1") as exc_info:
         resume_file(
             filename=str(path),
             checkpoint_path=checkpoint_path,
@@ -1412,6 +1563,136 @@ def test_resume_file_rejects_explicit_non_cursor_progress_families(
             sha256=sha256,
             size_bytes=path.stat().st_size,
         )
+
+    assert exc_info.value.issue.status == "unsupported"
+    assert exc_info.value.issue.code == "unsupported_progress_kind"
+    assert exc_info.value.issue.progress_kind == progress_kind
+
+
+def test_load_it_resume_selection_surfaces_blocked_cursor_continuation_facts(
+    tmp_path: Path,
+) -> None:
+    checkpoint_path = tmp_path / "checkpoint.json"
+    checkpoint_identity_key = normalize_it_checkpoint_identity_key(
+        identity=ItCheckpointIdentityV1(
+            task=ItTaskIdentityV1(
+                pipeline_version="p-it",
+                sha256="sha-it-blocked-cursor",
+            ),
+            stream="customers",
+            progress_kind="cursor_v1",
+            progress={"page_number": 3},
+        )
+    )
+    checkpoint_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "flow_kind": "it",
+                "stream": "customers",
+                "task_identity_key": normalize_it_task_identity_key(
+                    identity=ItTaskIdentityV1(
+                        pipeline_version="p-it",
+                        sha256="sha-it-blocked-cursor",
+                    )
+                ),
+                "checkpoints": [
+                    {
+                        "checkpoint_index": 0,
+                        "checkpoint_identity_key": checkpoint_identity_key,
+                        "progress_kind": "cursor_v1",
+                        "progress": {"page_number": 3},
+                    }
+                ],
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ItResumeRecoveryError, match="field 'cursor'") as exc_info:
+        load_it_resume_selection(
+            checkpoint_path=checkpoint_path,
+            pipeline_version="p-it",
+            sha256="sha-it-blocked-cursor",
+        )
+
+    assert exc_info.value.issue.status == "blocked"
+    assert exc_info.value.issue.code == "missing_checkpoint_cursor"
+    assert exc_info.value.issue.checkpoint_identity_key == checkpoint_identity_key
+    assert exc_info.value.issue.progress_kind == "cursor_v1"
+
+
+def test_resume_file_surfaces_blocked_state_cursor_for_supported_cursor_subset(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "messages.json"
+    path.write_text(
+        json.dumps(
+            {
+                "messages": [
+                    {
+                        "type": "RECORD",
+                        "record": {
+                            "stream": "customers",
+                            "data": {"id": 1},
+                            "emitted_at": "2026-01-01T00:00:00Z",
+                        },
+                    },
+                    {
+                        "type": "STATE",
+                        "state": {"data": {"cursor": "2026-01-01T00:00:00Z"}},
+                    },
+                    {
+                        "type": "RECORD",
+                        "record": {
+                            "stream": "customers",
+                            "data": {"id": 2},
+                            "emitted_at": "2026-01-02T00:00:00Z",
+                        },
+                    },
+                    {
+                        "type": "STATE",
+                        "state": {"data": {"page_number": 2}},
+                    },
+                ]
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    initial = process_file(
+        filename=str(path),
+        strategy=PartitionStrategy.AUTO,
+        sha256="sha-it-blocked-state",
+        size_bytes=path.stat().st_size,
+    )
+    artifacts = dump_it_artifacts(
+        out_dir=tmp_path / "artifacts",
+        result=initial,
+        pipeline_version="p-it",
+    )
+
+    with pytest.raises(ItResumeRecoveryError, match="field 'cursor'") as exc_info:
+        resume_file(
+            filename=str(path),
+            checkpoint_path=tmp_path / "artifacts" / "checkpoint.json",
+            checkpoint_identity_key=artifacts.checkpoint.checkpoints[0].checkpoint_identity_key,
+            pipeline_version="p-it",
+            strategy=PartitionStrategy.AUTO,
+            sha256="sha-it-blocked-state",
+            size_bytes=path.stat().st_size,
+        )
+
+    assert exc_info.value.issue.status == "blocked"
+    assert exc_info.value.issue.code == "missing_state_cursor"
+    assert exc_info.value.issue.checkpoint_identity_key == (
+        artifacts.checkpoint.checkpoints[0].checkpoint_identity_key
+    )
+    assert exc_info.value.issue.progress_kind == "cursor_v1"
 
 
 def test_resume_file_is_deterministic_for_equivalent_inputs(tmp_path: Path) -> None:
