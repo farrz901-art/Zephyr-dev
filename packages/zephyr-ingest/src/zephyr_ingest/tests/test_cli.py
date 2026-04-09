@@ -576,3 +576,119 @@ def test_cli_run_second_round_destinations_flow_into_snapshot_and_fanout(
 
     assert rc == 0
     assert called["ok"] is True
+
+
+def test_cli_run_mongodb_destination_flows_into_snapshot_and_fanout(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    called = {"ok": False}
+    (tmp_path / "dummy.txt").touch()
+
+    class _FakeMongoClient:
+        def close(self) -> None:
+            return None
+
+    def _fake_mongodb_collection_or_exit(**kwargs: object) -> tuple[_FakeMongoClient, object]:
+        del kwargs
+        return _FakeMongoClient(), object()
+
+    monkeypatch.setattr(cli, "_make_mongodb_collection_or_exit", _fake_mongodb_collection_or_exit)
+
+    def fake_run_documents(*, docs: Any, cfg: Any, ctx: Any, **kwargs: Any) -> Any:
+        del docs, cfg, ctx
+        called["ok"] = True
+
+        dest = kwargs.get("destination")
+        assert dest is not None
+        assert getattr(dest, "name") == "fanout"
+        children = getattr(dest, "destinations")
+        child_names = {getattr(child, "name") for child in children}
+        assert child_names == {"filesystem", "mongodb"}
+
+        snap = cast(ConfigSnapshotV1, kwargs.get("config_snapshot"))
+        mongodb_snapshot = snap["destinations"].get("mongodb")
+        assert mongodb_snapshot is not None
+        assert mongodb_snapshot["database"] == "zephyr"
+        assert mongodb_snapshot["collection"] == "delivery_records"
+        assert mongodb_snapshot["write_mode"] == "replace_upsert"
+
+        sources = snap.get("sources")
+        assert sources is not None
+        assert sources["destinations.mongodb.uri"] == "cli"
+        assert sources["destinations.mongodb.database"] == "cli"
+        assert sources["destinations.mongodb.collection"] == "cli"
+
+    monkeypatch.setattr(cli, "run_documents", fake_run_documents)
+
+    rc = cli.main(
+        [
+            "run",
+            "--path",
+            str(tmp_path / "dummy.txt"),
+            "--out",
+            str(tmp_path / "out"),
+            "--mongodb-uri",
+            "mongodb://db.example.test",
+            "--mongodb-database",
+            "zephyr",
+            "--mongodb-collection",
+            "delivery_records",
+        ]
+    )
+
+    assert rc == 0
+    assert called["ok"] is True
+
+
+def test_cli_run_loki_destination_flows_into_snapshot_and_fanout(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    called = {"ok": False}
+    (tmp_path / "dummy.txt").touch()
+
+    def fake_run_documents(*, docs: Any, cfg: Any, ctx: Any, **kwargs: Any) -> Any:
+        del docs, cfg, ctx
+        called["ok"] = True
+
+        dest = kwargs.get("destination")
+        assert dest is not None
+        assert getattr(dest, "name") == "fanout"
+        children = getattr(dest, "destinations")
+        child_names = {getattr(child, "name") for child in children}
+        assert child_names == {"filesystem", "loki"}
+
+        snap = cast(ConfigSnapshotV1, kwargs.get("config_snapshot"))
+        loki_snapshot = snap["destinations"].get("loki")
+        assert loki_snapshot is not None
+        assert loki_snapshot["url"] == "https://logs.example.test"
+        assert loki_snapshot["stream"] == "delivery"
+        assert loki_snapshot.get("tenant_id") == "tenant-a"
+
+        sources = snap.get("sources")
+        assert sources is not None
+        assert sources["destinations.loki.url"] == "cli"
+        assert sources["destinations.loki.stream"] == "cli"
+        assert sources["destinations.loki.tenant_id"] == "cli"
+
+    monkeypatch.setattr(cli, "run_documents", fake_run_documents)
+
+    rc = cli.main(
+        [
+            "run",
+            "--path",
+            str(tmp_path / "dummy.txt"),
+            "--out",
+            str(tmp_path / "out"),
+            "--loki-url",
+            "https://logs.example.test",
+            "--loki-stream",
+            "delivery",
+            "--loki-tenant-id",
+            "tenant-a",
+        ]
+    )
+
+    assert rc == 0
+    assert called["ok"] is True

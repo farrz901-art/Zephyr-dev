@@ -27,6 +27,11 @@ from zephyr_ingest.delivery_idempotency import (
 from zephyr_ingest.destinations.base import DeliveryReceipt
 from zephyr_ingest.destinations.clickhouse import send_delivery_payload_v1_to_clickhouse
 from zephyr_ingest.destinations.kafka import ProducerProtocol, send_delivery_payload_v1_to_kafka
+from zephyr_ingest.destinations.loki import send_delivery_payload_v1_to_loki
+from zephyr_ingest.destinations.mongodb import (
+    MongoCollectionProtocol,
+    send_delivery_payload_v1_to_mongodb,
+)
 from zephyr_ingest.destinations.opensearch import send_delivery_payload_v1_to_opensearch
 from zephyr_ingest.destinations.s3 import S3ObjectWriterProtocol, send_delivery_payload_v1_to_s3
 from zephyr_ingest.destinations.sqlite import send_delivery_payload_v1_to_sqlite
@@ -383,6 +388,52 @@ class ClickHouseReplaySink:
             timeout_s=self.timeout_s,
             username=self.username,
             password=self.password,
+            transport=self.transport,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class MongoDBReplaySink:
+    database: str
+    collection: str
+    collection_obj: MongoCollectionProtocol
+    write_mode: str = "replace_upsert"
+
+    @property
+    def name(self) -> str:
+        return "mongodb"
+
+    def send(self, *, payload: DeliveryPayloadV1, idempotency_key: str) -> DeliveryReceipt:
+        return send_delivery_payload_v1_to_mongodb(
+            collection_obj=self.collection_obj,
+            database=self.database,
+            collection=self.collection,
+            payload=payload,
+            idempotency_key=idempotency_key,
+            write_mode=self.write_mode,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class LokiReplaySink:
+    url: str
+    stream: str
+    timeout_s: float = 10.0
+    tenant_id: str | None = None
+    transport: httpx.BaseTransport | None = None
+
+    @property
+    def name(self) -> str:
+        return "loki"
+
+    def send(self, *, payload: DeliveryPayloadV1, idempotency_key: str) -> DeliveryReceipt:
+        return send_delivery_payload_v1_to_loki(
+            url=self.url,
+            stream=self.stream,
+            payload=payload,
+            idempotency_key=idempotency_key,
+            timeout_s=self.timeout_s,
+            tenant_id=self.tenant_id,
             transport=self.transport,
         )
 

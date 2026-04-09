@@ -521,60 +521,215 @@ error_code
 
 details naming
 
-P4-M13：destination connector 扩展第二轮
-目标：
 
-在规则已经稳定后，真正增加一批 destination
+P4-M13：Cloud Object + warehouse destinations
+目标：先补两个最值钱且和现有五类明显不同的 destination 类型。
 
-P4-M14：source connector 扩展第二轮
-目标：
+P4-M13-01
+批次定板与 contract pressure mapping
+明确这两个 destination 对 shared delivery contract 的压力点：
 
-真正增加一批 source
+object store 的 object/key/write outcome 语义
 
-尤其加强 it-stream 侧
+warehouse 的 load/upsert/batch outcome 语义
 
-P4-M15：expanded connector focused integration tests
-目标：
+P4-M13-02
+实现 Cloud Object destination
 
-验证 onboarding 模式和主治理面没有被新 connector 拉坏
+P4-M13-03
+实现 warehouse destination
 
-第五段：P5 生产化准备收口
-P4-M16：部署形态准备
-目标：
+P4-M13-04
+focused validation + integration tests
 
-为 P5 的 K8s / Helm / 云端部署扫清结构阻碍
+P4-M14：search + NoSQL + observability destinations
+目标：把另外三类补齐。
 
-先不正式进入生产化落地
+P4-M14-01
+批次定板与 contract pressure mapping
 
-P4-M17：规模化验证准备
-目标：
+P4-M14-02
+实现 search destination
 
-为 P5 压测 / SLO / 故障演练准备 bench、指标、验证入口
+P4-M14-03
+实现 NoSQL destination
 
-P4-M18：P4 收官与 P5 起步判断
-目标：
+P4-M14-04
+实现 observability destination
+这里更像：
 
-正式确认：
+structured event sink
 
-哪些模块已经够稳
+audit/telemetry sink
 
-哪些 connector 模式已验证
+operator-facing external event/output
 
-P5 可以开始真正生产化落地
+P4-M15：cross-destination batch validation
+目标：把 P4-M13 / M14 这一批 destination 一起验证。
 
-这样安排的含义
-P4 里 connector 扩展不是没有，而是有节奏地放进去
-不是拖到很后面才做，而是：
+P4-M15-01
+shared retryability / failure vocabulary batch validation
 
-P4-M3：首批扩展
+P4-M15-02
+details/summary / operator-facing consistency validation
 
-P4-M13 / M14：第二轮系统扩展
+P4-M15-03
+replay/idempotency/provenance validation
 
-这样你既不会太早扩炸，也不会拖得过头。
+P4-M15-04
+focused integration locking
 
-P4 里平台治理也继续做
-所以不是“只扩 connector”或者“只做治理”，而是：
+P4-M16：destination breadth 收口
+目标：确认非企业级 destination 第一轮 breadth 已经够用。
 
-connector 扩张和平台治理一起推进，但按段落推进。
+P4-M16-01
+destination support matrix / supported subset formalization
 
-这正符合你要的路线。
+P4-M16-02
+unsupported gaps / provider-local semantics clarification
+
+P4-M16-03
+focused tests / architecture lock
+
+P4-M16-04
+P4 destination breadth closeout
+
+P4-M17：it-stream source breadth 第二轮
+目标：开始批量补 it source。
+
+建议类型：
+
+Database
+
+Warehouse
+
+Stream
+
+NoSQL
+
+P4-M17-01
+批次定板与 placement/pressure mapping
+
+P4-M17-02
+实现 Database source
+
+P4-M17-03
+实现 Warehouse source
+
+P4-M17-04
+focused validation / tests
+
+P4-M18：it-stream source breadth 第三轮
+P4-M18-01
+实现 Stream source
+
+P4-M18-02
+实现 NoSQL source
+
+P4-M18-03
+shared progress/checkpoint/resume validation
+
+P4-M18-04
+focused integration locking
+
+P4-M19：uns-stream source breadth 第二轮
+目标：补 uns 那边真正缺的文档型 source。
+
+建议类型：
+
+Object Store / Cloud document source
+
+Git source
+
+P4-M19-01
+批次定板与 placement/pressure mapping
+
+P4-M19-02
+实现 Object Store / Cloud doc source
+
+P4-M19-03
+实现 Git source
+
+P4-M19-04
+focused validation / tests
+
+P4-M20：uns-stream source breadth 第三轮
+建议类型：
+
+SaaS Docs
+
+视情况补一个 document-oriented cloud source 变体
+
+P4-M20-01
+实现 SaaS Docs source
+
+P4-M20-02
+实现另一个高价值文档型 source 或统一接入层加厚
+
+P4-M20-03
+shared document acquisition / provenance / partition entry validation
+
+P4-M20-04
+focused integration locking
+
+P4-M21：connector batch governance validation
+目标：不是再加 connector，而是检查这么一批 connector 扩张后：
+
+governance 没漂
+
+operator surface 没坏
+
+shared contracts 还站得住
+
+P4-M21-01
+source governance validation
+
+P4-M21-02
+destination governance validation
+
+P4-M21-03
+operator-facing surface validation
+
+P4-M21-04
+focused anti-drift locking
+
+P4-M22：connector support matrix / supported subset formalization
+目标：把 P4 的 breadth 形成正式支持面。
+
+P4-M22-01
+source support matrix
+
+P4-M22-02
+destination support matrix
+
+P4-M22-03
+unsupported / experimental / future work 边界 formalization
+
+P4-M22-04
+docs/contracts/tests 收口
+
+P4-M23：P5 productionization preparation I
+P4-M23-01
+deployment/config shape preparation
+
+P4-M23-02
+runtime shape / concurrency assumptions preparation
+
+P4-M23-03
+operator/metrics/provenance preparation for production paths
+
+P4-M23-04
+focused validation
+
+P4-M24：P5 productionization preparation II / P4 closeout
+P4-M24-01
+bench/scale/SLI candidate preparation
+
+P4-M24-02
+failure drill entry points preparation
+
+P4-M24-03
+P4 closeout review
+
+P4-M24-04
+P5 handoff matrix

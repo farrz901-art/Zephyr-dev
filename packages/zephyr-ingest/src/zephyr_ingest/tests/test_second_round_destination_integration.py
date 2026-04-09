@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any, Literal, Mapping, cast
 
 import httpx
 import pytest
@@ -22,13 +22,17 @@ from zephyr_ingest.delivery_idempotency import (
 )
 from zephyr_ingest.destinations.base import Destination
 from zephyr_ingest.destinations.clickhouse import ClickHouseDestination
+from zephyr_ingest.destinations.loki import LokiDestination
+from zephyr_ingest.destinations.mongodb import MongoDBDestination, MongoReplaceResultProtocol
 from zephyr_ingest.destinations.opensearch import OpenSearchDestination
 from zephyr_ingest.destinations.s3 import S3Destination
 from zephyr_ingest.runner import RunnerConfig, run_documents
 
 DestinationName = Literal["s3", "opensearch", "clickhouse"]
+RemainingDestinationName = Literal["mongodb", "loki"]
 
 _BATCH_DESTINATIONS: tuple[DestinationName, ...] = ("s3", "opensearch", "clickhouse")
+_REMAINING_BATCH_DESTINATIONS: tuple[RemainingDestinationName, ...] = ("mongodb", "loki")
 
 
 @dataclass
@@ -70,6 +74,42 @@ class FakeS3ServiceError(Exception):
             "ResponseMetadata": {"HTTPStatusCode": 503},
             "Error": {"Code": "SlowDown", "Message": "service unavailable"},
         }
+
+
+@dataclass(frozen=True)
+class FakeMongoReplaceResult:
+    acknowledged: bool = True
+    matched_count: int = 0
+    modified_count: int = 0
+    upserted_id: object | None = "abc:r1"
+
+
+@dataclass
+class FakeMongoCollection:
+    calls: list[dict[str, object]]
+    exc: Exception | None = None
+
+    def replace_one(
+        self,
+        filter: Mapping[str, object],
+        replacement: Mapping[str, object],
+        *,
+        upsert: bool,
+    ) -> MongoReplaceResultProtocol:
+        if self.exc is not None:
+            raise self.exc
+        self.calls.append(
+            {
+                "filter": dict(filter),
+                "replacement": dict(replacement),
+                "upsert": upsert,
+            }
+        )
+        return FakeMongoReplaceResult()
+
+
+class DuplicateKeyError(Exception):
+    code = 11000
 
 
 def _doc(tmp_path: Path, *, name: str = "a.txt", content: str = "hello") -> DocumentRef:
@@ -494,3 +534,294 @@ def test_second_round_destinations_integrate_runner_failure_reporting_and_dlq(
         assert details["identity_key"] == identity_key
         assert details["table"] == "delivery_rows"
         assert details["row_count"] == 1
+
+
+@pytest.mark.parametrize("destination_name", _REMAINING_BATCH_DESTINATIONS)
+def test_remaining_second_round_destinations_use_shared_runner_delivery_path(
+    destination_name: RemainingDestinationName,
+    tmp_path: Path,
+) -> None:
+    doc = _doc(tmp_path)
+    out_root = tmp_path / "out"
+    ctx = RunContext.new(
+        pipeline_version="p4-m14",
+        run_id=f"{destination_name}-runner-success",
+        timestamp_utc="2026-04-09T00:00:00Z",
+    )
+
+    destination: Destination
+    captured_payload: dict[str, object]
+    if destination_name == "mongodb":
+        fake = FakeMongoCollection(calls=[])
+        destination = MongoDBDestination(
+            uri="mongodb://db.example.test",
+            database="zephyr",
+            collection="delivery_records",
+            collection_obj=fake,
+        )
+        stats = run_documents(
+            docs=[doc],
+            cfg=RunnerConfig(out_root=out_root, workers=1, destination=destination),
+            ctx=ctx,
+            partition_fn=_ok_partition,
+            destination=destination,
+        )
+        assert len(fake.calls) == 1
+        replacement = cast(dict[str, object], fake.calls[0]["replacement"])
+        payload_obj = replacement.get("payload")
+        assert isinstance(payload_obj, dict)
+        captured_payload = cast(dict[str, object], payload_obj)
+    else:
+        loki_captured: dict[str, object] = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            body = json.loads(request.content.decode("utf-8"))
+            assert isinstance(body, dict)
+            loki_captured["body"] = cast(dict[str, object], body)
+            return httpx.Response(204, text="")
+
+        destination = LokiDestination(
+            url="https://logs.example.test",
+            stream="delivery",
+            tenant_id="tenant-a",
+            transport=httpx.MockTransport(handler),
+        )
+        stats = run_documents(
+            docs=[doc],
+            cfg=RunnerConfig(out_root=out_root, workers=1, destination=destination),
+            ctx=ctx,
+            partition_fn=_ok_partition,
+            destination=destination,
+        )
+        body = cast(dict[str, object], loki_captured["body"])
+        streams = cast(list[dict[str, object]], body["streams"])
+        values = cast(list[list[str]], streams[0]["values"])
+        payload_obj = json.loads(values[0][1])
+        assert isinstance(payload_obj, dict)
+        captured_payload = cast(dict[str, object], payload_obj)
+
+    assert stats.total == 1
+    assert stats.success == 1
+    assert stats.failed == 0
+
+    out_dir = _single_output_dir(out_root=out_root)
+    sha256 = out_dir.name
+    identity_key = _identity_key(sha256=sha256, run_id=ctx.run_id)
+
+    receipt = _read_json(out_dir / "delivery_receipt.json")
+    summary_obj = receipt.get("summary")
+    assert isinstance(summary_obj, dict)
+    summary = cast(dict[str, object], summary_obj)
+    assert receipt["destination"] == destination_name
+    assert receipt["ok"] is True
+    assert summary == {
+        "delivery_outcome": "delivered",
+        "failure_retryability": "not_failed",
+        "failure_kind": "not_failed",
+        "error_code": "not_failed",
+        "attempt_count": 1,
+        "payload_count": 1,
+    }
+
+    details_obj = receipt.get("details")
+    assert isinstance(details_obj, dict)
+    details = cast(dict[str, object], details_obj)
+
+    report = _read_json(out_root / "batch_report.json")
+    delivery_obj = report.get("delivery")
+    assert isinstance(delivery_obj, dict)
+    delivery = cast(dict[str, object], delivery_obj)
+    by_destination_obj = delivery.get("by_destination")
+    assert isinstance(by_destination_obj, dict)
+    by_destination = cast(dict[str, object], by_destination_obj)
+    destination_bucket_obj = by_destination.get(destination_name)
+    assert isinstance(destination_bucket_obj, dict)
+    destination_bucket = cast(dict[str, object], destination_bucket_obj)
+
+    assert delivery["total"] == 1
+    assert delivery["ok"] == 1
+    assert delivery["failed"] == 0
+    assert destination_bucket == {"total": 1, "ok": 1, "failed": 0}
+    assert report["counts_by_error_code"] == {}
+
+    assert captured_payload["sha256"] == sha256
+    _assert_primary_provenance(payload=captured_payload, sha256=sha256)
+
+    if destination_name == "mongodb":
+        assert details["document_id"] == identity_key
+        assert details["attempted_count"] == 1
+        assert details["accepted_count"] == 1
+        assert details["rejected_count"] == 0
+        assert "document_id" not in summary
+    else:
+        assert details["stream"] == "delivery"
+        assert details["tenant_id"] == "tenant-a"
+        assert details["line_count"] == 1
+        assert details["accepted_count"] == 1
+        assert details["rejected_count"] == 0
+        assert "stream" not in summary
+        assert "line_count" not in summary
+
+
+@pytest.mark.parametrize("destination_name", _REMAINING_BATCH_DESTINATIONS)
+def test_remaining_second_round_destinations_integrate_runner_failure_reporting_and_dlq(
+    destination_name: RemainingDestinationName,
+    tmp_path: Path,
+) -> None:
+    doc = _doc(tmp_path)
+    out_root = tmp_path / "out"
+    ctx = RunContext.new(
+        pipeline_version="p4-m14",
+        run_id=f"{destination_name}-runner-failure",
+        timestamp_utc="2026-04-09T00:00:00Z",
+    )
+
+    destination: Destination
+    captured_payload: dict[str, object]
+    expected_retryability: str
+    expected_failure_kind: str
+    if destination_name == "mongodb":
+        expected_retryability = "non_retryable"
+        expected_failure_kind = "constraint"
+        fake = FakeMongoCollection(calls=[], exc=DuplicateKeyError("E11000 duplicate key error"))
+        destination = MongoDBDestination(
+            uri="mongodb://db.example.test",
+            database="zephyr",
+            collection="delivery_records",
+            collection_obj=fake,
+        )
+        stats = run_documents(
+            docs=[doc],
+            cfg=RunnerConfig(out_root=out_root, workers=1, destination=destination),
+            ctx=ctx,
+            partition_fn=_ok_partition,
+            destination=destination,
+        )
+        assert len(fake.calls) == 0
+        dlq_payload_path = list((out_root / "_dlq" / "delivery").glob("*.json"))
+        assert len(dlq_payload_path) == 1
+        destination_receipt_source = _read_json(dlq_payload_path[0])
+        run_meta_obj = destination_receipt_source.get("run_meta")
+        assert isinstance(run_meta_obj, dict)
+        captured_payload = {
+            "sha256": cast(str, destination_receipt_source["sha256"]),
+            "run_meta": cast(dict[str, object], run_meta_obj),
+        }
+    else:
+        loki_captured: dict[str, object] = {}
+        expected_retryability = "retryable"
+        expected_failure_kind = "rate_limited"
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            body = json.loads(request.content.decode("utf-8"))
+            assert isinstance(body, dict)
+            loki_captured["body"] = cast(dict[str, object], body)
+            return httpx.Response(429, text="ingester rate limit")
+
+        destination = LokiDestination(
+            url="https://logs.example.test",
+            stream="delivery",
+            transport=httpx.MockTransport(handler),
+        )
+        stats = run_documents(
+            docs=[doc],
+            cfg=RunnerConfig(out_root=out_root, workers=1, destination=destination),
+            ctx=ctx,
+            partition_fn=_ok_partition,
+            destination=destination,
+        )
+        body = cast(dict[str, object], loki_captured["body"])
+        streams = cast(list[dict[str, object]], body["streams"])
+        values = cast(list[list[str]], streams[0]["values"])
+        payload_obj = json.loads(values[0][1])
+        assert isinstance(payload_obj, dict)
+        captured_payload = cast(dict[str, object], payload_obj)
+
+    assert stats.total == 1
+    assert stats.success == 1
+    assert stats.failed == 0
+
+    out_dir = _single_output_dir(out_root=out_root)
+    sha256 = out_dir.name
+    identity_key = _identity_key(sha256=sha256, run_id=ctx.run_id)
+
+    receipt = _read_json(out_dir / "delivery_receipt.json")
+    summary_obj = receipt.get("summary")
+    assert isinstance(summary_obj, dict)
+    summary = cast(dict[str, object], summary_obj)
+    assert receipt["destination"] == destination_name
+    assert receipt["ok"] is False
+    assert summary == {
+        "delivery_outcome": "failed",
+        "failure_retryability": expected_retryability,
+        "failure_kind": expected_failure_kind,
+        "error_code": str(ErrorCode.DELIVERY_FAILED),
+        "attempt_count": 1,
+        "payload_count": 1,
+    }
+
+    report = _read_json(out_root / "batch_report.json")
+    counts_obj = report.get("counts")
+    assert isinstance(counts_obj, dict)
+    counts = cast(dict[str, object], counts_obj)
+    delivery_obj = report.get("delivery")
+    assert isinstance(delivery_obj, dict)
+    delivery = cast(dict[str, object], delivery_obj)
+    by_destination_obj = delivery.get("by_destination")
+    assert isinstance(by_destination_obj, dict)
+    by_destination = cast(dict[str, object], by_destination_obj)
+    destination_bucket_obj = by_destination.get(destination_name)
+    assert isinstance(destination_bucket_obj, dict)
+    destination_bucket = cast(dict[str, object], destination_bucket_obj)
+    failure_kinds_obj = delivery.get("failure_kinds_by_destination")
+    assert isinstance(failure_kinds_obj, dict)
+    failure_kinds = cast(dict[str, object], failure_kinds_obj)
+
+    assert counts["success"] == 1
+    assert counts["failed"] == 0
+    assert delivery["total"] == 1
+    assert delivery["ok"] == 0
+    assert delivery["failed"] == 1
+    assert delivery["dlq_written_total"] == 1
+    assert destination_bucket == {"total": 1, "ok": 0, "failed": 1}
+    assert failure_kinds[destination_name] == {expected_failure_kind: 1}
+    assert report["counts_by_error_code"] == {str(ErrorCode.DELIVERY_FAILED): 1}
+
+    dlq_files = list((out_root / "_dlq" / "delivery").glob("*.json"))
+    assert len(dlq_files) == 1
+    dlq = _read_json(dlq_files[0])
+    assert dlq["sha256"] == sha256
+    assert dlq["run_id"] == ctx.run_id
+    destination_receipt_obj = dlq.get("destination_receipt")
+    assert isinstance(destination_receipt_obj, dict)
+    destination_receipt = cast(dict[str, object], destination_receipt_obj)
+    assert destination_receipt["destination"] == destination_name
+    assert destination_receipt["ok"] is False
+
+    run_meta_obj = dlq.get("run_meta")
+    assert isinstance(run_meta_obj, dict)
+    run_meta = cast(dict[str, object], run_meta_obj)
+    provenance_obj = run_meta.get("provenance")
+    assert isinstance(provenance_obj, dict)
+    provenance = cast(dict[str, object], provenance_obj)
+    assert provenance["delivery_origin"] == "primary"
+    assert provenance["run_origin"] == "intake"
+    assert provenance["execution_mode"] == "batch"
+    assert provenance["task_id"] == sha256
+
+    assert captured_payload["sha256"] == sha256
+    _assert_primary_provenance(payload=captured_payload, sha256=sha256)
+
+    details_obj = receipt.get("details")
+    assert isinstance(details_obj, dict)
+    details = cast(dict[str, object], details_obj)
+    if destination_name == "mongodb":
+        assert details["document_id"] == identity_key
+        assert details["backend_error_code"] == 11000
+        assert details["accepted_count"] == 0
+        assert details["rejected_count"] == 1
+    else:
+        assert details["stream"] == "delivery"
+        assert details["line_count"] == 1
+        assert details["accepted_count"] == 0
+        assert details["rejected_count"] == 1

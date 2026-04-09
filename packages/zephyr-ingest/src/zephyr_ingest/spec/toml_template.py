@@ -246,6 +246,8 @@ def render_config_init_toml_v1(*, only: set[str] | None = None) -> str:
     - [destinations.s3]: commented block
     - [destinations.opensearch]: commented block
     - [destinations.clickhouse]: commented block
+    - [destinations.mongodb]: commented block
+    - [destinations.loki]: commented block
     """
     lines: list[str] = []
 
@@ -260,6 +262,8 @@ def render_config_init_toml_v1(*, only: set[str] | None = None) -> str:
     include_s3 = include_all or ("s3" in target_only)
     include_opensearch = include_all or ("opensearch" in target_only)
     include_clickhouse = include_all or ("clickhouse" in target_only)
+    include_mongodb = include_all or ("mongodb" in target_only)
+    include_loki = include_all or ("loki" in target_only)
 
     # Header
     lines.append("# Zephyr Ingest Configuration (auto-generated from spec)")
@@ -281,6 +285,8 @@ def render_config_init_toml_v1(*, only: set[str] | None = None) -> str:
         or include_s3
         or include_opensearch
         or include_clickhouse
+        or include_mongodb
+        or include_loki
     ):
         lines.append("")
         lines.append("# " + "=" * 50)
@@ -333,6 +339,26 @@ def render_config_init_toml_v1(*, only: set[str] | None = None) -> str:
                 _render_destination_section(
                     spec=clickhouse_spec,
                     table_name="destinations.clickhouse",
+                )
+            )
+
+    if include_mongodb:
+        mongodb_spec = get_spec(spec_id="destination.mongodb.v1")
+        if mongodb_spec:
+            lines.extend(
+                _render_destination_section(
+                    spec=mongodb_spec,
+                    table_name="destinations.mongodb",
+                )
+            )
+
+    if include_loki:
+        loki_spec = get_spec(spec_id="destination.loki.v1")
+        if loki_spec:
+            lines.extend(
+                _render_destination_section(
+                    spec=loki_spec,
+                    table_name="destinations.loki",
                 )
             )
 

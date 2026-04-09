@@ -21,6 +21,10 @@ from zephyr_ingest._internal.weaviate_client import (
 )
 
 if TYPE_CHECKING:
+    from zephyr_ingest.destinations.mongodb import (
+        MongoClientProtocol,
+        MongoCollectionProtocol,
+    )
     from zephyr_ingest.destinations.weaviate import WeaviateCollectionProtocol
 from zephyr_ingest.config.argparse_extract import (
     get_bool,
@@ -42,6 +46,8 @@ from zephyr_ingest.config.file_toml_v1 import ConfigFileV1, load_config_file_v1
 from zephyr_ingest.config.models import (
     ClickHouseConfigV1,
     KafkaConfigV1,
+    LokiConfigV1,
+    MongoDBConfigV1,
     OpenSearchConfigV1,
     S3ConfigV1,
     WeaviateConfigV1,
@@ -75,6 +81,8 @@ from zephyr_ingest.replay_delivery import (
     ClickHouseReplaySink,
     FanoutReplaySink,
     KafkaReplaySink,
+    LokiReplaySink,
+    MongoDBReplaySink,
     OpenSearchReplaySink,
     S3ReplaySink,
     WeaviateReplaySink,
@@ -123,19 +131,23 @@ class RunCmd:
     s3: S3ConfigV1 | None
     opensearch: OpenSearchConfigV1 | None
     clickhouse: ClickHouseConfigV1 | None
+    mongodb: MongoDBConfigV1 | None
+    loki: LokiConfigV1 | None
     config_sources: ConfigSourcesV1
 
 
 @dataclass(frozen=True, slots=True)
 class ReplayDeliveryCmd:
     out: str
-    dest: str  # webhook|kafka|weaviate|s3|opensearch|clickhouse|all
+    dest: str  # webhook|kafka|weaviate|s3|opensearch|clickhouse|mongodb|loki|all
     webhook: WebhookConfigV1 | None
     kafka: KafkaConfigV1 | None
     weaviate: WeaviateConfigV1 | None
     s3: S3ConfigV1 | None
     opensearch: OpenSearchConfigV1 | None
     clickhouse: ClickHouseConfigV1 | None
+    mongodb: MongoDBConfigV1 | None
+    loki: LokiConfigV1 | None
     limit: int | None
     dry_run: bool
     move_done: bool
@@ -265,6 +277,8 @@ def _add_runlike_args(*, p: argparse.ArgumentParser, paths_required: bool) -> No
         "destination.s3.v1",
         "destination.opensearch.v1",
         "destination.clickhouse.v1",
+        "destination.mongodb.v1",
+        "destination.loki.v1",
     ]
     specs: list[ConnectorSpecV1] = []
     for spec_id in spec_ids:
@@ -342,8 +356,21 @@ def _build_parser() -> argparse.ArgumentParser:
     replay.add_argument(
         "--dest",
         default="webhook",
-        choices=["webhook", "kafka", "weaviate", "s3", "opensearch", "clickhouse", "all"],
-        help="Replay destination: webhook, kafka, weaviate, s3, opensearch, clickhouse, or all",
+        choices=[
+            "webhook",
+            "kafka",
+            "weaviate",
+            "s3",
+            "opensearch",
+            "clickhouse",
+            "mongodb",
+            "loki",
+            "all",
+        ],
+        help=(
+            "Replay destination: webhook, kafka, weaviate, s3, "
+            "opensearch, clickhouse, mongodb, loki, or all"
+        ),
     )
     # Spec-driven destination flags for replay
     replay_specs: list[ConnectorSpecV1] = []
@@ -354,6 +381,8 @@ def _build_parser() -> argparse.ArgumentParser:
         "destination.s3.v1",
         "destination.opensearch.v1",
         "destination.clickhouse.v1",
+        "destination.mongodb.v1",
+        "destination.loki.v1",
     ]:
         s = get_spec(spec_id=spec_id)
         if s is None:
@@ -397,6 +426,8 @@ def _build_parser() -> argparse.ArgumentParser:
             "s3",
             "opensearch",
             "clickhouse",
+            "mongodb",
+            "loki",
             "uns-api",
         ],
         help="Limit output to selected blocks (repeatable). Default: all.",
@@ -1394,6 +1425,167 @@ def _parse_run_cmd(ns: argparse.Namespace, argv: Sequence[str]) -> RunCmd:
             None if file_clickhouse is None else file_clickhouse.rate_limit,
         )
 
+    # -------------------------
+    # destinations: loki
+    # Enable if url is provided either by CLI or FILE.
+    # -------------------------
+    loki_url_cli = get_opt_str(ns, "loki_url")
+    file_loki = None if dest_file is None else dest_file.loki
+    loki_url = _choose_opt_str(
+        flag="--loki-url",
+        cli_val=loki_url_cli,
+        file_val=None if file_loki is None else file_loki.url,
+    )
+    loki: LokiConfigV1 | None = None
+    if loki_url is not None:
+        loki_stream = _choose_opt_str(
+            flag="--loki-stream",
+            cli_val=get_opt_str(ns, "loki_stream"),
+            file_val=None if file_loki is None else file_loki.stream,
+        )
+        if loki_stream is None:
+            raise ConfigError("--loki-stream is required when loki is enabled")
+        loki = LokiConfigV1(
+            url=loki_url,
+            stream=loki_stream,
+            timeout_s=_choose_float(
+                flag="--loki-timeout-s",
+                cli_val=get_float(ns, "loki_timeout_s"),
+                file_val=None if file_loki is None else file_loki.timeout_s,
+            ),
+            tenant_id=_choose_opt_str(
+                flag="--loki-tenant-id",
+                cli_val=get_opt_str(ns, "loki_tenant_id"),
+                file_val=None if file_loki is None else file_loki.tenant_id,
+            ),
+            max_inflight=_choose_opt_int(
+                flag="--loki-max-inflight",
+                cli_val=get_opt_int(ns, "loki_max_inflight"),
+                file_val=None if file_loki is None else file_loki.max_inflight,
+            ),
+            rate_limit=_choose_opt_float(
+                flag="--loki-rate-limit",
+                cli_val=get_opt_float(ns, "loki_rate_limit"),
+                file_val=None if file_loki is None else file_loki.rate_limit,
+            ),
+        )
+        sources["destinations.loki.url"] = (
+            "cli" if "--loki-url" in present else ("file" if file_loki is not None else "default")
+        )
+        sources["destinations.loki.stream"] = _src(
+            "--loki-stream", None if file_loki is None else file_loki.stream
+        )
+        sources["destinations.loki.timeout_s"] = _src(
+            "--loki-timeout-s", None if file_loki is None else file_loki.timeout_s
+        )
+        sources["destinations.loki.tenant_id"] = _src(
+            "--loki-tenant-id", None if file_loki is None else file_loki.tenant_id
+        )
+        sources["destinations.loki.max_inflight"] = _src(
+            "--loki-max-inflight", None if file_loki is None else file_loki.max_inflight
+        )
+        sources["destinations.loki.rate_limit"] = _src(
+            "--loki-rate-limit", None if file_loki is None else file_loki.rate_limit
+        )
+
+    # -------------------------
+    # destinations: mongodb
+    # Enable if uri is provided either by CLI or FILE.
+    # -------------------------
+    mongodb_uri_cli = get_opt_str(ns, "mongodb_uri")
+    file_mongodb = None if dest_file is None else dest_file.mongodb
+    mongodb_uri = _choose_opt_str(
+        flag="--mongodb-uri",
+        cli_val=mongodb_uri_cli,
+        file_val=None if file_mongodb is None else file_mongodb.uri,
+    )
+    mongodb: MongoDBConfigV1 | None = None
+    if mongodb_uri is not None:
+        mongodb_username = _choose_opt_str(
+            flag="--mongodb-username",
+            cli_val=get_opt_str(ns, "mongodb_username"),
+            file_val=None if file_mongodb is None else file_mongodb.username,
+        )
+        mongodb_password = _choose_opt_str(
+            flag="--mongodb-password",
+            cli_val=get_opt_str(ns, "mongodb_password"),
+            file_val=None if file_mongodb is None else file_mongodb.password,
+        )
+        if (mongodb_username is None) != (mongodb_password is None):
+            raise ConfigError(
+                "--mongodb-username and --mongodb-password must be specified together"
+            )
+        mongodb_database = _choose_opt_str(
+            flag="--mongodb-database",
+            cli_val=get_opt_str(ns, "mongodb_database"),
+            file_val=None if file_mongodb is None else file_mongodb.database,
+        )
+        mongodb_collection = _choose_opt_str(
+            flag="--mongodb-collection",
+            cli_val=get_opt_str(ns, "mongodb_collection"),
+            file_val=None if file_mongodb is None else file_mongodb.collection,
+        )
+        if mongodb_database is None or mongodb_collection is None:
+            raise ConfigError(
+                "--mongodb-database and --mongodb-collection are required when mongodb is enabled"
+            )
+        mongodb = MongoDBConfigV1(
+            uri=mongodb_uri,
+            database=mongodb_database,
+            collection=mongodb_collection,
+            timeout_s=_choose_float(
+                flag="--mongodb-timeout-s",
+                cli_val=get_float(ns, "mongodb_timeout_s"),
+                file_val=None if file_mongodb is None else file_mongodb.timeout_s,
+            ),
+            write_mode=_choose_str(
+                flag="--mongodb-write-mode",
+                cli_val=get_req_str(ns, "mongodb_write_mode"),
+                file_val=None if file_mongodb is None else file_mongodb.write_mode,
+            ),
+            username=mongodb_username,
+            password=mongodb_password,
+            max_inflight=_choose_opt_int(
+                flag="--mongodb-max-inflight",
+                cli_val=get_opt_int(ns, "mongodb_max_inflight"),
+                file_val=None if file_mongodb is None else file_mongodb.max_inflight,
+            ),
+            rate_limit=_choose_opt_float(
+                flag="--mongodb-rate-limit",
+                cli_val=get_opt_float(ns, "mongodb_rate_limit"),
+                file_val=None if file_mongodb is None else file_mongodb.rate_limit,
+            ),
+        )
+        sources["destinations.mongodb.uri"] = (
+            "cli"
+            if "--mongodb-uri" in present
+            else ("file" if file_mongodb is not None else "default")
+        )
+        sources["destinations.mongodb.database"] = _src(
+            "--mongodb-database", None if file_mongodb is None else file_mongodb.database
+        )
+        sources["destinations.mongodb.collection"] = _src(
+            "--mongodb-collection", None if file_mongodb is None else file_mongodb.collection
+        )
+        sources["destinations.mongodb.timeout_s"] = _src(
+            "--mongodb-timeout-s", None if file_mongodb is None else file_mongodb.timeout_s
+        )
+        sources["destinations.mongodb.write_mode"] = _src(
+            "--mongodb-write-mode", None if file_mongodb is None else file_mongodb.write_mode
+        )
+        sources["destinations.mongodb.username"] = _src(
+            "--mongodb-username", None if file_mongodb is None else file_mongodb.username
+        )
+        sources["destinations.mongodb.password"] = _src(
+            "--mongodb-password", None if file_mongodb is None else file_mongodb.password
+        )
+        sources["destinations.mongodb.max_inflight"] = _src(
+            "--mongodb-max-inflight", None if file_mongodb is None else file_mongodb.max_inflight
+        )
+        sources["destinations.mongodb.rate_limit"] = _src(
+            "--mongodb-rate-limit", None if file_mongodb is None else file_mongodb.rate_limit
+        )
+
     return RunCmd(
         paths=get_str_list(ns, "paths"),
         glob=get_req_str(ns, "glob"),
@@ -1427,6 +1619,8 @@ def _parse_run_cmd(ns: argparse.Namespace, argv: Sequence[str]) -> RunCmd:
         s3=s3,
         opensearch=opensearch,
         clickhouse=clickhouse,
+        loki=loki,
+        mongodb=mongodb,
         config_sources=sources,
     )
 
@@ -1549,6 +1743,8 @@ def _parse_cmd(
         s3 = S3ConfigV1.from_namespace(ns)
         opensearch = OpenSearchConfigV1.from_namespace(ns)
         clickhouse = ClickHouseConfigV1.from_namespace(ns)
+        loki = LokiConfigV1.from_namespace(ns)
+        mongodb = MongoDBConfigV1.from_namespace(ns)
         # Apply ENV overlay for secrets (CLI explicit still wins because overlay only fills missing)
         weaviate = overlay_weaviate_api_key(weaviate=weaviate)
         if dest in ("webhook", "all") and webhook is None:
@@ -1565,6 +1761,10 @@ def _parse_cmd(
             raise ConfigError("--opensearch-url is required when --dest includes opensearch")
         if dest in ("clickhouse", "all") and clickhouse is None:
             raise ConfigError("--clickhouse-url is required when --dest includes clickhouse")
+        if dest in ("loki", "all") and loki is None:
+            raise ConfigError("--loki-url is required when --dest includes loki")
+        if dest in ("mongodb", "all") and mongodb is None:
+            raise ConfigError("--mongodb-uri is required when --dest includes mongodb")
         return ReplayDeliveryCmd(
             out=get_req_str(ns, "out"),
             dest=dest,
@@ -1574,6 +1774,8 @@ def _parse_cmd(
             s3=s3,
             opensearch=opensearch,
             clickhouse=clickhouse,
+            loki=loki,
+            mongodb=mongodb,
             limit=get_opt_int(ns, "limit"),
             dry_run=get_bool(ns, "dry_run"),
             move_done=get_bool(ns, "move_done"),
@@ -1729,6 +1931,32 @@ def _make_s3_writer_or_exit(
         raise SystemExit(1) from e
 
 
+def _make_mongodb_collection_or_exit(
+    *,
+    uri: str,
+    database: str,
+    collection: str,
+    timeout_s: float,
+    username: str | None,
+    password: str | None,
+) -> tuple["MongoClientProtocol", "MongoCollectionProtocol"]:
+    try:
+        from zephyr_ingest.destinations.mongodb import make_mongodb_collection
+
+        return make_mongodb_collection(
+            uri=uri,
+            database=database,
+            collection=collection,
+            timeout_s=timeout_s,
+            username=username,
+            password=password,
+        )
+    except ImportError as e:
+        logging.error("MongoDB client not installed: %s", e)
+        logging.error("Install with: uv pip install pymongo")
+        raise SystemExit(1) from e
+
+
 def _make_weaviate_collection_or_exit(
     *, cfg: WeaviateConfigV1
 ) -> tuple[WeaviateClientProtocol, "WeaviateCollectionProtocol"]:
@@ -1773,6 +2001,10 @@ def _build_config_snapshot(*, cmd: RunCmd) -> ConfigSnapshotV1:
         destinations["opensearch"] = cmd.opensearch.to_snapshot_v1()
     if cmd.clickhouse is not None:
         destinations["clickhouse"] = cmd.clickhouse.to_snapshot_v1()
+    if cmd.loki is not None:
+        destinations["loki"] = cmd.loki.to_snapshot_v1()
+    if cmd.mongodb is not None:
+        destinations["mongodb"] = cmd.mongodb.to_snapshot_v1()
 
     backend: BackendSnapshotV1
     if cmd.backend == "uns-api":
@@ -1814,7 +2046,10 @@ def _build_config_snapshot(*, cmd: RunCmd) -> ConfigSnapshotV1:
     }
 
 
-def _build_destinations(*, cmd: RunCmd) -> tuple[Destination, WeaviateClientProtocol | None]:
+def _build_destinations(
+    *,
+    cmd: RunCmd,
+) -> tuple[Destination, WeaviateClientProtocol | None, MongoClientProtocol | None]:
     dests: list[Destination] = []
     dests.append(FilesystemDestination())
 
@@ -1843,6 +2078,7 @@ def _build_destinations(*, cmd: RunCmd) -> tuple[Destination, WeaviateClientProt
         )
 
     weaviate_client: WeaviateClientProtocol | None = None
+    mongodb_client: MongoClientProtocol | None = None
     if cmd.weaviate is not None:
         from zephyr_ingest.destinations.weaviate import WeaviateDestination
 
@@ -1916,12 +2152,52 @@ def _build_destinations(*, cmd: RunCmd) -> tuple[Destination, WeaviateClientProt
             )
         )
 
+    if cmd.loki is not None:
+        from zephyr_ingest.destinations.loki import LokiDestination
+
+        dests.append(
+            LokiDestination(
+                url=cmd.loki.url,
+                stream=cmd.loki.stream,
+                timeout_s=cmd.loki.timeout_s,
+                tenant_id=cmd.loki.tenant_id,
+                max_inflight=cmd.loki.max_inflight,
+                rate_limit=cmd.loki.rate_limit,
+            )
+        )
+
+    if cmd.mongodb is not None:
+        from zephyr_ingest.destinations.mongodb import MongoDBDestination
+
+        mongodb_client, mongodb_collection = _make_mongodb_collection_or_exit(
+            uri=cmd.mongodb.uri,
+            database=cmd.mongodb.database,
+            collection=cmd.mongodb.collection,
+            timeout_s=cmd.mongodb.timeout_s,
+            username=cmd.mongodb.username,
+            password=cmd.mongodb.password,
+        )
+        dests.append(
+            MongoDBDestination(
+                uri=cmd.mongodb.uri,
+                database=cmd.mongodb.database,
+                collection=cmd.mongodb.collection,
+                timeout_s=cmd.mongodb.timeout_s,
+                write_mode=cmd.mongodb.write_mode,
+                username=cmd.mongodb.username,
+                password=cmd.mongodb.password,
+                collection_obj=mongodb_collection,
+                max_inflight=cmd.mongodb.max_inflight,
+                rate_limit=cmd.mongodb.rate_limit,
+            )
+        )
+
     if len(dests) == 1:
-        return dests[0], weaviate_client
+        return dests[0], weaviate_client, mongodb_client
 
     from zephyr_ingest.destinations.fanout import FanoutDestination
 
-    return FanoutDestination(destinations=tuple(dests)), weaviate_client
+    return FanoutDestination(destinations=tuple(dests)), weaviate_client, mongodb_client
 
 
 def _build_backend(*, cmd: RunCmd) -> object | None:
@@ -1953,6 +2229,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     argv2 = sys.argv[1:] if argv is None else argv
 
     weaviate_client: WeaviateClientProtocol | None = None
+    mongodb_client: MongoClientProtocol | None = None
 
     try:
         cmd = _parse_cmd(argv2)
@@ -2081,7 +2358,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             iter_cmd = replace(base, out=str(iter_out))
 
             try:
-                destination, weaviate_client = _build_destinations(cmd=iter_cmd)
+                destination, weaviate_client, mongodb_client = _build_destinations(cmd=iter_cmd)
                 backend_obj = _build_backend(cmd=iter_cmd)
                 ctx = RunContext.new(
                     pipeline_version=iter_cmd.pipeline_version or PIPELINE_VERSION,
@@ -2114,6 +2391,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             finally:
                 if weaviate_client is not None:
                     weaviate_client.close()
+                if mongodb_client is not None:
+                    mongodb_client.close()
 
             wall_ms, dpm = _load_batch_report_metrics(out_root=Path(iter_cmd.out))
             results.append(
@@ -2280,6 +2559,34 @@ def main(argv: Sequence[str] | None = None) -> int:
                     password=cmd.clickhouse.password,
                 )
             )
+        if cmd.dest in ("loki", "all"):
+            assert cmd.loki is not None
+            sinks.append(
+                LokiReplaySink(
+                    url=cmd.loki.url,
+                    stream=cmd.loki.stream,
+                    timeout_s=cmd.loki.timeout_s,
+                    tenant_id=cmd.loki.tenant_id,
+                )
+            )
+        if cmd.dest in ("mongodb", "all"):
+            assert cmd.mongodb is not None
+            mongodb_client, mongodb_collection = _make_mongodb_collection_or_exit(
+                uri=cmd.mongodb.uri,
+                database=cmd.mongodb.database,
+                collection=cmd.mongodb.collection,
+                timeout_s=cmd.mongodb.timeout_s,
+                username=cmd.mongodb.username,
+                password=cmd.mongodb.password,
+            )
+            sinks.append(
+                MongoDBReplaySink(
+                    database=cmd.mongodb.database,
+                    collection=cmd.mongodb.collection,
+                    collection_obj=mongodb_collection,
+                    write_mode=cmd.mongodb.write_mode,
+                )
+            )
 
         try:
             sink = sinks[0] if len(sinks) == 1 else FanoutReplaySink(sinks=tuple(sinks))  # type: ignore[arg-type]
@@ -2295,10 +2602,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         finally:
             if weaviate_client is not None:
                 weaviate_client.close()
+            if mongodb_client is not None:
+                mongodb_client.close()
 
     # RunCmd
     try:
-        destination, weaviate_client = _build_destinations(cmd=cmd)
+        destination, weaviate_client, mongodb_client = _build_destinations(cmd=cmd)
         backend_obj = _build_backend(cmd=cmd)
 
         ctx = RunContext.new(
@@ -2335,6 +2644,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     finally:
         if weaviate_client is not None:
             weaviate_client.close()
+        if mongodb_client is not None:
+            mongodb_client.close()
 
 
 if __name__ == "__main__":

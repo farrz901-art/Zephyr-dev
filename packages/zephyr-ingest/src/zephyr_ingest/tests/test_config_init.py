@@ -87,6 +87,8 @@ def test_config_init_contains_spec_driven_fields() -> None:
     assert "# [destinations.s3]" in toml
     assert "# [destinations.opensearch]" in toml
     assert "# [destinations.clickhouse]" in toml
+    assert "# [destinations.mongodb]" in toml
+    assert "# [destinations.loki]" in toml
 
 
 def test_config_init_includes_env_hints_for_secrets() -> None:

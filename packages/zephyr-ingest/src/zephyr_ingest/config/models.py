@@ -16,6 +16,8 @@ from zephyr_ingest.config.errors import ConfigError
 from zephyr_ingest.config.snapshot_v1 import (
     ClickHouseDestinationSnapshotV1,
     KafkaDestinationSnapshotV1,
+    LokiDestinationSnapshotV1,
+    MongoDBDestinationSnapshotV1,
     OpenSearchDestinationSnapshotV1,
     S3DestinationSnapshotV1,
     WeaviateDestinationSnapshotV1,
@@ -446,6 +448,96 @@ class ClickHouseConfigV1:
         }
         if self.database is not None:
             snapshot["database"] = self.database
+        if self.max_inflight is not None:
+            snapshot["max_inflight"] = self.max_inflight
+        if self.rate_limit is not None:
+            snapshot["rate_limit"] = self.rate_limit
+        return snapshot
+
+
+@dataclass(frozen=True, slots=True)
+class MongoDBConfigV1:
+    uri: str
+    database: str
+    collection: str
+    timeout_s: float
+    write_mode: str = "replace_upsert"
+    username: str | None = None
+    password: str | None = None
+    max_inflight: int | None = None
+    rate_limit: float | None = None
+
+    @staticmethod
+    def from_namespace(ns: argparse.Namespace) -> MongoDBConfigV1 | None:
+        uri = get_opt_str(ns, "mongodb_uri")
+        if uri is None:
+            return None
+        username = get_opt_str(ns, "mongodb_username")
+        password = get_opt_str(ns, "mongodb_password")
+        if (username is None) != (password is None):
+            raise ConfigError(
+                "Both --mongodb-username and --mongodb-password must be specified together"
+            )
+        return MongoDBConfigV1(
+            uri=uri,
+            database=get_req_str(ns, "mongodb_database"),
+            collection=get_req_str(ns, "mongodb_collection"),
+            timeout_s=get_float(ns, "mongodb_timeout_s"),
+            write_mode=get_req_str(ns, "mongodb_write_mode"),
+            username=username,
+            password=password,
+            max_inflight=get_opt_int(ns, "mongodb_max_inflight"),
+            rate_limit=get_opt_float(ns, "mongodb_rate_limit"),
+        )
+
+    def to_snapshot_v1(self) -> MongoDBDestinationSnapshotV1:
+        snapshot: MongoDBDestinationSnapshotV1 = {
+            "uri": self.uri,
+            "database": self.database,
+            "collection": self.collection,
+            "timeout_s": self.timeout_s,
+            "write_mode": self.write_mode,
+            "username": None if self.username is None else "***",
+            "password": None if self.password is None else "***",
+        }
+        if self.max_inflight is not None:
+            snapshot["max_inflight"] = self.max_inflight
+        if self.rate_limit is not None:
+            snapshot["rate_limit"] = self.rate_limit
+        return snapshot
+
+
+@dataclass(frozen=True, slots=True)
+class LokiConfigV1:
+    url: str
+    stream: str
+    timeout_s: float
+    tenant_id: str | None = None
+    max_inflight: int | None = None
+    rate_limit: float | None = None
+
+    @staticmethod
+    def from_namespace(ns: argparse.Namespace) -> LokiConfigV1 | None:
+        url = get_opt_str(ns, "loki_url")
+        if url is None:
+            return None
+        return LokiConfigV1(
+            url=url,
+            stream=get_req_str(ns, "loki_stream"),
+            timeout_s=get_float(ns, "loki_timeout_s"),
+            tenant_id=get_opt_str(ns, "loki_tenant_id"),
+            max_inflight=get_opt_int(ns, "loki_max_inflight"),
+            rate_limit=get_opt_float(ns, "loki_rate_limit"),
+        )
+
+    def to_snapshot_v1(self) -> LokiDestinationSnapshotV1:
+        snapshot: LokiDestinationSnapshotV1 = {
+            "url": self.url,
+            "stream": self.stream,
+            "timeout_s": self.timeout_s,
+        }
+        if self.tenant_id is not None:
+            snapshot["tenant_id"] = self.tenant_id
         if self.max_inflight is not None:
             snapshot["max_inflight"] = self.max_inflight
         if self.rate_limit is not None:

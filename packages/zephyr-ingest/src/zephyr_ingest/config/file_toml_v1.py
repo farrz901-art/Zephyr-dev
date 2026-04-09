@@ -169,6 +169,29 @@ class ClickHouseDestFileV1:
 
 
 @dataclass(frozen=True, slots=True)
+class MongoDBDestFileV1:
+    uri: str
+    database: str
+    collection: str
+    timeout_s: float | None = None
+    write_mode: str | None = None
+    username: str | None = None
+    password: str | None = None
+    max_inflight: int | None = None
+    rate_limit: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class LokiDestFileV1:
+    url: str
+    stream: str
+    timeout_s: float | None = None
+    tenant_id: str | None = None
+    max_inflight: int | None = None
+    rate_limit: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class DestinationsFileV1:
     webhook: WebhookDestFileV1 | None = None
     kafka: KafkaDestFileV1 | None = None
@@ -176,6 +199,8 @@ class DestinationsFileV1:
     s3: S3DestFileV1 | None = None
     opensearch: OpenSearchDestFileV1 | None = None
     clickhouse: ClickHouseDestFileV1 | None = None
+    mongodb: MongoDBDestFileV1 | None = None
+    loki: LokiDestFileV1 | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -228,7 +253,9 @@ def load_config_file_v1(*, path: Path) -> ConfigFileV1:
         retry_tbl, {"enabled", "max_attempts", "base_backoff_ms", "max_backoff_ms"}, "retry"
     )
     _unknown_keys(
-        dest_tbl, {"webhook", "kafka", "weaviate", "s3", "opensearch", "clickhouse"}, "destinations"
+        dest_tbl,
+        {"webhook", "kafka", "weaviate", "s3", "opensearch", "clickhouse", "mongodb", "loki"},
+        "destinations",
     )
 
     webhook: WebhookDestFileV1 | None = None
@@ -426,6 +453,76 @@ def load_config_file_v1(*, path: Path) -> ConfigFileV1:
             rate_limit=_opt_float(ch_tbl, "rate_limit", "destinations.clickhouse"),
         )
 
+    mongodb: MongoDBDestFileV1 | None = None
+    if "mongodb" in dest_tbl:
+        mongo_tbl = _as_table(dest_tbl["mongodb"], "destinations.mongodb")
+        _unknown_keys(
+            mongo_tbl,
+            {
+                "uri",
+                "database",
+                "collection",
+                "timeout_s",
+                "write_mode",
+                "username",
+                "password",
+                "max_inflight",
+                "rate_limit",
+            },
+            "destinations.mongodb",
+        )
+        uri = _opt_str(mongo_tbl, "uri", "destinations.mongodb")
+        database = _opt_str(mongo_tbl, "database", "destinations.mongodb")
+        collection = _opt_str(mongo_tbl, "collection", "destinations.mongodb")
+        if uri is None or database is None or collection is None:
+            raise ConfigError(
+                "destinations.mongodb.uri, destinations.mongodb.database, and "
+                "destinations.mongodb.collection are required when "
+                "[destinations.mongodb] is present"
+            )
+        mongodb = MongoDBDestFileV1(
+            uri=uri,
+            database=database,
+            collection=collection,
+            timeout_s=_opt_float(mongo_tbl, "timeout_s", "destinations.mongodb"),
+            write_mode=_opt_str(mongo_tbl, "write_mode", "destinations.mongodb"),
+            username=_opt_str(mongo_tbl, "username", "destinations.mongodb"),
+            password=_opt_str(mongo_tbl, "password", "destinations.mongodb"),
+            max_inflight=_opt_int(mongo_tbl, "max_inflight", "destinations.mongodb"),
+            rate_limit=_opt_float(mongo_tbl, "rate_limit", "destinations.mongodb"),
+        )
+
+    loki: LokiDestFileV1 | None = None
+    if "loki" in dest_tbl:
+        loki_tbl = _as_table(dest_tbl["loki"], "destinations.loki")
+        _unknown_keys(
+            loki_tbl,
+            {
+                "url",
+                "stream",
+                "timeout_s",
+                "tenant_id",
+                "max_inflight",
+                "rate_limit",
+            },
+            "destinations.loki",
+        )
+        url = _opt_str(loki_tbl, "url", "destinations.loki")
+        stream = _opt_str(loki_tbl, "stream", "destinations.loki")
+        if url is None or stream is None:
+            raise ConfigError(
+                "destinations.loki.url and destinations.loki.stream are required "
+                "when [destinations.loki] is present"
+            )
+        loki = LokiDestFileV1(
+            url=url,
+            stream=stream,
+            timeout_s=_opt_float(loki_tbl, "timeout_s", "destinations.loki"),
+            tenant_id=_opt_str(loki_tbl, "tenant_id", "destinations.loki"),
+            max_inflight=_opt_int(loki_tbl, "max_inflight", "destinations.loki"),
+            rate_limit=_opt_float(loki_tbl, "rate_limit", "destinations.loki"),
+        )
+
     return ConfigFileV1(
         schema_version=schema_version,
         schema_version_present=schema_version_present,
@@ -455,5 +552,7 @@ def load_config_file_v1(*, path: Path) -> ConfigFileV1:
             s3=s3,
             opensearch=opensearch,
             clickhouse=clickhouse,
+            mongodb=mongodb,
+            loki=loki,
         ),
     )

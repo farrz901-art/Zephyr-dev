@@ -109,6 +109,27 @@ class ClickHouseDestinationSnapshotV1(TypedDict):
     rate_limit: NotRequired[float | None]
 
 
+class MongoDBDestinationSnapshotV1(TypedDict):
+    uri: str
+    database: str
+    collection: str
+    timeout_s: float
+    write_mode: str
+    username: str | None
+    password: str | None
+    max_inflight: NotRequired[int | None]
+    rate_limit: NotRequired[float | None]
+
+
+class LokiDestinationSnapshotV1(TypedDict):
+    url: str
+    stream: str
+    timeout_s: float
+    tenant_id: NotRequired[str | None]
+    max_inflight: NotRequired[int | None]
+    rate_limit: NotRequired[float | None]
+
+
 class DestinationsSnapshotV1(TypedDict):
     filesystem: FilesystemDestinationSnapshotV1
     webhook: NotRequired[WebhookDestinationSnapshotV1]
@@ -117,6 +138,8 @@ class DestinationsSnapshotV1(TypedDict):
     s3: NotRequired[S3DestinationSnapshotV1]
     opensearch: NotRequired[OpenSearchDestinationSnapshotV1]
     clickhouse: NotRequired[ClickHouseDestinationSnapshotV1]
+    mongodb: NotRequired[MongoDBDestinationSnapshotV1]
+    loki: NotRequired[LokiDestinationSnapshotV1]
 
 
 ConfigValueSource: TypeAlias = Literal["cli", "env", "file", "default"]

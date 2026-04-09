@@ -343,12 +343,64 @@ Shared-contract pressure map for the second-round batch:
   idempotency expectations, replay path, and reporting stay shared; column mapping, insert
   batching, partitioning, and engine-specific tuning stay destination-local
 
-Deferred non-enterprise destination categories for later P4 work:
-- `nosql` document-store destinations stay deferred until the current batch proves how far shared
-  receipt/details naming and idempotency semantics can stretch without absorbing collection-specific
-  patch/update vocabularies
-- observability destinations stay deferred until it is clear how to avoid blurring Zephyr's own
-  operator/observability surfaces with a destination that speaks telemetry-native protocols
+Remaining second-round non-enterprise destination batch for P4 (P4-M14-01):
+- finish the current non-enterprise destination breadth plan before any source-batch pivot by
+  adding one `nosql` representative and one observability representative, rather than reopening the
+  destination slate again
+- the remaining batch is: `mongodb`-compatible document-store destination and `loki`-compatible
+  observability/log-stream destination
+- `mongodb` is the preferred `nosql` representative because it pressures collection/document
+  identity, insert-vs-upsert semantics, and duplicate-key or validation failures without forcing a
+  destination-owned async job model, partition-token model, or wide-table reconciliation contract
+- `loki` is the preferred observability representative because it pressures append-only
+  telemetry-style delivery, label/stream metadata, and backend rate limits while still fitting the
+  current HTTP-shaped delivery, receipt, and replay path better than metrics- or trace-native
+  protocols that would blur Zephyr delivery with telemetry ingestion semantics
+- this remaining batch is preferred over other `nosql` or observability candidates right now:
+  `dynamodb` and `cassandra` introduce partition/throughput or wide-column planning pressure that is
+  too close to new delivery-governance work, while OTLP metrics/traces or vendor-native event
+  systems would push Zephyr into telemetry-specific payload shaping before the shared delivery
+  contract has been proven on a simpler observability sink
+
+Shared-contract pressure map for the remaining batch:
+- `mongodb`-compatible document-store destination. Retryability pressure: transient network,
+  primary-election, or server-availability failures may be retryable, while auth, collection
+  policy, validation, and duplicate-key outcomes stay non-retryable. `failure_kind` / `error_code`
+  pressure: normalize duplicate-key, validation, document-size, and write-concern outcomes into the
+  current shared vocabulary without leaking driver exception classes into the durable contract.
+  details/summary naming pressure: keep stable collection, write mode, document identity,
+  attempted/accepted/rejected counts, and any bounded matched/modified/upserted facts in receipt
+  details, while keeping summary naming shared. idempotency / replay pressure: replay must reuse
+  the same document identity policy and make insert-vs-replace-vs-upsert behavior explicit through
+  shared idempotency semantics rather than destination-local retry shortcuts. operator-facing
+  reporting pressure: operators need collection, write mode, and representative document-id or
+  duplicate-key facts through the existing delivery reporting path. Shared vs local: payload
+  ownership, receipt shape, retryability, `failure_kind` / `error_code`, replay compatibility,
+  idempotency expectations, and reporting stay shared; BSON mapping, collection options, write
+  concern tuning, and driver session/auth handling stay destination-local
+- `loki`-compatible observability/log-stream destination. Retryability pressure: transport,
+  ingester-backpressure, and rate-limit failures may be retryable, while auth, tenant, label, or
+  payload-validation failures stay non-retryable. `failure_kind` / `error_code` pressure: map
+  telemetry-style HTTP failures into the existing shared vocabulary without creating observability-
+  only success/failure states. details/summary naming pressure: receipt details must preserve
+  tenant/stream selector facts, write mode, and attempted/accepted/rejected line counts where they
+  are real, while shared summary naming stays unchanged. idempotency / replay pressure: replay must
+  remain compatible with append-style log delivery and deterministic stream/document identity facts
+  where Zephyr owns them, without claiming a backend-native dedupe guarantee that Loki does not
+  provide. operator-facing reporting pressure: operators need stream/tenant, label-set summary, and
+  retry/failure visibility through Zephyr's existing delivery reporting rather than a parallel
+  observability dashboard contract. Shared vs local: payload ownership, receipt/details discipline,
+  retryability, failure vocabulary, replay path, and operator-facing reporting stay shared; label
+  shaping, timestamp mapping, tenant headers, stream batching, and backend-specific HTTP response
+  parsing stay destination-local
+
+Deferred after the remaining batch:
+- other `nosql` families such as key-value, wide-column, or cache-oriented destinations remain
+  deferred until the `mongodb`-style document-store adapter proves how far shared document identity
+  and write-mode semantics can stretch without widening the shared delivery contract
+- telemetry-native observability families beyond log/event delivery remain deferred until the
+  `loki`-style sink proves that Zephyr can target observability backends without redefining the
+  shared payload around metrics, traces, or collector-specific envelopes
 - enterprise-managed destination families stay out of scope for this batch unless a later change
   explicitly adds them to the repo architecture
 

@@ -20,6 +20,8 @@ def test_spec_list(capsys: pytest.CaptureFixture[str]) -> None:
     assert "destination.s3.v1" in ids
     assert "destination.opensearch.v1" in ids
     assert "destination.clickhouse.v1" in ids
+    assert "destination.mongodb.v1" in ids
+    assert "destination.loki.v1" in ids
     assert "backend.uns_api.v1" in ids
 
 
@@ -74,3 +76,24 @@ def test_spec_show_toml_backend_uns_api_includes_env_hint(
     assert "uns_api_key" in out
     for env in UNS_API_KEY_ENV_NAMES:
         assert env in out
+
+
+def test_spec_show_toml_destination_mongodb(capsys: pytest.CaptureFixture[str]) -> None:
+    rc = cli.main(["spec", "show", "--id", "destination.mongodb.v1", "--format", "toml"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "[destinations.mongodb]" in out
+    assert "uri" in out
+    assert "database" in out
+    assert "collection" in out
+    assert "write_mode" in out
+
+
+def test_spec_show_toml_destination_loki(capsys: pytest.CaptureFixture[str]) -> None:
+    rc = cli.main(["spec", "show", "--id", "destination.loki.v1", "--format", "toml"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "[destinations.loki]" in out
+    assert "url" in out
+    assert "stream" in out
+    assert "tenant_id" in out

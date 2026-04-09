@@ -297,3 +297,137 @@ timeout_s = 6.0
 
     assert rc == 0
     assert called["ok"] is True
+
+
+def test_config_file_enables_mongodb_destination_and_preserves_snapshot_sources(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    (inbox / "a.txt").write_text("hello", encoding="utf-8")
+
+    cfg_path = tmp_path / "cfg.toml"
+    _write_config(
+        cfg_path,
+        """
+[destinations.mongodb]
+uri = "mongodb://db.example.test"
+database = "zephyr"
+collection = "delivery_records"
+timeout_s = 4.5
+""".strip(),
+    )
+
+    class _FakeMongoClient:
+        def close(self) -> None:
+            return None
+
+    def _fake_mongodb_collection_or_exit(**kwargs: object) -> tuple[_FakeMongoClient, object]:
+        del kwargs
+        return _FakeMongoClient(), object()
+
+    monkeypatch.setattr(cli, "_make_mongodb_collection_or_exit", _fake_mongodb_collection_or_exit)
+
+    called = {"ok": False}
+
+    def fake_run_documents(*, docs: Any, cfg: Any, ctx: Any, **kwargs: Any) -> Any:
+        del docs, cfg, ctx
+        called["ok"] = True
+
+        dest = kwargs.get("destination")
+        assert dest is not None
+        assert getattr(dest, "name") == "fanout"
+
+        snap = cast(ConfigSnapshotV1, kwargs.get("config_snapshot"))
+        mongodb_snapshot = snap["destinations"].get("mongodb")
+        assert mongodb_snapshot is not None
+        assert mongodb_snapshot["uri"] == "mongodb://db.example.test"
+        assert mongodb_snapshot["database"] == "zephyr"
+        assert mongodb_snapshot["collection"] == "delivery_records"
+        assert mongodb_snapshot["timeout_s"] == 4.5
+
+        sources = snap.get("sources")
+        assert sources is not None
+        assert sources["destinations.mongodb.uri"] == "file"
+        assert sources["destinations.mongodb.database"] == "file"
+        assert sources["destinations.mongodb.collection"] == "file"
+
+    monkeypatch.setattr(cli, "run_documents", fake_run_documents)
+
+    rc = cli.main(
+        [
+            "run",
+            "--path",
+            str(inbox),
+            "--out",
+            str(tmp_path / "out"),
+            "--config",
+            str(cfg_path),
+        ]
+    )
+
+    assert rc == 0
+    assert called["ok"] is True
+
+
+def test_config_file_enables_loki_destination_and_preserves_snapshot_sources(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    (inbox / "a.txt").write_text("hello", encoding="utf-8")
+
+    cfg_path = tmp_path / "cfg.toml"
+    _write_config(
+        cfg_path,
+        """
+[destinations.loki]
+url = "https://logs.example.test"
+stream = "delivery"
+tenant_id = "tenant-a"
+timeout_s = 3.5
+""".strip(),
+    )
+
+    called = {"ok": False}
+
+    def fake_run_documents(*, docs: Any, cfg: Any, ctx: Any, **kwargs: Any) -> Any:
+        del docs, cfg, ctx
+        called["ok"] = True
+
+        dest = kwargs.get("destination")
+        assert dest is not None
+        assert getattr(dest, "name") == "fanout"
+
+        snap = cast(ConfigSnapshotV1, kwargs.get("config_snapshot"))
+        loki_snapshot = snap["destinations"].get("loki")
+        assert loki_snapshot is not None
+        assert loki_snapshot["url"] == "https://logs.example.test"
+        assert loki_snapshot["stream"] == "delivery"
+        assert loki_snapshot.get("tenant_id") == "tenant-a"
+        assert loki_snapshot["timeout_s"] == 3.5
+
+        sources = snap.get("sources")
+        assert sources is not None
+        assert sources["destinations.loki.url"] == "file"
+        assert sources["destinations.loki.stream"] == "file"
+        assert sources["destinations.loki.tenant_id"] == "file"
+
+    monkeypatch.setattr(cli, "run_documents", fake_run_documents)
+
+    rc = cli.main(
+        [
+            "run",
+            "--path",
+            str(inbox),
+            "--out",
+            str(tmp_path / "out"),
+            "--config",
+            str(cfg_path),
+        ]
+    )
+
+    assert rc == 0
+    assert called["ok"] is True
