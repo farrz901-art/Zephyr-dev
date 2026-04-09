@@ -14,7 +14,10 @@ from zephyr_ingest.config.argparse_extract import (
 )
 from zephyr_ingest.config.errors import ConfigError
 from zephyr_ingest.config.snapshot_v1 import (
+    ClickHouseDestinationSnapshotV1,
     KafkaDestinationSnapshotV1,
+    OpenSearchDestinationSnapshotV1,
+    S3DestinationSnapshotV1,
     WeaviateDestinationSnapshotV1,
     WebhookDestinationSnapshotV1,
 )
@@ -295,3 +298,156 @@ class WeaviateConfigV1:
     #         "api_key": None if self.api_key is None else "***",
     #         "skip_init_checks": self.skip_init_checks,
     #     }
+
+
+@dataclass(frozen=True, slots=True)
+class S3ConfigV1:
+    bucket: str
+    region: str
+    access_key: str
+    secret_key: str
+    endpoint_url: str | None = None
+    session_token: str | None = None
+    prefix: str = ""
+    write_mode: str = "overwrite"
+    max_inflight: int | None = None
+    rate_limit: float | None = None
+
+    @staticmethod
+    def from_namespace(ns: argparse.Namespace) -> S3ConfigV1 | None:
+        bucket = get_opt_str(ns, "s3_bucket")
+        if bucket is None:
+            return None
+
+        region = get_req_str(ns, "s3_region")
+        access_key = get_req_str(ns, "s3_access_key")
+        secret_key = get_req_str(ns, "s3_secret_key")
+        return S3ConfigV1(
+            bucket=bucket,
+            region=region,
+            access_key=access_key,
+            secret_key=secret_key,
+            endpoint_url=get_opt_str(ns, "s3_endpoint_url"),
+            session_token=get_opt_str(ns, "s3_session_token"),
+            prefix=get_opt_str(ns, "s3_prefix") or "",
+            write_mode=get_req_str(ns, "s3_write_mode"),
+            max_inflight=get_opt_int(ns, "s3_max_inflight"),
+            rate_limit=get_opt_float(ns, "s3_rate_limit"),
+        )
+
+    def to_snapshot_v1(self) -> S3DestinationSnapshotV1:
+        snapshot: S3DestinationSnapshotV1 = {
+            "bucket": self.bucket,
+            "region": self.region,
+            "prefix": self.prefix,
+            "write_mode": self.write_mode,
+            "access_key": "***",
+            "secret_key": "***",
+            "session_token": None if self.session_token is None else "***",
+        }
+        if self.endpoint_url is not None:
+            snapshot["endpoint_url"] = self.endpoint_url
+        if self.max_inflight is not None:
+            snapshot["max_inflight"] = self.max_inflight
+        if self.rate_limit is not None:
+            snapshot["rate_limit"] = self.rate_limit
+        return snapshot
+
+
+@dataclass(frozen=True, slots=True)
+class OpenSearchConfigV1:
+    url: str
+    index: str
+    timeout_s: float
+    skip_tls_verify: bool = False
+    username: str | None = None
+    password: str | None = None
+    max_inflight: int | None = None
+    rate_limit: float | None = None
+
+    @staticmethod
+    def from_namespace(ns: argparse.Namespace) -> OpenSearchConfigV1 | None:
+        url = get_opt_str(ns, "opensearch_url")
+        if url is None:
+            return None
+        username = get_opt_str(ns, "opensearch_username")
+        password = get_opt_str(ns, "opensearch_password")
+        if (username is None) != (password is None):
+            raise ConfigError(
+                "Both --opensearch-username and --opensearch-password must be specified together"
+            )
+        return OpenSearchConfigV1(
+            url=url,
+            index=get_req_str(ns, "opensearch_index"),
+            timeout_s=get_float(ns, "opensearch_timeout_s"),
+            skip_tls_verify=get_bool(ns, "opensearch_skip_tls_verify"),
+            username=username,
+            password=password,
+            max_inflight=get_opt_int(ns, "opensearch_max_inflight"),
+            rate_limit=get_opt_float(ns, "opensearch_rate_limit"),
+        )
+
+    def to_snapshot_v1(self) -> OpenSearchDestinationSnapshotV1:
+        snapshot: OpenSearchDestinationSnapshotV1 = {
+            "url": self.url,
+            "index": self.index,
+            "timeout_s": self.timeout_s,
+            "verify_tls": not self.skip_tls_verify,
+            "username": None if self.username is None else "***",
+            "password": None if self.password is None else "***",
+        }
+        if self.max_inflight is not None:
+            snapshot["max_inflight"] = self.max_inflight
+        if self.rate_limit is not None:
+            snapshot["rate_limit"] = self.rate_limit
+        return snapshot
+
+
+@dataclass(frozen=True, slots=True)
+class ClickHouseConfigV1:
+    url: str
+    table: str
+    timeout_s: float
+    database: str | None = None
+    username: str | None = None
+    password: str | None = None
+    max_inflight: int | None = None
+    rate_limit: float | None = None
+
+    @staticmethod
+    def from_namespace(ns: argparse.Namespace) -> ClickHouseConfigV1 | None:
+        url = get_opt_str(ns, "clickhouse_url")
+        if url is None:
+            return None
+        username = get_opt_str(ns, "clickhouse_username")
+        password = get_opt_str(ns, "clickhouse_password")
+        if (username is None) != (password is None):
+            raise ConfigError(
+                "Both --clickhouse-username and --clickhouse-password must be specified together"
+            )
+        return ClickHouseConfigV1(
+            url=url,
+            table=get_req_str(ns, "clickhouse_table"),
+            timeout_s=get_float(ns, "clickhouse_timeout_s"),
+            database=get_opt_str(ns, "clickhouse_database"),
+            username=username,
+            password=password,
+            max_inflight=get_opt_int(ns, "clickhouse_max_inflight"),
+            rate_limit=get_opt_float(ns, "clickhouse_rate_limit"),
+        )
+
+    def to_snapshot_v1(self) -> ClickHouseDestinationSnapshotV1:
+        snapshot: ClickHouseDestinationSnapshotV1 = {
+            "url": self.url,
+            "table": self.table,
+            "timeout_s": self.timeout_s,
+            "username": None if self.username is None else "***",
+            "password": None if self.password is None else "***",
+        }
+        if self.database is not None:
+            snapshot["database"] = self.database
+        if self.max_inflight is not None:
+            snapshot["max_inflight"] = self.max_inflight
+        if self.rate_limit is not None:
+            snapshot["rate_limit"] = self.rate_limit
+        return snapshot

@@ -214,3 +214,86 @@ uns_api_key = "file-key"
     )
     assert rc == 0
     assert called["ok"] is True
+
+
+def test_config_file_enables_second_round_destinations_and_preserves_snapshot_sources(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    (inbox / "a.txt").write_text("hello", encoding="utf-8")
+
+    cfg_path = tmp_path / "cfg.toml"
+    _write_config(
+        cfg_path,
+        """
+[destinations.s3]
+bucket = "archive"
+region = "us-east-1"
+access_key = "file-ak"
+secret_key = "file-sk"
+prefix = "delivery"
+
+[destinations.opensearch]
+url = "https://search.example.test"
+index = "zephyr-docs"
+timeout_s = 4.5
+
+[destinations.clickhouse]
+url = "https://clickhouse.example.test"
+table = "delivery_rows"
+timeout_s = 6.0
+""".strip(),
+    )
+
+    def _fake_s3_writer_or_exit(**kwargs: object) -> object:
+        del kwargs
+        return object()
+
+    monkeypatch.setattr(cli, "_make_s3_writer_or_exit", _fake_s3_writer_or_exit)
+
+    called = {"ok": False}
+
+    def fake_run_documents(*, docs: Any, cfg: Any, ctx: Any, **kwargs: Any) -> Any:
+        del docs, cfg, ctx
+        called["ok"] = True
+
+        dest = kwargs.get("destination")
+        assert dest is not None
+        assert getattr(dest, "name") == "fanout"
+
+        snap = cast(ConfigSnapshotV1, kwargs.get("config_snapshot"))
+        s3_snapshot = snap["destinations"].get("s3")
+        opensearch_snapshot = snap["destinations"].get("opensearch")
+        clickhouse_snapshot = snap["destinations"].get("clickhouse")
+        assert s3_snapshot is not None
+        assert opensearch_snapshot is not None
+        assert clickhouse_snapshot is not None
+        assert s3_snapshot["bucket"] == "archive"
+        assert s3_snapshot["access_key"] == "***"
+        assert opensearch_snapshot["timeout_s"] == 4.5
+        assert clickhouse_snapshot["timeout_s"] == 6.0
+
+        sources = snap.get("sources")
+        assert sources is not None
+        assert sources["destinations.s3.bucket"] == "file"
+        assert sources["destinations.opensearch.url"] == "file"
+        assert sources["destinations.clickhouse.url"] == "file"
+
+    monkeypatch.setattr(cli, "run_documents", fake_run_documents)
+
+    rc = cli.main(
+        [
+            "run",
+            "--path",
+            str(inbox),
+            "--out",
+            str(tmp_path / "out"),
+            "--config",
+            str(cfg_path),
+        ]
+    )
+
+    assert rc == 0
+    assert called["ok"] is True

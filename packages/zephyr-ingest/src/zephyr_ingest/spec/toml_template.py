@@ -243,6 +243,9 @@ def render_config_init_toml_v1(*, only: set[str] | None = None) -> str:
     - [destinations.webhook]: commented block
     - [destinations.kafka]: commented block
     - [destinations.weaviate]: commented block
+    - [destinations.s3]: commented block
+    - [destinations.opensearch]: commented block
+    - [destinations.clickhouse]: commented block
     """
     lines: list[str] = []
 
@@ -254,6 +257,9 @@ def render_config_init_toml_v1(*, only: set[str] | None = None) -> str:
     include_webhook = include_all or ("webhook" in target_only)
     include_kafka = include_all or ("kafka" in target_only)
     include_weaviate = include_all or ("weaviate" in target_only)
+    include_s3 = include_all or ("s3" in target_only)
+    include_opensearch = include_all or ("opensearch" in target_only)
+    include_clickhouse = include_all or ("clickhouse" in target_only)
 
     # Header
     lines.append("# Zephyr Ingest Configuration (auto-generated from spec)")
@@ -268,7 +274,14 @@ def render_config_init_toml_v1(*, only: set[str] | None = None) -> str:
     # [retry]
     lines.extend(_render_retry_section())
 
-    if include_webhook or include_kafka or include_weaviate:
+    if (
+        include_webhook
+        or include_kafka
+        or include_weaviate
+        or include_s3
+        or include_opensearch
+        or include_clickhouse
+    ):
         lines.append("")
         lines.append("# " + "=" * 50)
         lines.append("# Destinations (uncomment to enable)")
@@ -296,6 +309,31 @@ def render_config_init_toml_v1(*, only: set[str] | None = None) -> str:
         if weaviate_spec:
             lines.extend(
                 _render_destination_section(spec=weaviate_spec, table_name="destinations.weaviate")
+            )
+
+    if include_s3:
+        s3_spec = get_spec(spec_id="destination.s3.v1")
+        if s3_spec:
+            lines.extend(_render_destination_section(spec=s3_spec, table_name="destinations.s3"))
+
+    if include_opensearch:
+        opensearch_spec = get_spec(spec_id="destination.opensearch.v1")
+        if opensearch_spec:
+            lines.extend(
+                _render_destination_section(
+                    spec=opensearch_spec,
+                    table_name="destinations.opensearch",
+                )
+            )
+
+    if include_clickhouse:
+        clickhouse_spec = get_spec(spec_id="destination.clickhouse.v1")
+        if clickhouse_spec:
+            lines.extend(
+                _render_destination_section(
+                    spec=clickhouse_spec,
+                    table_name="destinations.clickhouse",
+                )
             )
 
     lines.append("")

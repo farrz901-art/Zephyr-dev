@@ -131,10 +131,51 @@ class WeaviateDestFileV1:
 
 
 @dataclass(frozen=True, slots=True)
+class S3DestFileV1:
+    bucket: str
+    region: str
+    access_key: str
+    secret_key: str
+    endpoint_url: str | None = None
+    session_token: str | None = None
+    prefix: str | None = None
+    write_mode: str | None = None
+    max_inflight: int | None = None
+    rate_limit: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class OpenSearchDestFileV1:
+    url: str
+    index: str
+    timeout_s: float | None = None
+    skip_tls_verify: bool | None = None
+    username: str | None = None
+    password: str | None = None
+    max_inflight: int | None = None
+    rate_limit: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ClickHouseDestFileV1:
+    url: str
+    table: str
+    timeout_s: float | None = None
+    database: str | None = None
+    username: str | None = None
+    password: str | None = None
+    max_inflight: int | None = None
+    rate_limit: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class DestinationsFileV1:
     webhook: WebhookDestFileV1 | None = None
     kafka: KafkaDestFileV1 | None = None
     weaviate: WeaviateDestFileV1 | None = None
+    s3: S3DestFileV1 | None = None
+    opensearch: OpenSearchDestFileV1 | None = None
+    clickhouse: ClickHouseDestFileV1 | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -186,7 +227,9 @@ def load_config_file_v1(*, path: Path) -> ConfigFileV1:
     _unknown_keys(
         retry_tbl, {"enabled", "max_attempts", "base_backoff_ms", "max_backoff_ms"}, "retry"
     )
-    _unknown_keys(dest_tbl, {"webhook", "kafka", "weaviate"}, "destinations")
+    _unknown_keys(
+        dest_tbl, {"webhook", "kafka", "weaviate", "s3", "opensearch", "clickhouse"}, "destinations"
+    )
 
     webhook: WebhookDestFileV1 | None = None
     if "webhook" in dest_tbl:
@@ -271,6 +314,118 @@ def load_config_file_v1(*, path: Path) -> ConfigFileV1:
             skip_init_checks=_opt_bool(wv, "skip_init_checks", "destinations.weaviate"),
         )
 
+    s3: S3DestFileV1 | None = None
+    if "s3" in dest_tbl:
+        s3_tbl = _as_table(dest_tbl["s3"], "destinations.s3")
+        _unknown_keys(
+            s3_tbl,
+            {
+                "bucket",
+                "region",
+                "access_key",
+                "secret_key",
+                "endpoint_url",
+                "session_token",
+                "prefix",
+                "write_mode",
+                "max_inflight",
+                "rate_limit",
+            },
+            "destinations.s3",
+        )
+        bucket = _opt_str(s3_tbl, "bucket", "destinations.s3")
+        region = _opt_str(s3_tbl, "region", "destinations.s3")
+        access_key = _opt_str(s3_tbl, "access_key", "destinations.s3")
+        secret_key = _opt_str(s3_tbl, "secret_key", "destinations.s3")
+        if bucket is None or region is None or access_key is None or secret_key is None:
+            raise ConfigError(
+                "destinations.s3.bucket, destinations.s3.region, "
+                "destinations.s3.access_key, and destinations.s3.secret_key "
+                "are required when [destinations.s3] is present"
+            )
+        s3 = S3DestFileV1(
+            bucket=bucket,
+            region=region,
+            access_key=access_key,
+            secret_key=secret_key,
+            endpoint_url=_opt_str(s3_tbl, "endpoint_url", "destinations.s3"),
+            session_token=_opt_str(s3_tbl, "session_token", "destinations.s3"),
+            prefix=_opt_str(s3_tbl, "prefix", "destinations.s3"),
+            write_mode=_opt_str(s3_tbl, "write_mode", "destinations.s3"),
+            max_inflight=_opt_int(s3_tbl, "max_inflight", "destinations.s3"),
+            rate_limit=_opt_float(s3_tbl, "rate_limit", "destinations.s3"),
+        )
+
+    opensearch: OpenSearchDestFileV1 | None = None
+    if "opensearch" in dest_tbl:
+        os_tbl = _as_table(dest_tbl["opensearch"], "destinations.opensearch")
+        _unknown_keys(
+            os_tbl,
+            {
+                "url",
+                "index",
+                "timeout_s",
+                "skip_tls_verify",
+                "username",
+                "password",
+                "max_inflight",
+                "rate_limit",
+            },
+            "destinations.opensearch",
+        )
+        url = _opt_str(os_tbl, "url", "destinations.opensearch")
+        index = _opt_str(os_tbl, "index", "destinations.opensearch")
+        if url is None or index is None:
+            raise ConfigError(
+                "destinations.opensearch.url and destinations.opensearch.index "
+                "are required when [destinations.opensearch] is present"
+            )
+        opensearch = OpenSearchDestFileV1(
+            url=url,
+            index=index,
+            timeout_s=_opt_float(os_tbl, "timeout_s", "destinations.opensearch"),
+            skip_tls_verify=_opt_bool(os_tbl, "skip_tls_verify", "destinations.opensearch"),
+            username=_opt_str(os_tbl, "username", "destinations.opensearch"),
+            password=_opt_str(os_tbl, "password", "destinations.opensearch"),
+            max_inflight=_opt_int(os_tbl, "max_inflight", "destinations.opensearch"),
+            rate_limit=_opt_float(os_tbl, "rate_limit", "destinations.opensearch"),
+        )
+
+    clickhouse: ClickHouseDestFileV1 | None = None
+    if "clickhouse" in dest_tbl:
+        ch_tbl = _as_table(dest_tbl["clickhouse"], "destinations.clickhouse")
+        _unknown_keys(
+            ch_tbl,
+            {
+                "url",
+                "table",
+                "timeout_s",
+                "database",
+                "username",
+                "password",
+                "max_inflight",
+                "rate_limit",
+            },
+            "destinations.clickhouse",
+        )
+        url = _opt_str(ch_tbl, "url", "destinations.clickhouse")
+        table = _opt_str(ch_tbl, "table", "destinations.clickhouse")
+        if url is None or table is None:
+            raise ConfigError(
+                "destinations.clickhouse.url and destinations.clickhouse.table "
+                "are required when [destinations.clickhouse] is present"
+            )
+        clickhouse = ClickHouseDestFileV1(
+            url=url,
+            table=table,
+            timeout_s=_opt_float(ch_tbl, "timeout_s", "destinations.clickhouse"),
+            database=_opt_str(ch_tbl, "database", "destinations.clickhouse"),
+            username=_opt_str(ch_tbl, "username", "destinations.clickhouse"),
+            password=_opt_str(ch_tbl, "password", "destinations.clickhouse"),
+            max_inflight=_opt_int(ch_tbl, "max_inflight", "destinations.clickhouse"),
+            rate_limit=_opt_float(ch_tbl, "rate_limit", "destinations.clickhouse"),
+        )
+
     return ConfigFileV1(
         schema_version=schema_version,
         schema_version_present=schema_version_present,
@@ -293,5 +448,12 @@ def load_config_file_v1(*, path: Path) -> ConfigFileV1:
             base_backoff_ms=_opt_int(retry_tbl, "base_backoff_ms", "retry"),
             max_backoff_ms=_opt_int(retry_tbl, "max_backoff_ms", "retry"),
         ),
-        destinations=DestinationsFileV1(webhook=webhook, kafka=kafka, weaviate=weaviate),
+        destinations=DestinationsFileV1(
+            webhook=webhook,
+            kafka=kafka,
+            weaviate=weaviate,
+            s3=s3,
+            opensearch=opensearch,
+            clickhouse=clickhouse,
+        ),
     )

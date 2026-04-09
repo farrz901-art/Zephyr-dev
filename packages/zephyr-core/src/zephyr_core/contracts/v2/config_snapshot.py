@@ -74,11 +74,49 @@ class WeaviateDestinationSnapshotV1(TypedDict):
     rate_limit: NotRequired[float | None]
 
 
+class S3DestinationSnapshotV1(TypedDict):
+    bucket: str
+    region: str
+    prefix: str
+    write_mode: str
+    endpoint_url: NotRequired[str | None]
+    access_key: str | None
+    secret_key: str | None
+    session_token: str | None
+    max_inflight: NotRequired[int | None]
+    rate_limit: NotRequired[float | None]
+
+
+class OpenSearchDestinationSnapshotV1(TypedDict):
+    url: str
+    index: str
+    timeout_s: float
+    verify_tls: bool
+    username: str | None
+    password: str | None
+    max_inflight: NotRequired[int | None]
+    rate_limit: NotRequired[float | None]
+
+
+class ClickHouseDestinationSnapshotV1(TypedDict):
+    url: str
+    table: str
+    timeout_s: float
+    database: NotRequired[str | None]
+    username: str | None
+    password: str | None
+    max_inflight: NotRequired[int | None]
+    rate_limit: NotRequired[float | None]
+
+
 class DestinationsSnapshotV1(TypedDict):
     filesystem: FilesystemDestinationSnapshotV1
     webhook: NotRequired[WebhookDestinationSnapshotV1]
     kafka: NotRequired[KafkaDestinationSnapshotV1]
     weaviate: NotRequired[WeaviateDestinationSnapshotV1]
+    s3: NotRequired[S3DestinationSnapshotV1]
+    opensearch: NotRequired[OpenSearchDestinationSnapshotV1]
+    clickhouse: NotRequired[ClickHouseDestinationSnapshotV1]
 
 
 ConfigValueSource: TypeAlias = Literal["cli", "env", "file", "default"]

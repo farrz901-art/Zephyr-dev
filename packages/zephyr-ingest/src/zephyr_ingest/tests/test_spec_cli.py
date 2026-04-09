@@ -17,6 +17,9 @@ def test_spec_list(capsys: pytest.CaptureFixture[str]) -> None:
     assert "destination.webhook.v1" in ids
     assert "destination.kafka.v1" in ids
     assert "destination.weaviate.v1" in ids
+    assert "destination.s3.v1" in ids
+    assert "destination.opensearch.v1" in ids
+    assert "destination.clickhouse.v1" in ids
     assert "backend.uns_api.v1" in ids
 
 

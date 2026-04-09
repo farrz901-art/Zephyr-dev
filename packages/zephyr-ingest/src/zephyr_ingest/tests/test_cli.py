@@ -502,3 +502,77 @@ def test_cli_queue_sqlite_backend_supports_shared_inspection_and_requeue_subset(
         "orphan_count": 0,
         "recorded_at_utc": requeue_payload["recorded_at_utc"],
     }
+
+
+def test_cli_run_second_round_destinations_flow_into_snapshot_and_fanout(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    called = {"ok": False}
+    (tmp_path / "dummy.txt").touch()
+
+    def _fake_s3_writer_or_exit(**kwargs: object) -> object:
+        del kwargs
+        return object()
+
+    monkeypatch.setattr(cli, "_make_s3_writer_or_exit", _fake_s3_writer_or_exit)
+
+    def fake_run_documents(*, docs: Any, cfg: Any, ctx: Any, **kwargs: Any) -> Any:
+        del docs, cfg, ctx
+        called["ok"] = True
+
+        dest = kwargs.get("destination")
+        assert dest is not None
+        assert getattr(dest, "name") == "fanout"
+        children = getattr(dest, "destinations")
+        child_names = {getattr(child, "name") for child in children}
+        assert child_names == {"filesystem", "s3", "opensearch", "clickhouse"}
+
+        snap = cast(ConfigSnapshotV1, kwargs.get("config_snapshot"))
+        s3_snapshot = snap["destinations"].get("s3")
+        opensearch_snapshot = snap["destinations"].get("opensearch")
+        clickhouse_snapshot = snap["destinations"].get("clickhouse")
+        assert s3_snapshot is not None
+        assert opensearch_snapshot is not None
+        assert clickhouse_snapshot is not None
+        assert s3_snapshot["bucket"] == "archive"
+        assert s3_snapshot["access_key"] == "***"
+        assert opensearch_snapshot["index"] == "zephyr-docs"
+        assert clickhouse_snapshot["table"] == "delivery_rows"
+
+        sources = snap.get("sources")
+        assert sources is not None
+        assert sources["destinations.s3.bucket"] == "cli"
+        assert sources["destinations.opensearch.url"] == "cli"
+        assert sources["destinations.clickhouse.url"] == "cli"
+
+    monkeypatch.setattr(cli, "run_documents", fake_run_documents)
+
+    rc = cli.main(
+        [
+            "run",
+            "--path",
+            str(tmp_path / "dummy.txt"),
+            "--out",
+            str(tmp_path / "out"),
+            "--s3-bucket",
+            "archive",
+            "--s3-region",
+            "us-east-1",
+            "--s3-access-key",
+            "ak",
+            "--s3-secret-key",
+            "sk",
+            "--opensearch-url",
+            "https://search.example.test",
+            "--opensearch-index",
+            "zephyr-docs",
+            "--clickhouse-url",
+            "https://clickhouse.example.test",
+            "--clickhouse-table",
+            "delivery_rows",
+        ]
+    )
+
+    assert rc == 0
+    assert called["ok"] is True

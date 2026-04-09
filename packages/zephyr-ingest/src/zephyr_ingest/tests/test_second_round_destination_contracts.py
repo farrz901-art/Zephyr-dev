@@ -1,0 +1,375 @@
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Literal, cast
+
+import httpx
+import pytest
+
+from zephyr_core import RunMetaV1
+from zephyr_core.contracts.v1.enums import RunOutcome
+from zephyr_core.contracts.v1.run_meta import RunProvenanceV1
+from zephyr_core.versioning import RUN_META_SCHEMA_VERSION
+from zephyr_ingest.delivery_idempotency import (
+    DeliveryIdentityV1,
+    normalize_delivery_idempotency_key,
+)
+from zephyr_ingest.destinations.base import DeliveryReceipt
+from zephyr_ingest.destinations.clickhouse import ClickHouseDestination
+from zephyr_ingest.destinations.opensearch import OpenSearchDestination
+from zephyr_ingest.destinations.s3 import S3Destination
+from zephyr_ingest.replay_delivery import (
+    ClickHouseReplaySink,
+    OpenSearchReplaySink,
+    ReplaySink,
+    S3ReplaySink,
+    replay_delivery_dlq,
+)
+
+DestinationName = Literal["s3", "opensearch", "clickhouse"]
+
+_BATCH_DESTINATIONS: tuple[DestinationName, ...] = ("s3", "opensearch", "clickhouse")
+_SHARED_SUMMARY_KEYS = {
+    "delivery_outcome",
+    "failure_retryability",
+    "failure_kind",
+    "error_code",
+    "attempt_count",
+    "payload_count",
+}
+
+
+@dataclass
+class FakeS3Client:
+    calls: list[dict[str, object]]
+    exc: Exception | None = None
+
+    def put_object(
+        self,
+        *,
+        Bucket: str,
+        Key: str,
+        Body: bytes,
+        ContentType: str,
+    ) -> dict[str, object]:
+        raw_payload = json.loads(Body.decode("utf-8"))
+        assert isinstance(raw_payload, dict)
+        self.calls.append(
+            {
+                "bucket": Bucket,
+                "key": Key,
+                "content_type": ContentType,
+                "payload": cast(dict[str, object], raw_payload),
+            }
+        )
+        if self.exc is not None:
+            raise self.exc
+        return {
+            "ETag": '"etag-1"',
+            "VersionId": "v1",
+            "ResponseMetadata": {"HTTPStatusCode": 200},
+        }
+
+
+class FakeS3ServiceError(Exception):
+    def __init__(self) -> None:
+        super().__init__("service unavailable")
+        self.response = {
+            "ResponseMetadata": {"HTTPStatusCode": 503},
+            "Error": {"Code": "SlowDown", "Message": "service unavailable"},
+        }
+
+
+def _build_meta(*, run_id: str) -> RunMetaV1:
+    return RunMetaV1(
+        run_id=run_id,
+        pipeline_version="p4-m13",
+        timestamp_utc="2026-04-09T00:00:00Z",
+        schema_version=RUN_META_SCHEMA_VERSION,
+        outcome=RunOutcome.SUCCESS,
+        engine=None,
+        document=None,
+        error=None,
+        warnings=[],
+    )
+
+
+def _identity_key(*, sha256: str, run_id: str) -> str:
+    return normalize_delivery_idempotency_key(
+        identity=DeliveryIdentityV1(sha256=sha256, run_id=run_id)
+    )
+
+
+def _shared_summary(
+    *,
+    delivery_outcome: Literal["delivered", "failed"],
+    failure_retryability: str,
+    failure_kind: str,
+    error_code: str,
+) -> dict[str, object]:
+    return {
+        "delivery_outcome": delivery_outcome,
+        "failure_retryability": failure_retryability,
+        "failure_kind": failure_kind,
+        "error_code": error_code,
+        "attempt_count": 1,
+        "payload_count": 1,
+    }
+
+
+def _assert_shared_boundary(receipt: DeliveryReceipt) -> None:
+    assert set(receipt.shared_summary) == _SHARED_SUMMARY_KEYS
+    assert "bucket" not in receipt.shared_summary
+    assert "object_key" not in receipt.shared_summary
+    assert "index" not in receipt.shared_summary
+    assert "document_id" not in receipt.shared_summary
+    assert "table" not in receipt.shared_summary
+    assert "attempted_count" not in receipt.shared_summary
+    assert "accepted_count" not in receipt.shared_summary
+    assert "rejected_count" not in receipt.shared_summary
+
+
+def _write_replay_record(*, out_root: Path, sha256: str, run_id: str) -> None:
+    dlq_dir = out_root / "_dlq" / "delivery"
+    dlq_dir.mkdir(parents=True, exist_ok=True)
+    run_meta = _build_meta(run_id=run_id).to_dict()
+    run_meta["provenance"] = RunProvenanceV1(
+        run_origin="intake",
+        delivery_origin="primary",
+        execution_mode="worker",
+        task_id="task-1",
+        checkpoint_identity_key="cp-1",
+        task_identity_key="task-key-1",
+    ).to_dict()
+    (dlq_dir / "one.json").write_text(
+        json.dumps({"sha256": sha256, "run_id": run_id, "run_meta": run_meta}),
+        encoding="utf-8",
+    )
+
+
+@pytest.mark.parametrize("destination_name", _BATCH_DESTINATIONS)
+def test_second_round_destinations_share_success_summary_boundary(
+    destination_name: DestinationName,
+    tmp_path: Path,
+) -> None:
+    sha256 = "abc123"
+    meta = _build_meta(run_id=f"{destination_name}-success")
+    identity_key = _identity_key(sha256=sha256, run_id=meta.run_id)
+
+    if destination_name == "s3":
+        receipt = S3Destination(
+            bucket="archive",
+            region="us-east-1",
+            access_key="ak",
+            secret_key="sk",
+            prefix="deliveries",
+            client=FakeS3Client(calls=[]),
+        )(out_root=tmp_path / "out", sha256=sha256, meta=meta, result=None)
+        assert receipt.details is not None
+        assert receipt.details["identity_key"] == identity_key
+        assert receipt.details["object_key"] == f"deliveries/{identity_key}.json"
+    elif destination_name == "opensearch":
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            assert request.url.path == f"/zephyr-docs/_doc/{identity_key}"
+            return httpx.Response(201, json={"result": "created", "_version": 1})
+
+        receipt = OpenSearchDestination(
+            url="https://search.example.test",
+            index="zephyr-docs",
+            transport=httpx.MockTransport(handler),
+        )(out_root=tmp_path / "out", sha256=sha256, meta=meta, result=None)
+        assert receipt.details is not None
+        assert receipt.details["document_id"] == identity_key
+        assert receipt.details["attempted_count"] == 1
+        assert receipt.details["accepted_count"] == 1
+        assert receipt.details["rejected_count"] == 0
+    else:
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            row = json.loads(request.content.decode("utf-8").strip())
+            assert isinstance(row, dict)
+            typed_row = cast(dict[str, object], row)
+            assert typed_row["identity_key"] == identity_key
+            return httpx.Response(200, text="")
+
+        receipt = ClickHouseDestination(
+            url="https://clickhouse.example.test",
+            database="analytics",
+            table="delivery_rows",
+            transport=httpx.MockTransport(handler),
+        )(out_root=tmp_path / "out", sha256=sha256, meta=meta, result=None)
+        assert receipt.details is not None
+        assert receipt.details["identity_key"] == identity_key
+        assert receipt.details["row_count"] == 1
+
+    assert receipt.ok is True
+    assert receipt.failure_retryability == "not_failed"
+    assert receipt.shared_failure_kind == "not_failed"
+    assert receipt.shared_error_code == "not_failed"
+    assert receipt.shared_summary == _shared_summary(
+        delivery_outcome="delivered",
+        failure_retryability="not_failed",
+        failure_kind="not_failed",
+        error_code="not_failed",
+    )
+    _assert_shared_boundary(receipt)
+
+
+@pytest.mark.parametrize("destination_name", _BATCH_DESTINATIONS)
+def test_second_round_destinations_share_failure_vocabulary_boundary(
+    destination_name: DestinationName,
+    tmp_path: Path,
+) -> None:
+    sha256 = "abc123"
+    meta = _build_meta(run_id=f"{destination_name}-failure")
+    identity_key = _identity_key(sha256=sha256, run_id=meta.run_id)
+
+    if destination_name == "s3":
+        receipt = S3Destination(
+            bucket="archive",
+            region="us-east-1",
+            access_key="ak",
+            secret_key="sk",
+            prefix="deliveries",
+            client=FakeS3Client(calls=[], exc=FakeS3ServiceError()),
+        )(out_root=tmp_path / "out", sha256=sha256, meta=meta, result=None)
+        expected_retryability = "retryable"
+        expected_failure_kind = "server_error"
+        assert receipt.details is not None
+        assert receipt.details["identity_key"] == identity_key
+        assert receipt.details["backend_error_code"] == "SlowDown"
+    elif destination_name == "opensearch":
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            del request
+            return httpx.Response(
+                429,
+                json={"error": {"type": "rejected_execution_exception", "reason": "busy"}},
+            )
+
+        receipt = OpenSearchDestination(
+            url="https://search.example.test",
+            index="zephyr-docs",
+            transport=httpx.MockTransport(handler),
+        )(out_root=tmp_path / "out", sha256=sha256, meta=meta, result=None)
+        expected_retryability = "retryable"
+        expected_failure_kind = "rate_limited"
+        assert receipt.details is not None
+        assert receipt.details["document_id"] == identity_key
+        assert receipt.details["attempted_count"] == 1
+        assert receipt.details["accepted_count"] == 0
+        assert receipt.details["rejected_count"] == 1
+    else:
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            del request
+            return httpx.Response(400, text="DB::Exception: Type mismatch in VALUES section")
+
+        receipt = ClickHouseDestination(
+            url="https://clickhouse.example.test",
+            table="delivery_rows",
+            transport=httpx.MockTransport(handler),
+        )(out_root=tmp_path / "out", sha256=sha256, meta=meta, result=None)
+        expected_retryability = "non_retryable"
+        expected_failure_kind = "constraint"
+        assert receipt.details is not None
+        assert receipt.details["identity_key"] == identity_key
+        assert receipt.details["row_count"] == 1
+
+    assert receipt.ok is False
+    assert receipt.shared_error_code == "ZE-DELIVERY-FAILED"
+    assert receipt.failure_retryability == expected_retryability
+    assert receipt.shared_failure_kind == expected_failure_kind
+    assert receipt.shared_summary == _shared_summary(
+        delivery_outcome="failed",
+        failure_retryability=expected_retryability,
+        failure_kind=expected_failure_kind,
+        error_code="ZE-DELIVERY-FAILED",
+    )
+    _assert_shared_boundary(receipt)
+
+
+@pytest.mark.parametrize("destination_name", _BATCH_DESTINATIONS)
+def test_second_round_replay_sinks_preserve_identity_and_replay_provenance(
+    destination_name: DestinationName,
+    tmp_path: Path,
+) -> None:
+    sha256 = "abc123"
+    run_id = f"{destination_name}-replay"
+    identity_key = _identity_key(sha256=sha256, run_id=run_id)
+    out_root = tmp_path / destination_name
+    _write_replay_record(out_root=out_root, sha256=sha256, run_id=run_id)
+
+    captured_payload: dict[str, object]
+    sink: ReplaySink
+    if destination_name == "s3":
+        fake = FakeS3Client(calls=[])
+        sink = S3ReplaySink(bucket="archive", prefix="replay", client=fake)
+        stats = replay_delivery_dlq(out_root=out_root, sink=sink, dry_run=False, move_done=False)
+        assert len(fake.calls) == 1
+        assert fake.calls[0]["key"] == f"replay/{identity_key}.json"
+        captured_payload = cast(dict[str, object], fake.calls[0]["payload"])
+    elif destination_name == "opensearch":
+        opensearch_captured: dict[str, object] = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            opensearch_captured["path"] = request.url.path
+            body = json.loads(request.content.decode("utf-8"))
+            assert isinstance(body, dict)
+            opensearch_captured["body"] = cast(dict[str, object], body)
+            return httpx.Response(201, json={"result": "created"})
+
+        sink = OpenSearchReplaySink(
+            url="https://search.example.test",
+            index="docs",
+            transport=httpx.MockTransport(handler),
+        )
+        stats = replay_delivery_dlq(out_root=out_root, sink=sink, dry_run=False, move_done=False)
+        assert opensearch_captured["path"] == f"/docs/_doc/{identity_key}"
+        body = cast(dict[str, object], opensearch_captured["body"])
+        assert body["delivery_identity"] == identity_key
+        payload_obj = body.get("payload")
+        assert isinstance(payload_obj, dict)
+        captured_payload = cast(dict[str, object], payload_obj)
+    else:
+        clickhouse_captured: dict[str, object] = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            row = json.loads(request.content.decode("utf-8").strip())
+            assert isinstance(row, dict)
+            clickhouse_captured["row"] = cast(dict[str, object], row)
+            return httpx.Response(200, text="")
+
+        sink = ClickHouseReplaySink(
+            url="https://clickhouse.example.test",
+            table="delivery_rows",
+            transport=httpx.MockTransport(handler),
+        )
+        stats = replay_delivery_dlq(out_root=out_root, sink=sink, dry_run=False, move_done=False)
+        row = cast(dict[str, object], clickhouse_captured["row"])
+        assert row["identity_key"] == identity_key
+        payload_json = row.get("payload_json")
+        assert isinstance(payload_json, str)
+        raw_payload = json.loads(payload_json)
+        assert isinstance(raw_payload, dict)
+        captured_payload = cast(dict[str, object], raw_payload)
+
+    assert stats.total == 1
+    assert stats.succeeded == 1
+    assert stats.failed == 0
+    assert captured_payload["sha256"] == sha256
+    run_meta_obj = captured_payload.get("run_meta")
+    assert isinstance(run_meta_obj, dict)
+    typed_run_meta = cast(dict[str, object], run_meta_obj)
+    provenance_obj = typed_run_meta.get("provenance")
+    assert isinstance(provenance_obj, dict)
+    provenance = cast(dict[str, object], provenance_obj)
+    assert typed_run_meta["run_id"] == run_id
+    assert provenance["delivery_origin"] == "replay"
+    assert provenance["run_origin"] == "intake"
+    assert provenance["execution_mode"] == "worker"
+    assert provenance["checkpoint_identity_key"] == "cp-1"
+    assert provenance["task_identity_key"] == "task-key-1"

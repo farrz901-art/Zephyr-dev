@@ -25,7 +25,10 @@ from zephyr_ingest.delivery_idempotency import (
     normalize_weaviate_delivery_object_id,
 )
 from zephyr_ingest.destinations.base import DeliveryReceipt
+from zephyr_ingest.destinations.clickhouse import send_delivery_payload_v1_to_clickhouse
 from zephyr_ingest.destinations.kafka import ProducerProtocol, send_delivery_payload_v1_to_kafka
+from zephyr_ingest.destinations.opensearch import send_delivery_payload_v1_to_opensearch
+from zephyr_ingest.destinations.s3 import S3ObjectWriterProtocol, send_delivery_payload_v1_to_s3
 from zephyr_ingest.destinations.sqlite import send_delivery_payload_v1_to_sqlite
 from zephyr_ingest.destinations.weaviate import WeaviateCollectionProtocol
 from zephyr_ingest.destinations.webhook import WebhookDestination
@@ -304,6 +307,84 @@ class WeaviateReplaySink:
             details["retryable"] = True
             details["error_code"] = str(ErrorCode.DELIVERY_WEAVIATE_FAILED)
             return DeliveryReceipt(destination="weaviate", ok=False, details=details)
+
+
+@dataclass(frozen=True, slots=True)
+class S3ReplaySink:
+    bucket: str
+    client: S3ObjectWriterProtocol
+    prefix: str = ""
+    write_mode: str = "overwrite"
+
+    @property
+    def name(self) -> str:
+        return "s3"
+
+    def send(self, *, payload: DeliveryPayloadV1, idempotency_key: str) -> DeliveryReceipt:
+        return send_delivery_payload_v1_to_s3(
+            client=self.client,
+            bucket=self.bucket,
+            prefix=self.prefix,
+            payload=payload,
+            idempotency_key=idempotency_key,
+            write_mode=self.write_mode,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class OpenSearchReplaySink:
+    url: str
+    index: str
+    timeout_s: float = 10.0
+    verify_tls: bool = True
+    username: str | None = None
+    password: str | None = None
+    transport: httpx.BaseTransport | None = None
+
+    @property
+    def name(self) -> str:
+        return "opensearch"
+
+    def send(self, *, payload: DeliveryPayloadV1, idempotency_key: str) -> DeliveryReceipt:
+        return send_delivery_payload_v1_to_opensearch(
+            url=self.url,
+            index=self.index,
+            payload=payload,
+            idempotency_key=idempotency_key,
+            timeout_s=self.timeout_s,
+            verify_tls=self.verify_tls,
+            username=self.username,
+            password=self.password,
+            transport=self.transport,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class ClickHouseReplaySink:
+    url: str
+    table: str
+    timeout_s: float = 10.0
+    database: str | None = None
+    username: str | None = None
+    password: str | None = None
+    transport: httpx.BaseTransport | None = None
+
+    @property
+    def name(self) -> str:
+        return "clickhouse"
+
+    def send(self, *, payload: DeliveryPayloadV1, idempotency_key: str) -> DeliveryReceipt:
+        return send_delivery_payload_v1_to_clickhouse(
+            url=self.url,
+            table=self.table,
+            database=self.database,
+            payload=payload,
+            idempotency_key=idempotency_key,
+            timeout_s=self.timeout_s,
+            username=self.username,
+            password=self.password,
+            transport=self.transport,
+        )
 
 
 @dataclass(frozen=True, slots=True)

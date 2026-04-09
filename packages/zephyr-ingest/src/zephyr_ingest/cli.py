@@ -39,7 +39,14 @@ from zephyr_ingest.config.env_overlay import (
 )
 from zephyr_ingest.config.errors import ConfigError
 from zephyr_ingest.config.file_toml_v1 import ConfigFileV1, load_config_file_v1
-from zephyr_ingest.config.models import KafkaConfigV1, WeaviateConfigV1, WebhookConfigV1
+from zephyr_ingest.config.models import (
+    ClickHouseConfigV1,
+    KafkaConfigV1,
+    OpenSearchConfigV1,
+    S3ConfigV1,
+    WeaviateConfigV1,
+    WebhookConfigV1,
+)
 from zephyr_ingest.config.snapshot_v1 import (
     CONFIG_SNAPSHOT_SCHEMA_VERSION,
     BackendSnapshotV1,
@@ -65,8 +72,11 @@ from zephyr_ingest.queue_recover import (
     requeue_local_task,
 )
 from zephyr_ingest.replay_delivery import (
+    ClickHouseReplaySink,
     FanoutReplaySink,
     KafkaReplaySink,
+    OpenSearchReplaySink,
+    S3ReplaySink,
     WeaviateReplaySink,
     WebhookReplaySink,
     replay_delivery_dlq,
@@ -110,16 +120,22 @@ class RunCmd:
     webhook: WebhookConfigV1 | None
     kafka: KafkaConfigV1 | None
     weaviate: WeaviateConfigV1 | None
+    s3: S3ConfigV1 | None
+    opensearch: OpenSearchConfigV1 | None
+    clickhouse: ClickHouseConfigV1 | None
     config_sources: ConfigSourcesV1
 
 
 @dataclass(frozen=True, slots=True)
 class ReplayDeliveryCmd:
     out: str
-    dest: str  # webhook|kafka|weaviate|all
+    dest: str  # webhook|kafka|weaviate|s3|opensearch|clickhouse|all
     webhook: WebhookConfigV1 | None
     kafka: KafkaConfigV1 | None
     weaviate: WeaviateConfigV1 | None
+    s3: S3ConfigV1 | None
+    opensearch: OpenSearchConfigV1 | None
+    clickhouse: ClickHouseConfigV1 | None
     limit: int | None
     dry_run: bool
     move_done: bool
@@ -246,6 +262,9 @@ def _add_runlike_args(*, p: argparse.ArgumentParser, paths_required: bool) -> No
         "destination.webhook.v1",
         "destination.kafka.v1",
         "destination.weaviate.v1",
+        "destination.s3.v1",
+        "destination.opensearch.v1",
+        "destination.clickhouse.v1",
     ]
     specs: list[ConnectorSpecV1] = []
     for spec_id in spec_ids:
@@ -323,12 +342,19 @@ def _build_parser() -> argparse.ArgumentParser:
     replay.add_argument(
         "--dest",
         default="webhook",
-        choices=["webhook", "kafka", "weaviate", "all"],
-        help="Replay destination: webhook, kafka, weaviate, or all",
+        choices=["webhook", "kafka", "weaviate", "s3", "opensearch", "clickhouse", "all"],
+        help="Replay destination: webhook, kafka, weaviate, s3, opensearch, clickhouse, or all",
     )
-    # Spec-driven destination flags for replay (webhook + kafka)
+    # Spec-driven destination flags for replay
     replay_specs: list[ConnectorSpecV1] = []
-    for spec_id in ["destination.webhook.v1", "destination.kafka.v1", "destination.weaviate.v1"]:
+    for spec_id in [
+        "destination.webhook.v1",
+        "destination.kafka.v1",
+        "destination.weaviate.v1",
+        "destination.s3.v1",
+        "destination.opensearch.v1",
+        "destination.clickhouse.v1",
+    ]:
         s = get_spec(spec_id=spec_id)
         if s is None:
             raise RuntimeError(f"missing spec: {spec_id}")
@@ -363,7 +389,16 @@ def _build_parser() -> argparse.ArgumentParser:
         "--only",
         action="append",
         default=[],
-        choices=["all", "webhook", "kafka", "weaviate", "uns-api"],
+        choices=[
+            "all",
+            "webhook",
+            "kafka",
+            "weaviate",
+            "s3",
+            "opensearch",
+            "clickhouse",
+            "uns-api",
+        ],
         help="Limit output to selected blocks (repeatable). Default: all.",
     )
 
@@ -1081,6 +1116,284 @@ def _parse_run_cmd(ns: argparse.Namespace, argv: Sequence[str]) -> RunCmd:
             ("--weaviate-skip-init-checks",), None if wv_file is None else wv_file.skip_init_checks
         )
 
+    # -------------------------
+    # destinations: s3
+    # Enable if bucket is provided either by CLI or FILE.
+    # -------------------------
+    s3_bucket_cli = get_opt_str(ns, "s3_bucket")
+    file_s3 = None if dest_file is None else dest_file.s3
+    s3_bucket = _choose_opt_str(
+        flag="--s3-bucket",
+        cli_val=s3_bucket_cli,
+        file_val=None if file_s3 is None else file_s3.bucket,
+    )
+    s3: S3ConfigV1 | None = None
+    if s3_bucket is not None:
+        s3_region = _choose_opt_str(
+            flag="--s3-region",
+            cli_val=get_opt_str(ns, "s3_region"),
+            file_val=None if file_s3 is None else file_s3.region,
+        )
+        s3_access_key = _choose_opt_str(
+            flag="--s3-access-key",
+            cli_val=get_opt_str(ns, "s3_access_key"),
+            file_val=None if file_s3 is None else file_s3.access_key,
+        )
+        s3_secret_key = _choose_opt_str(
+            flag="--s3-secret-key",
+            cli_val=get_opt_str(ns, "s3_secret_key"),
+            file_val=None if file_s3 is None else file_s3.secret_key,
+        )
+        if s3_region is None or s3_access_key is None or s3_secret_key is None:
+            raise ConfigError(
+                "--s3-region, --s3-access-key, and --s3-secret-key are required when s3 is enabled"
+            )
+        s3 = S3ConfigV1(
+            bucket=s3_bucket,
+            region=s3_region,
+            access_key=s3_access_key,
+            secret_key=s3_secret_key,
+            endpoint_url=_choose_opt_str(
+                flag="--s3-endpoint-url",
+                cli_val=get_opt_str(ns, "s3_endpoint_url"),
+                file_val=None if file_s3 is None else file_s3.endpoint_url,
+            ),
+            session_token=_choose_opt_str(
+                flag="--s3-session-token",
+                cli_val=get_opt_str(ns, "s3_session_token"),
+                file_val=None if file_s3 is None else file_s3.session_token,
+            ),
+            prefix=_choose_str(
+                flag="--s3-prefix",
+                cli_val=get_opt_str(ns, "s3_prefix") or "",
+                file_val=None if file_s3 is None else file_s3.prefix,
+            ),
+            write_mode=_choose_str(
+                flag="--s3-write-mode",
+                cli_val=get_req_str(ns, "s3_write_mode"),
+                file_val=None if file_s3 is None else file_s3.write_mode,
+            ),
+            max_inflight=_choose_opt_int(
+                flag="--s3-max-inflight",
+                cli_val=get_opt_int(ns, "s3_max_inflight"),
+                file_val=None if file_s3 is None else file_s3.max_inflight,
+            ),
+            rate_limit=_choose_opt_float(
+                flag="--s3-rate-limit",
+                cli_val=get_opt_float(ns, "s3_rate_limit"),
+                file_val=None if file_s3 is None else file_s3.rate_limit,
+            ),
+        )
+        sources["destinations.s3.bucket"] = (
+            "cli" if "--s3-bucket" in present else ("file" if file_s3 is not None else "default")
+        )
+        sources["destinations.s3.region"] = _src(
+            "--s3-region", None if file_s3 is None else file_s3.region
+        )
+        sources["destinations.s3.access_key"] = _src(
+            "--s3-access-key", None if file_s3 is None else file_s3.access_key
+        )
+        sources["destinations.s3.secret_key"] = _src(
+            "--s3-secret-key", None if file_s3 is None else file_s3.secret_key
+        )
+        sources["destinations.s3.endpoint_url"] = _src(
+            "--s3-endpoint-url", None if file_s3 is None else file_s3.endpoint_url
+        )
+        sources["destinations.s3.session_token"] = _src(
+            "--s3-session-token", None if file_s3 is None else file_s3.session_token
+        )
+        sources["destinations.s3.prefix"] = _src(
+            "--s3-prefix", None if file_s3 is None else file_s3.prefix
+        )
+        sources["destinations.s3.write_mode"] = _src(
+            "--s3-write-mode", None if file_s3 is None else file_s3.write_mode
+        )
+        sources["destinations.s3.max_inflight"] = _src(
+            "--s3-max-inflight", None if file_s3 is None else file_s3.max_inflight
+        )
+        sources["destinations.s3.rate_limit"] = _src(
+            "--s3-rate-limit", None if file_s3 is None else file_s3.rate_limit
+        )
+
+    # -------------------------
+    # destinations: opensearch
+    # Enable if url is provided either by CLI or FILE.
+    # -------------------------
+    opensearch_url_cli = get_opt_str(ns, "opensearch_url")
+    file_opensearch = None if dest_file is None else dest_file.opensearch
+    opensearch_url = _choose_opt_str(
+        flag="--opensearch-url",
+        cli_val=opensearch_url_cli,
+        file_val=None if file_opensearch is None else file_opensearch.url,
+    )
+    opensearch: OpenSearchConfigV1 | None = None
+    if opensearch_url is not None:
+        opensearch_username = _choose_opt_str(
+            flag="--opensearch-username",
+            cli_val=get_opt_str(ns, "opensearch_username"),
+            file_val=None if file_opensearch is None else file_opensearch.username,
+        )
+        opensearch_password = _choose_opt_str(
+            flag="--opensearch-password",
+            cli_val=get_opt_str(ns, "opensearch_password"),
+            file_val=None if file_opensearch is None else file_opensearch.password,
+        )
+        if (opensearch_username is None) != (opensearch_password is None):
+            raise ConfigError(
+                "--opensearch-username and --opensearch-password must be specified together"
+            )
+        opensearch_index = _choose_opt_str(
+            flag="--opensearch-index",
+            cli_val=get_opt_str(ns, "opensearch_index"),
+            file_val=None if file_opensearch is None else file_opensearch.index,
+        )
+        if opensearch_index is None:
+            raise ConfigError("--opensearch-index is required when opensearch is enabled")
+        opensearch = OpenSearchConfigV1(
+            url=opensearch_url,
+            index=opensearch_index,
+            timeout_s=_choose_float(
+                flag="--opensearch-timeout-s",
+                cli_val=get_float(ns, "opensearch_timeout_s"),
+                file_val=None if file_opensearch is None else file_opensearch.timeout_s,
+            ),
+            skip_tls_verify=_choose_bool(
+                flags=("--opensearch-skip-tls-verify",),
+                cli_val=get_bool(ns, "opensearch_skip_tls_verify"),
+                file_val=None if file_opensearch is None else file_opensearch.skip_tls_verify,
+            ),
+            username=opensearch_username,
+            password=opensearch_password,
+            max_inflight=_choose_opt_int(
+                flag="--opensearch-max-inflight",
+                cli_val=get_opt_int(ns, "opensearch_max_inflight"),
+                file_val=None if file_opensearch is None else file_opensearch.max_inflight,
+            ),
+            rate_limit=_choose_opt_float(
+                flag="--opensearch-rate-limit",
+                cli_val=get_opt_float(ns, "opensearch_rate_limit"),
+                file_val=None if file_opensearch is None else file_opensearch.rate_limit,
+            ),
+        )
+        sources["destinations.opensearch.url"] = (
+            "cli"
+            if "--opensearch-url" in present
+            else ("file" if file_opensearch is not None else "default")
+        )
+        sources["destinations.opensearch.index"] = _src(
+            "--opensearch-index", None if file_opensearch is None else file_opensearch.index
+        )
+        sources["destinations.opensearch.timeout_s"] = _src(
+            "--opensearch-timeout-s", None if file_opensearch is None else file_opensearch.timeout_s
+        )
+        sources["destinations.opensearch.skip_tls_verify"] = _src_bool(
+            ("--opensearch-skip-tls-verify",),
+            None if file_opensearch is None else file_opensearch.skip_tls_verify,
+        )
+        sources["destinations.opensearch.username"] = _src(
+            "--opensearch-username", None if file_opensearch is None else file_opensearch.username
+        )
+        sources["destinations.opensearch.password"] = _src(
+            "--opensearch-password", None if file_opensearch is None else file_opensearch.password
+        )
+        sources["destinations.opensearch.max_inflight"] = _src(
+            "--opensearch-max-inflight",
+            None if file_opensearch is None else file_opensearch.max_inflight,
+        )
+        sources["destinations.opensearch.rate_limit"] = _src(
+            "--opensearch-rate-limit",
+            None if file_opensearch is None else file_opensearch.rate_limit,
+        )
+
+    # -------------------------
+    # destinations: clickhouse
+    # Enable if url is provided either by CLI or FILE.
+    # -------------------------
+    clickhouse_url_cli = get_opt_str(ns, "clickhouse_url")
+    file_clickhouse = None if dest_file is None else dest_file.clickhouse
+    clickhouse_url = _choose_opt_str(
+        flag="--clickhouse-url",
+        cli_val=clickhouse_url_cli,
+        file_val=None if file_clickhouse is None else file_clickhouse.url,
+    )
+    clickhouse: ClickHouseConfigV1 | None = None
+    if clickhouse_url is not None:
+        clickhouse_username = _choose_opt_str(
+            flag="--clickhouse-username",
+            cli_val=get_opt_str(ns, "clickhouse_username"),
+            file_val=None if file_clickhouse is None else file_clickhouse.username,
+        )
+        clickhouse_password = _choose_opt_str(
+            flag="--clickhouse-password",
+            cli_val=get_opt_str(ns, "clickhouse_password"),
+            file_val=None if file_clickhouse is None else file_clickhouse.password,
+        )
+        if (clickhouse_username is None) != (clickhouse_password is None):
+            raise ConfigError(
+                "--clickhouse-username and --clickhouse-password must be specified together"
+            )
+        clickhouse_table = _choose_opt_str(
+            flag="--clickhouse-table",
+            cli_val=get_opt_str(ns, "clickhouse_table"),
+            file_val=None if file_clickhouse is None else file_clickhouse.table,
+        )
+        if clickhouse_table is None:
+            raise ConfigError("--clickhouse-table is required when clickhouse is enabled")
+        clickhouse = ClickHouseConfigV1(
+            url=clickhouse_url,
+            table=clickhouse_table,
+            timeout_s=_choose_float(
+                flag="--clickhouse-timeout-s",
+                cli_val=get_float(ns, "clickhouse_timeout_s"),
+                file_val=None if file_clickhouse is None else file_clickhouse.timeout_s,
+            ),
+            database=_choose_opt_str(
+                flag="--clickhouse-database",
+                cli_val=get_opt_str(ns, "clickhouse_database"),
+                file_val=None if file_clickhouse is None else file_clickhouse.database,
+            ),
+            username=clickhouse_username,
+            password=clickhouse_password,
+            max_inflight=_choose_opt_int(
+                flag="--clickhouse-max-inflight",
+                cli_val=get_opt_int(ns, "clickhouse_max_inflight"),
+                file_val=None if file_clickhouse is None else file_clickhouse.max_inflight,
+            ),
+            rate_limit=_choose_opt_float(
+                flag="--clickhouse-rate-limit",
+                cli_val=get_opt_float(ns, "clickhouse_rate_limit"),
+                file_val=None if file_clickhouse is None else file_clickhouse.rate_limit,
+            ),
+        )
+        sources["destinations.clickhouse.url"] = (
+            "cli"
+            if "--clickhouse-url" in present
+            else ("file" if file_clickhouse is not None else "default")
+        )
+        sources["destinations.clickhouse.table"] = _src(
+            "--clickhouse-table", None if file_clickhouse is None else file_clickhouse.table
+        )
+        sources["destinations.clickhouse.timeout_s"] = _src(
+            "--clickhouse-timeout-s", None if file_clickhouse is None else file_clickhouse.timeout_s
+        )
+        sources["destinations.clickhouse.database"] = _src(
+            "--clickhouse-database", None if file_clickhouse is None else file_clickhouse.database
+        )
+        sources["destinations.clickhouse.username"] = _src(
+            "--clickhouse-username", None if file_clickhouse is None else file_clickhouse.username
+        )
+        sources["destinations.clickhouse.password"] = _src(
+            "--clickhouse-password", None if file_clickhouse is None else file_clickhouse.password
+        )
+        sources["destinations.clickhouse.max_inflight"] = _src(
+            "--clickhouse-max-inflight",
+            None if file_clickhouse is None else file_clickhouse.max_inflight,
+        )
+        sources["destinations.clickhouse.rate_limit"] = _src(
+            "--clickhouse-rate-limit",
+            None if file_clickhouse is None else file_clickhouse.rate_limit,
+        )
+
     return RunCmd(
         paths=get_str_list(ns, "paths"),
         glob=get_req_str(ns, "glob"),
@@ -1111,6 +1424,9 @@ def _parse_run_cmd(ns: argparse.Namespace, argv: Sequence[str]) -> RunCmd:
         webhook=webhook,
         kafka=kafka,
         weaviate=weaviate,
+        s3=s3,
+        opensearch=opensearch,
+        clickhouse=clickhouse,
         config_sources=sources,
     )
 
@@ -1230,6 +1546,9 @@ def _parse_cmd(
         webhook = WebhookConfigV1.from_namespace(ns)
         kafka = KafkaConfigV1.from_namespace(ns)
         weaviate = WeaviateConfigV1.from_namespace(ns)
+        s3 = S3ConfigV1.from_namespace(ns)
+        opensearch = OpenSearchConfigV1.from_namespace(ns)
+        clickhouse = ClickHouseConfigV1.from_namespace(ns)
         # Apply ENV overlay for secrets (CLI explicit still wins because overlay only fills missing)
         weaviate = overlay_weaviate_api_key(weaviate=weaviate)
         if dest in ("webhook", "all") and webhook is None:
@@ -1240,12 +1559,21 @@ def _parse_cmd(
             )
         if dest in ("weaviate", "all") and weaviate is None:
             raise ConfigError("--weaviate-collection is required when --dest includes weaviate")
+        if dest in ("s3", "all") and s3 is None:
+            raise ConfigError("--s3-bucket is required when --dest includes s3")
+        if dest in ("opensearch", "all") and opensearch is None:
+            raise ConfigError("--opensearch-url is required when --dest includes opensearch")
+        if dest in ("clickhouse", "all") and clickhouse is None:
+            raise ConfigError("--clickhouse-url is required when --dest includes clickhouse")
         return ReplayDeliveryCmd(
             out=get_req_str(ns, "out"),
             dest=dest,
             webhook=webhook,
             kafka=kafka,
             weaviate=weaviate,
+            s3=s3,
+            opensearch=opensearch,
+            clickhouse=clickhouse,
             limit=get_opt_int(ns, "limit"),
             dry_run=get_bool(ns, "dry_run"),
             move_done=get_bool(ns, "move_done"),
@@ -1377,6 +1705,30 @@ def _make_kafka_producer_or_exit(brokers: str):
         raise SystemExit(1) from e
 
 
+def _make_s3_writer_or_exit(
+    *,
+    region: str,
+    access_key: str,
+    secret_key: str,
+    endpoint_url: str | None,
+    session_token: str | None,
+):
+    try:
+        from zephyr_ingest.destinations.s3 import make_s3_object_writer
+
+        return make_s3_object_writer(
+            region=region,
+            access_key=access_key,
+            secret_key=secret_key,
+            endpoint_url=endpoint_url,
+            session_token=session_token,
+        )
+    except ImportError as e:
+        logging.error("S3 client not installed: %s", e)
+        logging.error("Install with: uv pip install boto3")
+        raise SystemExit(1) from e
+
+
 def _make_weaviate_collection_or_exit(
     *, cfg: WeaviateConfigV1
 ) -> tuple[WeaviateClientProtocol, "WeaviateCollectionProtocol"]:
@@ -1415,6 +1767,12 @@ def _build_config_snapshot(*, cmd: RunCmd) -> ConfigSnapshotV1:
         destinations["kafka"] = cmd.kafka.to_snapshot_v1()
     if cmd.weaviate is not None:
         destinations["weaviate"] = cmd.weaviate.to_snapshot_v1()
+    if cmd.s3 is not None:
+        destinations["s3"] = cmd.s3.to_snapshot_v1()
+    if cmd.opensearch is not None:
+        destinations["opensearch"] = cmd.opensearch.to_snapshot_v1()
+    if cmd.clickhouse is not None:
+        destinations["clickhouse"] = cmd.clickhouse.to_snapshot_v1()
 
     backend: BackendSnapshotV1
     if cmd.backend == "uns-api":
@@ -1497,6 +1855,64 @@ def _build_destinations(*, cmd: RunCmd) -> tuple[Destination, WeaviateClientProt
                 timeout_s=cmd.weaviate.timeout_s,
                 max_inflight=cmd.weaviate.max_inflight,
                 rate_limit=cmd.weaviate.rate_limit,
+            )
+        )
+
+    if cmd.s3 is not None:
+        from zephyr_ingest.destinations.s3 import S3Destination
+
+        s3_client = _make_s3_writer_or_exit(
+            region=cmd.s3.region,
+            access_key=cmd.s3.access_key,
+            secret_key=cmd.s3.secret_key,
+            endpoint_url=cmd.s3.endpoint_url,
+            session_token=cmd.s3.session_token,
+        )
+        dests.append(
+            S3Destination(
+                bucket=cmd.s3.bucket,
+                region=cmd.s3.region,
+                access_key=cmd.s3.access_key,
+                secret_key=cmd.s3.secret_key,
+                endpoint_url=cmd.s3.endpoint_url,
+                session_token=cmd.s3.session_token,
+                prefix=cmd.s3.prefix,
+                write_mode=cmd.s3.write_mode,
+                client=s3_client,
+                max_inflight=cmd.s3.max_inflight,
+                rate_limit=cmd.s3.rate_limit,
+            )
+        )
+
+    if cmd.opensearch is not None:
+        from zephyr_ingest.destinations.opensearch import OpenSearchDestination
+
+        dests.append(
+            OpenSearchDestination(
+                url=cmd.opensearch.url,
+                index=cmd.opensearch.index,
+                timeout_s=cmd.opensearch.timeout_s,
+                verify_tls=not cmd.opensearch.skip_tls_verify,
+                username=cmd.opensearch.username,
+                password=cmd.opensearch.password,
+                max_inflight=cmd.opensearch.max_inflight,
+                rate_limit=cmd.opensearch.rate_limit,
+            )
+        )
+
+    if cmd.clickhouse is not None:
+        from zephyr_ingest.destinations.clickhouse import ClickHouseDestination
+
+        dests.append(
+            ClickHouseDestination(
+                url=cmd.clickhouse.url,
+                table=cmd.clickhouse.table,
+                database=cmd.clickhouse.database,
+                timeout_s=cmd.clickhouse.timeout_s,
+                username=cmd.clickhouse.username,
+                password=cmd.clickhouse.password,
+                max_inflight=cmd.clickhouse.max_inflight,
+                rate_limit=cmd.clickhouse.rate_limit,
             )
         )
 
@@ -1821,6 +2237,47 @@ def main(argv: Sequence[str] | None = None) -> int:
                     collection_name=cmd.weaviate.collection,
                     collection=collection,
                     max_batch_errors=cmd.weaviate.max_batch_errors,
+                )
+            )
+        if cmd.dest in ("s3", "all"):
+            assert cmd.s3 is not None
+            s3_client = _make_s3_writer_or_exit(
+                region=cmd.s3.region,
+                access_key=cmd.s3.access_key,
+                secret_key=cmd.s3.secret_key,
+                endpoint_url=cmd.s3.endpoint_url,
+                session_token=cmd.s3.session_token,
+            )
+            sinks.append(
+                S3ReplaySink(
+                    bucket=cmd.s3.bucket,
+                    prefix=cmd.s3.prefix,
+                    write_mode=cmd.s3.write_mode,
+                    client=s3_client,
+                )
+            )
+        if cmd.dest in ("opensearch", "all"):
+            assert cmd.opensearch is not None
+            sinks.append(
+                OpenSearchReplaySink(
+                    url=cmd.opensearch.url,
+                    index=cmd.opensearch.index,
+                    timeout_s=cmd.opensearch.timeout_s,
+                    verify_tls=not cmd.opensearch.skip_tls_verify,
+                    username=cmd.opensearch.username,
+                    password=cmd.opensearch.password,
+                )
+            )
+        if cmd.dest in ("clickhouse", "all"):
+            assert cmd.clickhouse is not None
+            sinks.append(
+                ClickHouseReplaySink(
+                    url=cmd.clickhouse.url,
+                    table=cmd.clickhouse.table,
+                    database=cmd.clickhouse.database,
+                    timeout_s=cmd.clickhouse.timeout_s,
+                    username=cmd.clickhouse.username,
+                    password=cmd.clickhouse.password,
                 )
             )
 

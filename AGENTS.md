@@ -289,6 +289,69 @@ First-wave destination connector candidates for P4:
   stay intact; bulk API shaping, refresh/indexing options, and backend-specific request tuning
   remain destination-local
 
+Second-round non-enterprise destination batch for P4 (P4-M13-01):
+- after the current non-enterprise destination set (`filesystem`, `kafka`, `sqlite`, `weaviate`,
+  `webhook`), expand through one controlled breadth batch rather than another single-example
+  connector step
+- the second-round batch is:
+  `s3`-compatible cloud object destination, `opensearch`-compatible search/index destination, and
+  `clickhouse`-compatible warehouse destination
+- this batch is preferred over `nosql` and observability destinations right now because it covers
+  three missing non-enterprise destination categories while still fitting the current shared
+  delivery payload / receipt / replay / idempotency model with bounded local adaptation
+- this batch is meant to pressure the current delivery contract in three distinct ways without
+  re-opening architecture: remote object acknowledgement/version facts, search bulk partial-success
+  outcomes, and warehouse row-batch write outcomes
+
+Shared-contract pressure map for the second-round batch:
+- `s3`-compatible cloud object destination. Retryability pressure: transient network/storage
+  failures stay retryable, while auth/config/policy failures stay non-retryable. `failure_kind` /
+  `error_code` pressure: normalize bucket/container, prefix, auth, size, and object-policy outcomes
+  without leaking SDK-local exception vocabularies. details/summary naming pressure: keep stable
+  object locator, write mode, and version/etag facts in shared receipt details. idempotency /
+  replay pressure: replay must re-drive the same object naming policy and distinguish overwrite
+  conflict vs safe re-put behavior through shared idempotency semantics rather than backend-local
+  shortcuts. operator-facing reporting pressure: operators need bucket/container, prefix, object
+  key, and version/etag facts through existing delivery reporting. Shared vs local: payload
+  ownership, receipt shape, retryability, `failure_kind` / `error_code`, replay compatibility, and
+  reporting stay shared; multipart upload, metadata/header mapping, object naming helpers, and
+  auth/session handling stay destination-local
+- `opensearch`-compatible search/index destination. Retryability pressure: transport and
+  index-backpressure failures may be retryable, while mapping/schema/validation failures stay
+  non-retryable. `failure_kind` / `error_code` pressure: bulk partial failures must collapse into
+  the current shared failure vocabulary instead of leaking backend status names. details/summary
+  naming pressure: receipt details must stabilize index/resource selector, write mode,
+  attempted/accepted/rejected document counts, and representative acknowledgement ids/statuses.
+  idempotency / replay pressure: replay must preserve document identity and write-mode semantics
+  without creating a destination-local replay workflow for refresh or reindex behavior.
+  operator-facing reporting pressure: operators need counts and representative failure classes for
+  partial bulk outcomes without reading raw backend responses. Shared vs local: payload ownership,
+  receipt/details discipline, retryable classification, failure vocabulary, replay compatibility,
+  and operator surfaces stay shared; bulk request shaping, refresh options, routing keys, and
+  backend response parsing stay destination-local
+- `clickhouse`-compatible warehouse destination. Retryability pressure: transient transport or
+  cluster-availability outcomes may be retryable, while schema/type/constraint mismatches stay
+  non-retryable. `failure_kind` / `error_code` pressure: normalize insert, merge, and dedupe-related
+  failures into the current shared vocabulary without creating warehouse-only success/failure
+  states. details/summary naming pressure: receipt details must preserve target table, write mode,
+  attempted/accepted row counts, and any stable batch/part acknowledgement facts that fit the
+  shared receipt model. idempotency / replay pressure: replay must remain safe under append/upsert
+  or dedupe-oriented modes and must not rely on destination-owned staged-load jobs or commit
+  polling in this batch. operator-facing reporting pressure: operators need row-count, table, and
+  write-mode visibility that aligns with current delivery reporting instead of a warehouse-specific
+  dashboard contract. Shared vs local: payload ownership, receipt shape, failure vocabulary,
+  idempotency expectations, replay path, and reporting stay shared; column mapping, insert
+  batching, partitioning, and engine-specific tuning stay destination-local
+
+Deferred non-enterprise destination categories for later P4 work:
+- `nosql` document-store destinations stay deferred until the current batch proves how far shared
+  receipt/details naming and idempotency semantics can stretch without absorbing collection-specific
+  patch/update vocabularies
+- observability destinations stay deferred until it is clear how to avoid blurring Zephyr's own
+  operator/observability surfaces with a destination that speaks telemetry-native protocols
+- enterprise-managed destination families stay out of scope for this batch unless a later change
+  explicitly adds them to the repo architecture
+
 Not first-wave by default:
 - warehouse/bulk-load job destinations that require async manifest upload, staged commit, or
   destination-owned job polling before current receipt/replay semantics are proven sufficient
