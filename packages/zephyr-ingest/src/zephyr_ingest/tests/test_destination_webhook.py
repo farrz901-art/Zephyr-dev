@@ -45,6 +45,7 @@ def test_webhook_retries_on_5xx_then_succeeds(tmp_path: Path) -> None:
 
     receipt = dest(out_root=tmp_path / "out", sha256="abc", meta=_meta(), result=None)
     assert receipt.ok is True
+    assert receipt.failure_retryability == "not_failed"
     assert receipt.details is not None
     assert receipt.details["attempts"] == 2
     assert receipt.details["retryable"] is False
@@ -70,6 +71,17 @@ def test_webhook_does_not_retry_on_4xx(tmp_path: Path) -> None:
 
     receipt = dest(out_root=tmp_path / "out", sha256="abc", meta=_meta(), result=None)
     assert receipt.ok is False
+    assert receipt.failure_retryability == "non_retryable"
+    assert receipt.shared_failure_kind == "client_error"
+    assert receipt.shared_error_code == "ZE-DELIVERY-HTTP-FAILED"
+    assert receipt.shared_summary == {
+        "delivery_outcome": "failed",
+        "failure_retryability": "non_retryable",
+        "failure_kind": "client_error",
+        "error_code": "ZE-DELIVERY-HTTP-FAILED",
+        "attempt_count": 1,
+        "payload_count": 1,
+    }
     assert receipt.details is not None
     assert receipt.details["attempts"] == 1
     assert receipt.details["status_code"] == 400
@@ -97,6 +109,9 @@ def test_webhook_retries_exhausted(tmp_path: Path) -> None:
 
     receipt = dest(out_root=tmp_path / "out", sha256="abc", meta=_meta(), result=None)
     assert receipt.ok is False
+    assert receipt.failure_retryability == "retryable"
+    assert receipt.shared_failure_kind == "server_error"
+    assert receipt.shared_error_code == "ZE-DELIVERY-HTTP-FAILED"
     assert receipt.details is not None
     assert receipt.details["attempts"] == 2
     assert receipt.details["retryable"] is True
@@ -203,6 +218,9 @@ def test_webhook_retries_timeout_failures_and_marks_retryable(
     receipt = dest(out_root=tmp_path / "out", sha256="abc", meta=_meta(), result=None)
 
     assert receipt.ok is False
+    assert receipt.failure_retryability == "retryable"
+    assert receipt.shared_failure_kind == "timeout"
+    assert receipt.shared_error_code == "ZE-DELIVERY-HTTP-FAILED"
     assert receipt.details is not None
     assert receipt.details["attempts"] == 2
     assert receipt.details["exc_type"] == "ReadTimeout"
@@ -239,6 +257,9 @@ def test_webhook_retries_connection_failures_and_marks_retryable(
     receipt = dest(out_root=tmp_path / "out", sha256="abc", meta=_meta(), result=None)
 
     assert receipt.ok is False
+    assert receipt.failure_retryability == "retryable"
+    assert receipt.shared_failure_kind == "connection"
+    assert receipt.shared_error_code == "ZE-DELIVERY-HTTP-FAILED"
     assert receipt.details is not None
     assert receipt.details["attempts"] == 2
     assert receipt.details["exc_type"] == "ConnectError"

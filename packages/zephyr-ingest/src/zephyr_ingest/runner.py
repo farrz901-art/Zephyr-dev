@@ -5,7 +5,7 @@ import json
 import logging
 import time
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, cast
@@ -153,7 +153,7 @@ def _resolve_flow_processor(
 def _write_delivery_receipt(out_dir: Path, receipt: DeliveryReceipt) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "delivery_receipt.json").write_text(
-        json.dumps(asdict(receipt), ensure_ascii=False, indent=2, default=str),
+        json.dumps(receipt.to_dict(), ensure_ascii=False, indent=2, default=str),
         encoding="utf-8",
     )
 
@@ -877,9 +877,10 @@ def run_documents(
             delivery_ok += 1
         else:
             delivery_failed += 1
-            if r.delivery_retryable is True:
+            delivery_retryability = r.delivery_receipt.failure_retryability
+            if delivery_retryability == "retryable":
                 delivery_failed_retryable += 1
-            elif r.delivery_retryable is False:
+            elif delivery_retryability == "non_retryable":
                 delivery_failed_non_retryable += 1
             else:
                 delivery_failed_unknown += 1
@@ -890,18 +891,20 @@ def run_documents(
             ok=r.delivery_receipt.ok,
         )
 
+        shared_error_code = r.delivery_receipt.shared_error_code
+        if shared_error_code not in {"not_failed", "unknown"}:
+            counts_by_error_code[shared_error_code] = (
+                counts_by_error_code.get(shared_error_code, 0) + 1
+            )
+        shared_failure_kind = r.delivery_receipt.shared_failure_kind
+        if shared_failure_kind not in {"not_failed", "unknown"}:
+            _bump_failure_kind_counter(
+                delivery_failure_kinds_by_destination,
+                destination=r.delivery_receipt.destination,
+                failure_kind=shared_failure_kind,
+            )
+
         details_obj: object = r.delivery_receipt.details
-        if isinstance(details_obj, dict):
-            ec = details_obj.get("error_code")
-            if isinstance(ec, str) and ec:
-                counts_by_error_code[ec] = counts_by_error_code.get(ec, 0) + 1
-            failure_kind_obj = details_obj.get("failure_kind")
-            if isinstance(failure_kind_obj, str) and failure_kind_obj:
-                _bump_failure_kind_counter(
-                    delivery_failure_kinds_by_destination,
-                    destination=r.delivery_receipt.destination,
-                    failure_kind=failure_kind_obj,
-                )
 
         # 深入统计 fanout 内部情况
         if r.delivery_receipt.destination == "fanout" and isinstance(details_obj, dict):

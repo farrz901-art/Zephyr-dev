@@ -47,6 +47,15 @@ def test_sqlite_destination_writes_shared_delivery_payload_and_normalized_receip
 
     assert receipt.ok is True
     assert receipt.destination == "sqlite"
+    assert receipt.failure_retryability == "not_failed"
+    assert receipt.shared_summary == {
+        "delivery_outcome": "delivered",
+        "failure_retryability": "not_failed",
+        "failure_kind": "not_failed",
+        "error_code": "not_failed",
+        "attempt_count": 1,
+        "payload_count": 1,
+    }
     assert receipt.details is not None
     assert receipt.details["table"] == "delivery_rows"
     assert receipt.details["operation"] == "upsert_inserted"
@@ -89,6 +98,8 @@ def test_sqlite_destination_preserves_idempotent_upsert_for_same_identity(tmp_pa
 
     assert first.ok is True
     assert second.ok is True
+    assert first.failure_retryability == "not_failed"
+    assert second.failure_retryability == "not_failed"
     assert second.details is not None
     assert second.details["operation"] == "upsert_replaced"
     assert second.details["identity_key"] == f"abc123:{meta.run_id}"
@@ -145,6 +156,11 @@ def test_sqlite_destination_locked_error_is_retryable(monkeypatch: pytest.Monkey
     )
 
     assert receipt.ok is False
+    assert receipt.failure_retryability == "retryable"
+    assert receipt.shared_failure_kind == "locked"
+    assert receipt.shared_error_code == "ZE-DELIVERY-FAILED"
+    assert receipt.shared_summary["attempt_count"] == 1
+    assert receipt.shared_summary["payload_count"] == 1
     assert receipt.details is not None
     assert receipt.details["retryable"] is True
     assert receipt.details["failure_kind"] == "locked"

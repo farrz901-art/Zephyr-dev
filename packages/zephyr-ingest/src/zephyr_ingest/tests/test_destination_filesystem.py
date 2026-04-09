@@ -32,6 +32,15 @@ def test_filesystem_destination_writes_run_meta(tmp_path: Path) -> None:
 
     receipt = dest(out_root=tmp_path / "out", sha256="abc", meta=meta, result=None)
     assert receipt.ok is True
+    assert receipt.failure_retryability == "not_failed"
+    assert receipt.shared_summary == {
+        "delivery_outcome": "delivered",
+        "failure_retryability": "not_failed",
+        "failure_kind": "not_failed",
+        "error_code": "not_failed",
+        "attempt_count": 1,
+        "payload_count": 1,
+    }
 
     assert (tmp_path / "out" / "abc" / "run_meta.json").exists()
 
@@ -69,7 +78,9 @@ def test_filesystem_destination_writes_success_artifacts(tmp_path: Path) -> None
 
     receipt = dest(out_root=tmp_path / "out", sha256="abc", meta=meta, result=result)
     assert receipt.ok is True
+    assert receipt.failure_retryability == "not_failed"
     assert receipt.details == {"out_dir": str(tmp_path / "out" / "abc")}
+    assert receipt.shared_summary["payload_count"] == 1
 
     out_dir = tmp_path / "out" / "abc"
     assert (out_dir / "run_meta.json").exists()
@@ -135,6 +146,7 @@ def test_filesystem_destination_writes_it_stream_artifacts(tmp_path: Path) -> No
     receipt = dest(out_root=tmp_path / "out", sha256="abc-it", meta=meta, result=result)
 
     assert receipt.ok is True
+    assert receipt.failure_retryability == "not_failed"
 
     out_dir = tmp_path / "out" / "abc-it"
     assert (out_dir / "run_meta.json").exists()
