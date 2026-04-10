@@ -206,6 +206,55 @@ Not first-wave by default:
 - message-bus/streaming connectors that would re-open runtime and checkpoint architecture questions
 - vendor-specific connector proliferation before the candidate classes above are proven
 
+First second-round non-enterprise `uns-stream` source batch for P4 (P4-M19-01):
+- after the now-complete second-round `it-stream` breadth, expand `uns-stream` source breadth
+  through one controlled two-source batch rather than another single-example source step
+- the first second-round `uns-stream` source batch is:
+  `s3`-compatible object-storage document collection source and `git`-compatible repository
+  document collection source
+- this batch is preferred over SaaS-docs-style sources right now because both candidates stay
+  document-native, pressure acquisition/provenance/partition-entry semantics in distinct ways, and
+  still fit the current `uns-stream` model without introducing app-owned sync state, account-level
+  workflow semantics, or remote change-token architecture
+- this batch is meant to pressure the current `uns-stream` model in two realistic ways without
+  changing ownership boundaries: remote object listing/version acquisition and repository tree/ref
+  acquisition with document-level provenance
+
+Shared-governance pressure map for the first second-round `uns-stream` source batch:
+- `s3`-compatible object-storage document collection source. acquisition/discovery pressure: prove
+  that bucket/prefix-style listing, stable object selection, and bounded fetch retries can remain
+  source-local while still entering `uns` as document-native work rather than a storage-native job
+  system. provenance/source-identity pressure: preserve bucket, prefix, object key, and stable
+  version facts such as etag/version id or generation markers so document identity remains
+  inspectable and replay-relevant. fetch-to-partition-entry pressure: fetched object bytes must
+  enter the current document partition/normalization path through Zephyr-owned document artifacts,
+  not through storage-client response envelopes or remote-file handles. shared vs local: shared
+  task/provenance/artifact ownership and partition-entry semantics stay in current `uns-stream` and
+  `zephyr-ingest` surfaces; listing pagination, object metadata/header mapping, auth/session
+  handling, and backend fetch tuning stay source-local
+- `git`-compatible repository document collection source. acquisition/discovery pressure: prove
+  that repository/ref/path-rooted document acquisition can fit the current `uns-stream` model when
+  bounded to explicit ref/tree selection rather than long-lived workspace sync or VCS-owned
+  execution state. provenance/source-identity pressure: preserve repository locator, ref/commit
+  identity, relative path, and stable file/blob version facts so document identity and later
+  inspection do not depend on ambient checkout state. fetch-to-partition-entry pressure: repository
+  blobs must enter the existing document partition path as Zephyr-owned document artifacts rather
+  than live working-tree handles or VCS-native patch/diff objects. shared vs local: shared
+  task/provenance/artifact ownership and partition-entry semantics stay shared; clone/fetch
+  strategy, sparse/path filtering, credential handling, ignore rules, and VCS-specific tree/blob
+  adaptation stay source-local
+
+Deferred after the first second-round `uns-stream` source batch:
+- SaaS-docs/document-suite sources remain deferred until the object-store and git-style batch
+  proves how far shared acquisition/provenance/partition-entry semantics can stretch without
+  introducing app-owned sync cursors, tenant/workspace permissions state, or workflow-native
+  document semantics
+- broader remote-content families that require long-lived synchronization, webhook-driven state, or
+  document-app-native delta tokens remain deferred until `uns-stream` has proven a second batch of
+  document-native acquisition without widening its current boundary
+- enterprise-managed document sources remain out of scope unless a later change explicitly adds
+  them to the architecture
+
 First second-round non-enterprise `it-stream` source batch for P4 (P4-M16-01):
 - after the now-complete second-round non-enterprise destination breadth, expand `it-stream` source
   breadth through one controlled two-source batch rather than another single-example step

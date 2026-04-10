@@ -6,8 +6,8 @@ from typing import Literal, Protocol, cast
 from it_stream import normalize_it_input_identity_sha
 from it_stream.service import process_file as process_it_file
 from uns_stream.backends.base import PartitionBackend
-from uns_stream.sources.http_source import normalize_uns_input_identity_sha
-from uns_stream.sources.http_source import process_file as process_uns_file
+from uns_stream.sources import normalize_uns_input_identity_sha
+from uns_stream.sources import process_file as process_uns_file
 from zephyr_core import DocumentRef, PartitionResult, PartitionStrategy
 
 FlowKind = Literal["uns", "it"]
