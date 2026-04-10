@@ -36,6 +36,61 @@ source-specific shortcuts.
   cursor-state continuation is supported, while record-level continuation on that path remains
   blocked unless resumable record timestamps exist.
 
+## Current second-round `it-stream` source breadth
+The current second-round non-enterprise `it-stream` source breadth is explicitly supported as this
+bounded set:
+- `postgresql_incremental_v1`
+- `clickhouse_incremental_v1`
+- `kafka_partition_offset_v1`
+- `mongodb_incremental_v1`
+
+These sources are supported only in the narrow subsets already proven by code and anti-drift tests:
+- `postgresql_incremental_v1`: ordered incremental table reads over one ascending cursor column,
+  explicit selected columns, optional starting cursor, bounded batch size, and shared
+  `cursor_v1` checkpoint/resume behavior
+- `clickhouse_incremental_v1`: ordered incremental warehouse table-query reads over one ascending
+  cursor column, explicit selected columns, optional starting cursor, bounded batch size, and
+  shared `cursor_v1` checkpoint/resume behavior
+- `kafka_partition_offset_v1`: explicit topic plus one partition, ascending offset progression,
+  optional starting offset, bounded batch size, JSON-object payload subset, and shared `cursor_v1`
+  checkpoint/resume behavior
+- `mongodb_incremental_v1`: ordered collection reads over one ascending cursor field, explicit
+  projected fields, optional starting cursor, bounded batch size, and shared `cursor_v1`
+  checkpoint/resume behavior
+
+Across that full second-round breadth, these semantics are currently shared and should be treated
+as the stable batch boundary:
+- task identity is derived from stable source selector plus intended read slice; secrets, transient
+  sessions, and inspect-only toggles must not affect identity
+- progress family stays explicit as `cursor_v1`
+- checkpoint identity stays distinct from task identity
+- lineage remains checkpoint-local: `parent_checkpoint_identity_key` links only the immediate prior
+  checkpoint
+- resume selection and resumed provenance stay explicit and inspectable
+- resumed runs keep the current shared provenance shape: `run_origin="resume"`,
+  `delivery_origin="primary"`, explicit resumed-from checkpoint identity, and explicit cursor
+  continuation
+
+The following semantics remain intentionally source-local and should not be normalized further
+right now:
+- SQL/query shaping, ordering-column selection, and row/document projection details
+- Kafka broker/client construction, partition assignment, JSON decoding, and offset fetch behavior
+- Mongo query/projection shaping, BSON mapping, and local cursor encoding
+- ClickHouse batching/window sizing, query shaping, and engine-specific read tuning
+- PostgreSQL read consistency hints, SQL dialect shaping, and local cursor encoding
+- source-local progress payload fields such as `schema`, `query_mode`, `topic`, `partition`,
+  `last_offset`, `collection`, `cursor_field`, `row_count`, and `document_count`
+
+The following categories or deeper capabilities remain deferred beyond the current P4 support
+boundary:
+- non-cursor progress families
+- CDC, changefeed, oplog-token, or log-native recovery models
+- multi-partition or consumer-group-managed stream reads
+- broader warehouse export/job workflows or staged-query recovery
+- snapshot/session/transaction-owned database recovery semantics
+- additional `it` source families outside the currently listed four-source breadth
+- enterprise-managed source connectors
+
 ## Change discipline
 When changing `it-stream` checkpoint/resume behavior:
 - update this file in the same change if you alter the recovery boundary or the supported recovery

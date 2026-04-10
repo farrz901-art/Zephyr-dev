@@ -40,6 +40,7 @@ class _SourceGovernanceBundle:
     resumed_artifact_kinds: list[str]
     task_identity_key: str
     first_checkpoint_identity_key: str
+    second_checkpoint_parent_checkpoint_identity_key: str | None
     first_progress: dict[str, object]
     second_progress: dict[str, object] | None
     selection_progress_kind: str
@@ -424,6 +425,7 @@ def _run_postgresql_bundle(
         ],
         task_identity_key=artifacts.checkpoint.task_identity_key,
         first_checkpoint_identity_key=first_checkpoint.checkpoint_identity_key,
+        second_checkpoint_parent_checkpoint_identity_key=second_checkpoint.parent_checkpoint_identity_key,
         first_progress=first_checkpoint.progress,
         second_progress=second_checkpoint.progress,
         selection_progress_kind=selection.selected_checkpoint.progress_kind,
@@ -519,6 +521,7 @@ def _run_clickhouse_bundle(
         ],
         task_identity_key=artifacts.checkpoint.task_identity_key,
         first_checkpoint_identity_key=first_checkpoint.checkpoint_identity_key,
+        second_checkpoint_parent_checkpoint_identity_key=second_checkpoint.parent_checkpoint_identity_key,
         first_progress=first_checkpoint.progress,
         second_progress=second_checkpoint.progress,
         selection_progress_kind=selection.selected_checkpoint.progress_kind,
@@ -616,6 +619,7 @@ def _run_kafka_bundle(
         ],
         task_identity_key=artifacts.checkpoint.task_identity_key,
         first_checkpoint_identity_key=first_checkpoint.checkpoint_identity_key,
+        second_checkpoint_parent_checkpoint_identity_key=second_checkpoint.parent_checkpoint_identity_key,
         first_progress=first_checkpoint.progress,
         second_progress=second_checkpoint.progress,
         selection_progress_kind=selection.selected_checkpoint.progress_kind,
@@ -713,6 +717,7 @@ def _run_mongodb_bundle(
         ],
         task_identity_key=artifacts.checkpoint.task_identity_key,
         first_checkpoint_identity_key=first_checkpoint.checkpoint_identity_key,
+        second_checkpoint_parent_checkpoint_identity_key=second_checkpoint.parent_checkpoint_identity_key,
         first_progress=first_checkpoint.progress,
         second_progress=second_checkpoint.progress,
         selection_progress_kind=selection.selected_checkpoint.progress_kind,
@@ -800,6 +805,7 @@ def _run_http_bundle(
         ],
         task_identity_key=artifacts.checkpoint.task_identity_key,
         first_checkpoint_identity_key=first_checkpoint.checkpoint_identity_key,
+        second_checkpoint_parent_checkpoint_identity_key=second_checkpoint.parent_checkpoint_identity_key,
         first_progress=first_checkpoint.progress,
         second_progress=second_checkpoint.progress,
         selection_progress_kind=selection.selected_checkpoint.progress_kind,
@@ -1148,3 +1154,346 @@ def test_second_second_round_source_batch_uses_shared_cursor_governance_and_pres
     )
     assert http_bundle.loaded_resumed_parent_checkpoint_identity_key is None
     assert http_bundle.loaded_resumed_checkpoint_identity_key != http_bundle.task_identity_key
+
+
+def test_full_second_round_source_breadth_shares_cursor_progress_checkpoint_and_resume_boundary(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    postgresql_bundle = _run_postgresql_bundle(
+        monkeypatch=monkeypatch,
+        tmp_path=tmp_path / "postgresql",
+    )
+    clickhouse_bundle = _run_clickhouse_bundle(
+        monkeypatch=monkeypatch,
+        tmp_path=tmp_path / "clickhouse",
+    )
+    kafka_bundle = _run_kafka_bundle(
+        monkeypatch=monkeypatch,
+        tmp_path=tmp_path / "kafka",
+    )
+    mongodb_bundle = _run_mongodb_bundle(
+        monkeypatch=monkeypatch,
+        tmp_path=tmp_path / "mongodb",
+    )
+    http_bundle = _run_http_bundle(
+        monkeypatch=monkeypatch,
+        tmp_path=tmp_path / "http",
+    )
+
+    second_round_breadth = (
+        postgresql_bundle,
+        clickhouse_bundle,
+        kafka_bundle,
+        mongodb_bundle,
+    )
+
+    assert {bundle.backend for bundle in second_round_breadth} == {
+        "postgresql-incremental",
+        "clickhouse-incremental",
+        "kafka-partition-offset",
+        "mongodb-incremental",
+    }
+
+    common_progress_keys = set(postgresql_bundle.first_progress)
+    for bundle in second_round_breadth:
+        assert bundle.initial_artifact_kinds == [
+            "record",
+            "record",
+            "record",
+            "state",
+            "state",
+            "log",
+            "log",
+            "log",
+        ]
+        assert bundle.resumed_artifact_kinds == ["record", "state"]
+        assert bundle.selection_progress_kind == "cursor_v1"
+        assert bundle.continuation_cursor == cast("str", bundle.first_progress["cursor"])
+        assert bundle.first_checkpoint_identity_key != bundle.task_identity_key
+        assert bundle.second_progress is not None
+        assert cast("str", bundle.second_progress["cursor"]) > cast(
+            "str", bundle.first_progress["cursor"]
+        )
+        assert bundle.loaded_resumed_provenance.resume == ItCheckpointResumeProvenanceV1(
+            checkpoint_identity_key=bundle.first_checkpoint_identity_key,
+            progress_kind="cursor_v1",
+            continuation=ItCheckpointResumeCursorContinuationV1(
+                exclusive_after_cursor=bundle.continuation_cursor
+            ),
+        )
+        assert (
+            bundle.loaded_resumed_provenance.resumed_from_checkpoint_identity_key
+            == bundle.first_checkpoint_identity_key
+        )
+        assert bundle.loaded_resumed_checkpoint_identity_key != bundle.task_identity_key
+        assert bundle.loaded_resumed_parent_checkpoint_identity_key is None
+        common_progress_keys &= set(bundle.first_progress)
+
+    assert common_progress_keys == {"connection_name", "cursor", "read_direction"}
+
+    assert postgresql_bundle.first_progress["schema"] == "public"
+    assert postgresql_bundle.first_progress["cursor_column"] == "updated_at"
+    assert "database" not in postgresql_bundle.first_progress
+    assert "read_mode" not in postgresql_bundle.first_progress
+    assert "document_count" not in postgresql_bundle.first_progress
+
+    assert clickhouse_bundle.first_progress["database"] == "analytics"
+    assert clickhouse_bundle.first_progress["query_mode"] == "incremental_table_query"
+    assert clickhouse_bundle.first_progress["cursor_column"] == "event_ts"
+    assert "schema" not in clickhouse_bundle.first_progress
+    assert "read_mode" not in clickhouse_bundle.first_progress
+    assert "document_count" not in clickhouse_bundle.first_progress
+
+    assert kafka_bundle.first_progress["topic"] == "orders.events"
+    assert kafka_bundle.first_progress["partition"] == 2
+    assert kafka_bundle.first_progress["read_mode"] == "explicit_partition_offset"
+    assert kafka_bundle.first_progress["last_offset"] == 10
+    assert "schema" not in kafka_bundle.first_progress
+    assert "database" not in kafka_bundle.first_progress
+    assert "cursor_column" not in kafka_bundle.first_progress
+
+    assert mongodb_bundle.first_progress["database"] == "analytics"
+    assert mongodb_bundle.first_progress["collection"] == "customer_docs"
+    assert mongodb_bundle.first_progress["cursor_field"] == "doc_cursor"
+    assert mongodb_bundle.first_progress["document_count"] == 2
+    assert "schema" not in mongodb_bundle.first_progress
+    assert "topic" not in mongodb_bundle.first_progress
+    assert "read_mode" not in mongodb_bundle.first_progress
+
+    assert http_bundle.selection_progress_kind == "cursor_v1"
+    assert http_bundle.continuation_cursor == cast("str", http_bundle.first_progress["cursor"])
+    assert http_bundle.resumed_artifact_kinds == ["state"]
+    assert http_bundle.loaded_resumed_provenance.resume == ItCheckpointResumeProvenanceV1(
+        checkpoint_identity_key=http_bundle.first_checkpoint_identity_key,
+        progress_kind="cursor_v1",
+        continuation=ItCheckpointResumeCursorContinuationV1(
+            exclusive_after_cursor=http_bundle.continuation_cursor
+        ),
+    )
+
+
+def test_full_second_round_source_breadth_shares_task_identity_lineage_and_provenance_boundary(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    postgresql_bundle = _run_postgresql_bundle(
+        monkeypatch=monkeypatch,
+        tmp_path=tmp_path / "postgresql",
+    )
+    clickhouse_bundle = _run_clickhouse_bundle(
+        monkeypatch=monkeypatch,
+        tmp_path=tmp_path / "clickhouse",
+    )
+    kafka_bundle = _run_kafka_bundle(
+        monkeypatch=monkeypatch,
+        tmp_path=tmp_path / "kafka",
+    )
+    mongodb_bundle = _run_mongodb_bundle(
+        monkeypatch=monkeypatch,
+        tmp_path=tmp_path / "mongodb",
+    )
+    http_bundle = _run_http_bundle(
+        monkeypatch=monkeypatch,
+        tmp_path=tmp_path / "http",
+    )
+
+    second_round_breadth = (
+        postgresql_bundle,
+        clickhouse_bundle,
+        kafka_bundle,
+        mongodb_bundle,
+    )
+
+    assert len({bundle.task_identity_key for bundle in second_round_breadth}) == 4
+
+    for bundle in second_round_breadth:
+        assert bundle.task_identity_key
+        assert bundle.first_checkpoint_identity_key
+        assert bundle.first_checkpoint_identity_key != bundle.task_identity_key
+        assert (
+            bundle.second_checkpoint_parent_checkpoint_identity_key
+            == bundle.first_checkpoint_identity_key
+        )
+        assert bundle.loaded_resumed_provenance == ItCheckpointProvenanceV1(
+            task_identity_key=bundle.task_identity_key,
+            run_origin="resume",
+            delivery_origin="primary",
+            execution_mode="worker",
+            resumed_from_checkpoint_identity_key=bundle.first_checkpoint_identity_key,
+            resume=ItCheckpointResumeProvenanceV1(
+                checkpoint_identity_key=bundle.first_checkpoint_identity_key,
+                progress_kind="cursor_v1",
+                continuation=ItCheckpointResumeCursorContinuationV1(
+                    exclusive_after_cursor=bundle.continuation_cursor
+                ),
+            ),
+        )
+        assert bundle.loaded_resumed_parent_checkpoint_identity_key is None
+        assert bundle.loaded_resumed_checkpoint_identity_key != bundle.task_identity_key
+
+    assert postgresql_bundle.first_progress["schema"] == "public"
+    assert clickhouse_bundle.first_progress["query_mode"] == "incremental_table_query"
+    assert kafka_bundle.first_progress["topic"] == "orders.events"
+    assert mongodb_bundle.first_progress["collection"] == "customer_docs"
+
+    assert http_bundle.task_identity_key
+    assert http_bundle.first_checkpoint_identity_key != http_bundle.task_identity_key
+    assert (
+        http_bundle.second_checkpoint_parent_checkpoint_identity_key
+        == http_bundle.first_checkpoint_identity_key
+    )
+    assert http_bundle.loaded_resumed_provenance == ItCheckpointProvenanceV1(
+        task_identity_key=http_bundle.task_identity_key,
+        run_origin="resume",
+        delivery_origin="primary",
+        execution_mode="worker",
+        resumed_from_checkpoint_identity_key=http_bundle.first_checkpoint_identity_key,
+        resume=ItCheckpointResumeProvenanceV1(
+            checkpoint_identity_key=http_bundle.first_checkpoint_identity_key,
+            progress_kind="cursor_v1",
+            continuation=ItCheckpointResumeCursorContinuationV1(
+                exclusive_after_cursor=http_bundle.continuation_cursor
+            ),
+        ),
+    )
+    assert http_bundle.loaded_resumed_parent_checkpoint_identity_key is None
+    assert http_bundle.loaded_resumed_checkpoint_identity_key != http_bundle.task_identity_key
+
+
+def test_full_second_round_source_breadth_is_architecture_locked_to_shared_it_model(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    postgresql_bundle = _run_postgresql_bundle(
+        monkeypatch=monkeypatch,
+        tmp_path=tmp_path / "postgresql",
+    )
+    clickhouse_bundle = _run_clickhouse_bundle(
+        monkeypatch=monkeypatch,
+        tmp_path=tmp_path / "clickhouse",
+    )
+    kafka_bundle = _run_kafka_bundle(
+        monkeypatch=monkeypatch,
+        tmp_path=tmp_path / "kafka",
+    )
+    mongodb_bundle = _run_mongodb_bundle(
+        monkeypatch=monkeypatch,
+        tmp_path=tmp_path / "mongodb",
+    )
+    http_bundle = _run_http_bundle(
+        monkeypatch=monkeypatch,
+        tmp_path=tmp_path / "http",
+    )
+
+    second_round_breadth = (
+        postgresql_bundle,
+        clickhouse_bundle,
+        kafka_bundle,
+        mongodb_bundle,
+    )
+
+    assert {bundle.source_name for bundle in second_round_breadth} == {
+        "postgresql",
+        "clickhouse",
+        "kafka",
+        "mongodb",
+    }
+    assert {bundle.backend for bundle in second_round_breadth} == {
+        "postgresql-incremental",
+        "clickhouse-incremental",
+        "kafka-partition-offset",
+        "mongodb-incremental",
+    }
+    assert len({bundle.task_identity_key for bundle in second_round_breadth}) == 4
+
+    common_progress_keys = set(postgresql_bundle.first_progress)
+    for bundle in second_round_breadth:
+        assert bundle.initial_artifact_kinds == [
+            "record",
+            "record",
+            "record",
+            "state",
+            "state",
+            "log",
+            "log",
+            "log",
+        ]
+        assert bundle.resumed_artifact_kinds == ["record", "state"]
+        assert bundle.selection_progress_kind == "cursor_v1"
+        assert bundle.continuation_cursor == cast("str", bundle.first_progress["cursor"])
+        assert bundle.first_checkpoint_identity_key != bundle.task_identity_key
+        assert (
+            bundle.second_checkpoint_parent_checkpoint_identity_key
+            == bundle.first_checkpoint_identity_key
+        )
+        assert bundle.loaded_resumed_provenance == ItCheckpointProvenanceV1(
+            task_identity_key=bundle.task_identity_key,
+            run_origin="resume",
+            delivery_origin="primary",
+            execution_mode="worker",
+            resumed_from_checkpoint_identity_key=bundle.first_checkpoint_identity_key,
+            resume=ItCheckpointResumeProvenanceV1(
+                checkpoint_identity_key=bundle.first_checkpoint_identity_key,
+                progress_kind="cursor_v1",
+                continuation=ItCheckpointResumeCursorContinuationV1(
+                    exclusive_after_cursor=bundle.continuation_cursor
+                ),
+            ),
+        )
+        assert bundle.loaded_resumed_parent_checkpoint_identity_key is None
+        assert bundle.loaded_resumed_checkpoint_identity_key != bundle.task_identity_key
+        common_progress_keys &= set(bundle.first_progress)
+
+    assert common_progress_keys == {"connection_name", "cursor", "read_direction"}
+
+    assert postgresql_bundle.first_progress["schema"] == "public"
+    assert postgresql_bundle.first_progress["cursor_column"] == "updated_at"
+    assert "query_mode" not in postgresql_bundle.first_progress
+    assert "topic" not in postgresql_bundle.first_progress
+    assert "collection" not in postgresql_bundle.first_progress
+
+    assert clickhouse_bundle.first_progress["database"] == "analytics"
+    assert clickhouse_bundle.first_progress["query_mode"] == "incremental_table_query"
+    assert "schema" not in clickhouse_bundle.first_progress
+    assert "topic" not in clickhouse_bundle.first_progress
+    assert "collection" not in clickhouse_bundle.first_progress
+
+    assert kafka_bundle.first_progress["topic"] == "orders.events"
+    assert kafka_bundle.first_progress["partition"] == 2
+    assert kafka_bundle.first_progress["read_mode"] == "explicit_partition_offset"
+    assert "schema" not in kafka_bundle.first_progress
+    assert "query_mode" not in kafka_bundle.first_progress
+    assert "collection" not in kafka_bundle.first_progress
+
+    assert mongodb_bundle.first_progress["database"] == "analytics"
+    assert mongodb_bundle.first_progress["collection"] == "customer_docs"
+    assert mongodb_bundle.first_progress["cursor_field"] == "doc_cursor"
+    assert "schema" not in mongodb_bundle.first_progress
+    assert "query_mode" not in mongodb_bundle.first_progress
+    assert "topic" not in mongodb_bundle.first_progress
+
+    assert http_bundle.backend == "http-json-cursor"
+    assert http_bundle.initial_artifact_kinds == ["state", "state", "log", "log", "log", "log"]
+    assert http_bundle.resumed_artifact_kinds == ["state"]
+    assert http_bundle.selection_progress_kind == "cursor_v1"
+    assert http_bundle.continuation_cursor == cast("str", http_bundle.first_progress["cursor"])
+    assert http_bundle.first_checkpoint_identity_key != http_bundle.task_identity_key
+    assert (
+        http_bundle.second_checkpoint_parent_checkpoint_identity_key
+        == http_bundle.first_checkpoint_identity_key
+    )
+    assert http_bundle.loaded_resumed_provenance == ItCheckpointProvenanceV1(
+        task_identity_key=http_bundle.task_identity_key,
+        run_origin="resume",
+        delivery_origin="primary",
+        execution_mode="worker",
+        resumed_from_checkpoint_identity_key=http_bundle.first_checkpoint_identity_key,
+        resume=ItCheckpointResumeProvenanceV1(
+            checkpoint_identity_key=http_bundle.first_checkpoint_identity_key,
+            progress_kind="cursor_v1",
+            continuation=ItCheckpointResumeCursorContinuationV1(
+                exclusive_after_cursor=http_bundle.continuation_cursor
+            ),
+        ),
+    )
