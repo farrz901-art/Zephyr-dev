@@ -18,6 +18,18 @@ from it_stream.sources.http_source import (
     load_http_json_cursor_source_config,
     normalize_http_json_cursor_source_identity_sha,
 )
+from it_stream.sources.kafka_source import (
+    fetch_kafka_partition_source,
+    is_kafka_partition_source_spec,
+    load_kafka_partition_source_config,
+    normalize_kafka_partition_source_identity_sha,
+)
+from it_stream.sources.mongodb_source import (
+    fetch_mongodb_incremental_source,
+    is_mongodb_incremental_source_spec,
+    load_mongodb_incremental_source_config,
+    normalize_mongodb_incremental_source_identity_sha,
+)
 from it_stream.sources.postgresql_source import (
     fetch_postgresql_incremental_source,
     is_postgresql_incremental_source_spec,
@@ -199,6 +211,48 @@ def _load_http_source_input_document(raw: dict[str, object]) -> ItNormalizedInpu
     )
 
 
+def _load_kafka_source_input_document(raw: dict[str, object]) -> ItNormalizedInputDocumentV1:
+    try:
+        config = load_kafka_partition_source_config(raw)
+    except ValueError as err:
+        raise ZephyrError(
+            code=ErrorCode.IO_READ_FAILED,
+            message=str(err),
+            details={"retryable": False, "source_kind": "kafka_partition_offset_v1"},
+        ) from err
+
+    payload = fetch_kafka_partition_source(config=config)
+    return ItNormalizedInputDocumentV1(
+        stream=payload.stream,
+        records=[
+            ItRecordV1(data=record.data, emitted_at=record.cursor) for record in payload.records
+        ],
+        states=[ItStateV1(data=state) for state in payload.states],
+        logs=[ItLogV1(level=level, message=message) for level, message in payload.logs],
+    )
+
+
+def _load_mongodb_source_input_document(raw: dict[str, object]) -> ItNormalizedInputDocumentV1:
+    try:
+        config = load_mongodb_incremental_source_config(raw)
+    except ValueError as err:
+        raise ZephyrError(
+            code=ErrorCode.IO_READ_FAILED,
+            message=str(err),
+            details={"retryable": False, "source_kind": "mongodb_incremental_v1"},
+        ) from err
+
+    payload = fetch_mongodb_incremental_source(config=config)
+    return ItNormalizedInputDocumentV1(
+        stream=payload.stream,
+        records=[
+            ItRecordV1(data=record.data, emitted_at=record.cursor) for record in payload.records
+        ],
+        states=[ItStateV1(data=state) for state in payload.states],
+        logs=[ItLogV1(level=level, message=message) for level, message in payload.logs],
+    )
+
+
 def _load_clickhouse_source_input_document(raw: dict[str, object]) -> ItNormalizedInputDocumentV1:
     try:
         config = load_clickhouse_incremental_source_config(raw)
@@ -249,6 +303,10 @@ def _load_input_document_and_backend(path: Path) -> tuple[ItNormalizedInputDocum
 
     if is_http_json_cursor_source_spec(typed_raw):
         return _load_http_source_input_document(typed_raw), "http-json-cursor"
+    if is_kafka_partition_source_spec(typed_raw):
+        return _load_kafka_source_input_document(typed_raw), "kafka-partition-offset"
+    if is_mongodb_incremental_source_spec(typed_raw):
+        return _load_mongodb_source_input_document(typed_raw), "mongodb-incremental"
     if is_clickhouse_incremental_source_spec(typed_raw):
         return _load_clickhouse_source_input_document(typed_raw), "clickhouse-incremental"
     if is_postgresql_incremental_source_spec(typed_raw):
@@ -279,6 +337,18 @@ def normalize_it_input_identity_sha(*, filename: str, default_sha: str) -> str:
         except ValueError:
             return default_sha
         return normalize_http_json_cursor_source_identity_sha(config=http_config)
+    if is_kafka_partition_source_spec(typed_raw):
+        try:
+            kafka_config = load_kafka_partition_source_config(typed_raw)
+        except ValueError:
+            return default_sha
+        return normalize_kafka_partition_source_identity_sha(config=kafka_config)
+    if is_mongodb_incremental_source_spec(typed_raw):
+        try:
+            mongodb_config = load_mongodb_incremental_source_config(typed_raw)
+        except ValueError:
+            return default_sha
+        return normalize_mongodb_incremental_source_identity_sha(config=mongodb_config)
     if is_clickhouse_incremental_source_spec(typed_raw):
         try:
             clickhouse_config = load_clickhouse_incremental_source_config(typed_raw)

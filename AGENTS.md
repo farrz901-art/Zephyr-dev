@@ -247,16 +247,56 @@ Shared-governance pressure map for the first second-round `it-stream` source bat
   semantics stay shared; warehouse SQL shaping, batching/window sizing, partition pruning, and
   engine-specific read tuning stay source-local
 
-Deferred after the first second-round `it-stream` source batch:
-- `stream` sources such as `kafka`-compatible or `redpanda`-compatible connectors remain deferred
-  until a later P4 change explicitly decides how far Zephyr should own consumer-group offsets,
-  acknowledgement/rebalance semantics, and partition-progress recovery without reopening runtime
-  architecture
-- `nosql` sources such as `mongodb`-compatible document reads remain deferred until the relational
-  and warehouse batch proves how far shared cursor/watermark governance can stretch before Zephyr
-  needs a wider source-progress vocabulary for shard/token/document-order semantics
-- log-based CDC, changefeed, or enterprise-managed database/warehouse connectors remain out of scope
-  for this batch because they would introduce new checkpoint/progress families too early
+Second second-round non-enterprise `it-stream` source batch for P4 (P4-M17-01):
+- after the relational/warehouse batch is completed and architecture-locked, continue `it-stream`
+  breadth through one more controlled two-source batch rather than pivoting early to `uns-stream`
+  planning or returning to one-off source additions
+- the second second-round `it-stream` source batch is:
+  `kafka`-compatible partitioned stream source and `mongodb`-compatible ordered document source
+- this batch is preferred over deferring `stream` or `nosql` again because it covers the two
+  remaining high-value non-enterprise `it` source categories while still allowing Zephyr to stay
+  inside the current task/checkpoint/provenance model when both are bounded to explicit ordered
+  progression, rather than full consumer-group ownership or change-stream token recovery
+- this batch is meant to pressure the current `it-stream` model in two new but grounded ways
+  without changing ownership boundaries: partition/offset progression under explicit slice
+  selection and ordered document progression under stable collection/query selection
+
+Shared-governance pressure map for the second second-round `it-stream` source batch:
+- `kafka`-compatible partitioned stream source. progress-family pressure: prove that bounded
+  partition/offset progression can fit the current explicit progress-family discipline without
+  collapsing Zephyr into broker-owned consumer-group or rebalance state. checkpoint/resume
+  pressure: resume must continue from explicit topic/partition/offset facts and intended slice
+  selection, not from member ids, lease ownership, or opaque broker session state.
+  lineage/provenance pressure: preserve topic, partition set, starting/ending offset facts,
+  ordering mode, and bounded decode/window-selection facts needed to explain what was read.
+  task-identity pressure: derive identity from stable broker/resource selector, topic or
+  subscription selector, partition-selection mode, and intended read slice, never transient
+  consumer-group membership, session generation, or poll timing. shared vs local: shared
+  task/checkpoint/provenance/governance semantics stay in current `it-stream` and
+  `zephyr-ingest` surfaces; broker client construction, rebalance handling, poll tuning,
+  deserialization, and local batching/commit strategy stay source-local
+- `mongodb`-compatible ordered document source. progress-family pressure: prove that ordered
+  document reads can still use the current cursor-family model through stable document watermark or
+  keyset progression rather than introducing oplog/change-stream token families. checkpoint/resume
+  pressure: resume must continue from explicit collection/query selector facts and last confirmed
+  ordering key state, not from driver cursor handles, server sessions, or snapshot transaction
+  state. lineage/provenance pressure: preserve database/collection selector, ordering key,
+  last confirmed document watermark, bounded filter/projection facts, and any stable read-scope
+  facts needed for replay and inspection. task-identity pressure: derive identity from stable
+  connection/resource selector, collection/query selector, ordering/progress mode, and intended
+  read slice, never transient auth/session values or inspect-only driver options. shared vs local:
+  shared task/checkpoint/provenance/governance semantics stay shared; BSON shaping, projection
+  mapping, read concern, query hinting, and local cursor encoding stay source-local
+
+Deferred after the second second-round `it-stream` source batch:
+- log-based CDC, changefeed, or enterprise-managed database/warehouse connectors remain deferred
+  because they still introduce new checkpoint/progress families too early
+- broader streaming variants that require Zephyr-owned consumer-group balancing, cross-partition
+  acknowledgement coordination, or long-lived lease management remain deferred until the
+  `kafka`-style bounded source proves how far explicit partition/offset recovery can stretch
+- wider `nosql` families such as key-value, wide-column, or shard-token-driven connectors remain
+  deferred until the `mongodb`-style ordered document adapter proves how far shared
+  cursor/watermark governance can stretch without widening the source-progress vocabulary
 
 Destination connector expansion:
 - should build on the hardened delivery / receipt / idempotency / replay semantics already in place

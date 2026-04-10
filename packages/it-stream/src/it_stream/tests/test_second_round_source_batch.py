@@ -18,11 +18,18 @@ from it_stream import (
     resume_file,
 )
 from it_stream.artifacts import load_it_checkpoint
-from it_stream.sources import clickhouse_source, http_source, postgresql_source
+from it_stream.sources import (
+    clickhouse_source,
+    http_source,
+    kafka_source,
+    mongodb_source,
+    postgresql_source,
+)
 from zephyr_core import PartitionStrategy
 
 SecondRoundSourceName = Literal["postgresql", "clickhouse"]
-SourceName = Literal["postgresql", "clickhouse", "http"]
+SecondSecondRoundSourceName = Literal["kafka", "mongodb"]
+SourceName = Literal["postgresql", "clickhouse", "kafka", "mongodb", "http"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,6 +103,63 @@ class _FakeClickHouseClient:
             if isinstance(raw_after_cursor, str):
                 after_cursor = raw_after_cursor
         return _FakeClickHouseQueryResult(list(self._pages.get(after_cursor, [])))
+
+    def close(self) -> None:
+        return None
+
+
+class _FakeKafkaMessage:
+    def __init__(self, *, offset: int, value: object) -> None:
+        self._offset = offset
+        self._value = value
+
+    def value(self) -> object:
+        return self._value
+
+    def offset(self) -> int:
+        return self._offset
+
+    def error(self) -> object | None:
+        return None
+
+
+class _FakeKafkaConsumer:
+    def __init__(self, pages: dict[int, list[_FakeKafkaMessage]]) -> None:
+        self._pages = pages
+        self._offset = 0
+
+    def assign(self, partitions: list[kafka_source.KafkaPartitionAssignmentV1]) -> None:
+        self._offset = partitions[0].offset
+
+    def consume(self, num_messages: int, timeout: float) -> list[_FakeKafkaMessage]:
+        del timeout
+        return list(self._pages.get(self._offset, []))[:num_messages]
+
+    def close(self) -> None:
+        return None
+
+
+class _FakeMongoCollectionHandle:
+    def __init__(self, pages: dict[str | None, list[dict[str, object]]]) -> None:
+        self._pages = pages
+
+    def find(
+        self,
+        filter: dict[str, object],
+        projection: dict[str, bool],
+        sort: list[tuple[str, int]],
+        limit: int,
+    ) -> list[dict[str, object]]:
+        del projection
+        del sort
+        after_cursor: str | None = None
+        raw_cursor = filter.get("doc_cursor")
+        if isinstance(raw_cursor, dict):
+            typed_cursor = cast("dict[str, object]", raw_cursor)
+            candidate = typed_cursor.get("$gt")
+            if isinstance(candidate, str):
+                after_cursor = candidate
+        return list(self._pages.get(after_cursor, []))[:limit]
 
     def close(self) -> None:
         return None
@@ -192,6 +256,78 @@ def _write_clickhouse_source_spec(
                 "connection_name": "analytics-primary",
                 "stream": "warehouse_customers",
                 "kind": "clickhouse_incremental_v1",
+            }
+        }
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _write_kafka_source_spec(
+    path: Path,
+    *,
+    brokers: list[str] | None = None,
+    reverse_order: bool = False,
+) -> None:
+    payload = {
+        "source": {
+            "kind": "kafka_partition_offset_v1",
+            "stream": "orders",
+            "connection_name": "events-primary",
+            "brokers": brokers or ["broker-a:9092", "broker-b:9092"],
+            "topic": "orders.events",
+            "partition": 2,
+            "offset_start": 8,
+            "batch_size": 2,
+        }
+    }
+    if reverse_order:
+        payload = {
+            "source": {
+                "batch_size": 2,
+                "offset_start": 8,
+                "partition": 2,
+                "topic": "orders.events",
+                "brokers": brokers or ["broker-b:9092", "broker-a:9092"],
+                "connection_name": "events-primary",
+                "stream": "orders",
+                "kind": "kafka_partition_offset_v1",
+            }
+        }
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _write_mongodb_source_spec(
+    path: Path,
+    *,
+    uri: str = "mongodb://reader:secret@mongo.test:27017/?replicaSet=rs0",
+    reverse_order: bool = False,
+) -> None:
+    payload = {
+        "source": {
+            "kind": "mongodb_incremental_v1",
+            "stream": "customer_docs",
+            "connection_name": "mongo-primary",
+            "uri": uri,
+            "database": "analytics",
+            "collection": "customer_docs",
+            "fields": ["doc_id", "doc_cursor", "segment"],
+            "cursor_field": "doc_cursor",
+            "cursor_start": "cust-0000",
+            "batch_size": 2,
+        }
+    }
+    if reverse_order:
+        payload = {
+            "source": {
+                "batch_size": 2,
+                "cursor_start": "cust-0000",
+                "cursor_field": "doc_cursor",
+                "fields": ["doc_id", "doc_cursor", "segment"],
+                "collection": "customer_docs",
+                "database": "analytics",
+                "uri": uri,
+                "connection_name": "mongo-primary",
+                "stream": "customer_docs",
+                "kind": "mongodb_incremental_v1",
             }
         }
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -374,6 +510,200 @@ def _run_clickhouse_bundle(
 
     return _SourceGovernanceBundle(
         source_name="clickhouse",
+        backend=initial.engine.backend,
+        initial_artifact_kinds=[
+            cast("str", element.metadata["artifact_kind"]) for element in initial.elements
+        ],
+        resumed_artifact_kinds=[
+            cast("str", element.metadata["artifact_kind"]) for element in resumed.elements
+        ],
+        task_identity_key=artifacts.checkpoint.task_identity_key,
+        first_checkpoint_identity_key=first_checkpoint.checkpoint_identity_key,
+        first_progress=first_checkpoint.progress,
+        second_progress=second_checkpoint.progress,
+        selection_progress_kind=selection.selected_checkpoint.progress_kind,
+        continuation_cursor=(
+            "" if selection.continuation is None else selection.continuation.exclusive_after_cursor
+        ),
+        loaded_resumed_provenance=cast("ItCheckpointProvenanceV1", loaded_resumed.provenance),
+        loaded_resumed_checkpoint_identity_key=loaded_resumed.checkpoints[
+            0
+        ].checkpoint_identity_key,
+        loaded_resumed_parent_checkpoint_identity_key=loaded_resumed.checkpoints[
+            0
+        ].parent_checkpoint_identity_key,
+    )
+
+
+def _run_kafka_bundle(
+    *,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> _SourceGovernanceBundle:
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    path = tmp_path / "kafka-source.json"
+    _write_kafka_source_spec(path)
+
+    pages = {
+        9: [
+            _FakeKafkaMessage(offset=9, value={"order_id": "ord-1", "status": "created"}),
+            _FakeKafkaMessage(offset=10, value={"order_id": "ord-2", "status": "paid"}),
+        ],
+        11: [_FakeKafkaMessage(offset=11, value={"order_id": "ord-3", "status": "shipped"})],
+        12: [],
+    }
+
+    def fake_connect(
+        *,
+        config: kafka_source.KafkaPartitionSourceConfigV1,
+    ) -> _FakeKafkaConsumer:
+        assert config.connection_name == "events-primary"
+        assert config.topic == "orders.events"
+        assert config.partition == 2
+        return _FakeKafkaConsumer(pages)
+
+    monkeypatch.setattr(kafka_source, "_connect_kafka_partition_source", fake_connect)
+    identity_sha = normalize_it_input_identity_sha(filename=str(path), default_sha="fallback")
+    initial = process_file(
+        filename=str(path),
+        strategy=PartitionStrategy.AUTO,
+        sha256=identity_sha,
+        size_bytes=path.stat().st_size,
+    )
+    artifacts = dump_it_artifacts(
+        out_dir=tmp_path / "kafka-artifacts",
+        result=initial,
+        pipeline_version="p-kafka",
+    )
+    first_checkpoint, second_checkpoint = artifacts.checkpoint.checkpoints
+    selection = load_it_resume_selection(
+        checkpoint_path=tmp_path / "kafka-artifacts" / "checkpoint.json",
+        pipeline_version="p-kafka",
+        sha256=identity_sha,
+        checkpoint_identity_key=first_checkpoint.checkpoint_identity_key,
+    )
+    resumed = resume_file(
+        filename=str(path),
+        checkpoint_path=tmp_path / "kafka-artifacts" / "checkpoint.json",
+        checkpoint_identity_key=first_checkpoint.checkpoint_identity_key,
+        pipeline_version="p-kafka",
+        strategy=PartitionStrategy.AUTO,
+        sha256=identity_sha,
+        size_bytes=path.stat().st_size,
+    )
+    dump_it_artifacts(
+        out_dir=tmp_path / "kafka-resumed-artifacts",
+        result=resumed,
+        pipeline_version="p-kafka",
+        run_provenance=selection.to_run_provenance(
+            execution_mode="worker",
+            task_id="task-kafka-resume",
+        ),
+        resume_provenance=selection.to_checkpoint_resume_provenance(),
+    )
+    loaded_resumed = load_it_checkpoint(
+        path=tmp_path / "kafka-resumed-artifacts" / "checkpoint.json"
+    )
+
+    return _SourceGovernanceBundle(
+        source_name="kafka",
+        backend=initial.engine.backend,
+        initial_artifact_kinds=[
+            cast("str", element.metadata["artifact_kind"]) for element in initial.elements
+        ],
+        resumed_artifact_kinds=[
+            cast("str", element.metadata["artifact_kind"]) for element in resumed.elements
+        ],
+        task_identity_key=artifacts.checkpoint.task_identity_key,
+        first_checkpoint_identity_key=first_checkpoint.checkpoint_identity_key,
+        first_progress=first_checkpoint.progress,
+        second_progress=second_checkpoint.progress,
+        selection_progress_kind=selection.selected_checkpoint.progress_kind,
+        continuation_cursor=(
+            "" if selection.continuation is None else selection.continuation.exclusive_after_cursor
+        ),
+        loaded_resumed_provenance=cast("ItCheckpointProvenanceV1", loaded_resumed.provenance),
+        loaded_resumed_checkpoint_identity_key=loaded_resumed.checkpoints[
+            0
+        ].checkpoint_identity_key,
+        loaded_resumed_parent_checkpoint_identity_key=loaded_resumed.checkpoints[
+            0
+        ].parent_checkpoint_identity_key,
+    )
+
+
+def _run_mongodb_bundle(
+    *,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> _SourceGovernanceBundle:
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    path = tmp_path / "mongodb-source.json"
+    _write_mongodb_source_spec(path)
+
+    pages: dict[str | None, list[dict[str, object]]] = {
+        "cust-0000": [
+            {"doc_id": "cust-1", "doc_cursor": "cust-0001", "segment": "gold"},
+            {"doc_id": "cust-2", "doc_cursor": "cust-0002", "segment": "silver"},
+        ],
+        "cust-0002": [{"doc_id": "cust-3", "doc_cursor": "cust-0003", "segment": "bronze"}],
+        "cust-0003": [],
+    }
+
+    def fake_connect(
+        *,
+        config: mongodb_source.MongoDBIncrementalSourceConfigV1,
+    ) -> _FakeMongoCollectionHandle:
+        assert config.connection_name == "mongo-primary"
+        assert config.database == "analytics"
+        assert config.collection == "customer_docs"
+        return _FakeMongoCollectionHandle(pages)
+
+    monkeypatch.setattr(mongodb_source, "_connect_mongodb_incremental_source", fake_connect)
+    identity_sha = normalize_it_input_identity_sha(filename=str(path), default_sha="fallback")
+    initial = process_file(
+        filename=str(path),
+        strategy=PartitionStrategy.AUTO,
+        sha256=identity_sha,
+        size_bytes=path.stat().st_size,
+    )
+    artifacts = dump_it_artifacts(
+        out_dir=tmp_path / "mongodb-artifacts",
+        result=initial,
+        pipeline_version="p-mongo",
+    )
+    first_checkpoint, second_checkpoint = artifacts.checkpoint.checkpoints
+    selection = load_it_resume_selection(
+        checkpoint_path=tmp_path / "mongodb-artifacts" / "checkpoint.json",
+        pipeline_version="p-mongo",
+        sha256=identity_sha,
+        checkpoint_identity_key=first_checkpoint.checkpoint_identity_key,
+    )
+    resumed = resume_file(
+        filename=str(path),
+        checkpoint_path=tmp_path / "mongodb-artifacts" / "checkpoint.json",
+        checkpoint_identity_key=first_checkpoint.checkpoint_identity_key,
+        pipeline_version="p-mongo",
+        strategy=PartitionStrategy.AUTO,
+        sha256=identity_sha,
+        size_bytes=path.stat().st_size,
+    )
+    dump_it_artifacts(
+        out_dir=tmp_path / "mongodb-resumed-artifacts",
+        result=resumed,
+        pipeline_version="p-mongo",
+        run_provenance=selection.to_run_provenance(
+            execution_mode="worker",
+            task_id="task-mongo-resume",
+        ),
+        resume_provenance=selection.to_checkpoint_resume_provenance(),
+    )
+    loaded_resumed = load_it_checkpoint(
+        path=tmp_path / "mongodb-resumed-artifacts" / "checkpoint.json"
+    )
+
+    return _SourceGovernanceBundle(
+        source_name="mongodb",
         backend=initial.engine.backend,
         initial_artifact_kinds=[
             cast("str", element.metadata["artifact_kind"]) for element in initial.elements
@@ -638,3 +968,183 @@ def test_first_second_round_source_batch_uses_shared_cursor_governance_and_prese
     assert http_bundle.first_progress["page_number"] == 1
     assert "schema" not in http_bundle.first_progress
     assert "database" not in http_bundle.first_progress
+
+
+def test_second_second_round_source_batch_shares_task_identity_boundary(
+    tmp_path: Path,
+) -> None:
+    observed_identities: dict[SecondSecondRoundSourceName, str] = {}
+
+    kafka_left = tmp_path / "kafka-left.json"
+    kafka_right = tmp_path / "kafka-right.json"
+    kafka_third = tmp_path / "kafka-third.json"
+    _write_kafka_source_spec(kafka_left)
+    _write_kafka_source_spec(
+        kafka_right,
+        brokers=["broker-b:9092", "broker-a:9092"],
+        reverse_order=True,
+    )
+    _write_kafka_source_spec(kafka_third)
+    kafka_third_payload = json.loads(kafka_third.read_text(encoding="utf-8"))
+    kafka_third_payload["source"]["partition"] = 3
+    kafka_third.write_text(
+        json.dumps(kafka_third_payload, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+    first_kafka = normalize_it_input_identity_sha(
+        filename=str(kafka_left),
+        default_sha="fallback-left",
+    )
+    second_kafka = normalize_it_input_identity_sha(
+        filename=str(kafka_right),
+        default_sha="fallback-right",
+    )
+    different_kafka = normalize_it_input_identity_sha(
+        filename=str(kafka_third),
+        default_sha="fallback-third",
+    )
+
+    assert first_kafka == second_kafka
+    assert first_kafka != different_kafka
+    observed_identities["kafka"] = first_kafka
+
+    mongodb_left = tmp_path / "mongodb-left.json"
+    mongodb_right = tmp_path / "mongodb-right.json"
+    mongodb_third = tmp_path / "mongodb-third.json"
+    _write_mongodb_source_spec(mongodb_left)
+    _write_mongodb_source_spec(
+        mongodb_right,
+        uri="mongodb://reader:rotated@mongo.test:27017/?replicaSet=rs0",
+        reverse_order=True,
+    )
+    _write_mongodb_source_spec(mongodb_third)
+    mongodb_third_payload = json.loads(mongodb_third.read_text(encoding="utf-8"))
+    mongodb_third_payload["source"]["cursor_start"] = "cust-0099"
+    mongodb_third.write_text(
+        json.dumps(mongodb_third_payload, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+    first_mongodb = normalize_it_input_identity_sha(
+        filename=str(mongodb_left),
+        default_sha="fallback-left",
+    )
+    second_mongodb = normalize_it_input_identity_sha(
+        filename=str(mongodb_right),
+        default_sha="fallback-right",
+    )
+    different_mongodb = normalize_it_input_identity_sha(
+        filename=str(mongodb_third),
+        default_sha="fallback-third",
+    )
+
+    assert first_mongodb == second_mongodb
+    assert first_mongodb != different_mongodb
+    observed_identities["mongodb"] = first_mongodb
+
+    assert len(set(observed_identities.values())) == 2
+
+
+def test_second_second_round_source_batch_uses_shared_cursor_governance_and_preserves_baselines(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    kafka_bundle = _run_kafka_bundle(
+        monkeypatch=monkeypatch,
+        tmp_path=tmp_path / "kafka",
+    )
+    mongodb_bundle = _run_mongodb_bundle(
+        monkeypatch=monkeypatch,
+        tmp_path=tmp_path / "mongodb",
+    )
+    postgresql_bundle = _run_postgresql_bundle(
+        monkeypatch=monkeypatch,
+        tmp_path=tmp_path / "postgresql",
+    )
+    clickhouse_bundle = _run_clickhouse_bundle(
+        monkeypatch=monkeypatch,
+        tmp_path=tmp_path / "clickhouse",
+    )
+    http_bundle = _run_http_bundle(
+        monkeypatch=monkeypatch,
+        tmp_path=tmp_path / "http",
+    )
+
+    second_round_batch = (kafka_bundle, mongodb_bundle)
+    for bundle in second_round_batch:
+        assert bundle.backend in {"kafka-partition-offset", "mongodb-incremental"}
+        assert bundle.initial_artifact_kinds == [
+            "record",
+            "record",
+            "record",
+            "state",
+            "state",
+            "log",
+            "log",
+            "log",
+        ]
+        assert bundle.resumed_artifact_kinds == ["record", "state"]
+        assert bundle.selection_progress_kind == "cursor_v1"
+        assert bundle.continuation_cursor == cast("str", bundle.first_progress["cursor"])
+        assert bundle.first_checkpoint_identity_key != bundle.task_identity_key
+        assert bundle.second_progress is not None
+        assert cast("str", bundle.second_progress["cursor"]) > cast(
+            "str", bundle.first_progress["cursor"]
+        )
+        assert bundle.loaded_resumed_provenance == ItCheckpointProvenanceV1(
+            task_identity_key=bundle.task_identity_key,
+            run_origin="resume",
+            delivery_origin="primary",
+            execution_mode="worker",
+            resumed_from_checkpoint_identity_key=bundle.first_checkpoint_identity_key,
+            resume=ItCheckpointResumeProvenanceV1(
+                checkpoint_identity_key=bundle.first_checkpoint_identity_key,
+                progress_kind="cursor_v1",
+                continuation=ItCheckpointResumeCursorContinuationV1(
+                    exclusive_after_cursor=bundle.continuation_cursor
+                ),
+            ),
+        )
+        assert bundle.loaded_resumed_parent_checkpoint_identity_key is None
+        assert bundle.loaded_resumed_checkpoint_identity_key != bundle.task_identity_key
+
+    assert kafka_bundle.first_progress["topic"] == "orders.events"
+    assert kafka_bundle.first_progress["partition"] == 2
+    assert kafka_bundle.first_progress["read_mode"] == "explicit_partition_offset"
+    assert "database" not in kafka_bundle.first_progress
+    assert "collection" not in kafka_bundle.first_progress
+
+    assert mongodb_bundle.first_progress["database"] == "analytics"
+    assert mongodb_bundle.first_progress["collection"] == "customer_docs"
+    assert mongodb_bundle.first_progress["cursor_field"] == "doc_cursor"
+    assert "topic" not in mongodb_bundle.first_progress
+    assert "read_mode" not in mongodb_bundle.first_progress
+
+    assert postgresql_bundle.backend == "postgresql-incremental"
+    assert postgresql_bundle.first_progress["schema"] == "public"
+    assert clickhouse_bundle.backend == "clickhouse-incremental"
+    assert clickhouse_bundle.first_progress["query_mode"] == "incremental_table_query"
+
+    assert http_bundle.backend == "http-json-cursor"
+    assert http_bundle.initial_artifact_kinds == ["state", "state", "log", "log", "log", "log"]
+    assert http_bundle.resumed_artifact_kinds == ["state"]
+    assert http_bundle.selection_progress_kind == "cursor_v1"
+    assert http_bundle.continuation_cursor == cast("str", http_bundle.first_progress["cursor"])
+    assert http_bundle.first_checkpoint_identity_key != http_bundle.task_identity_key
+    assert http_bundle.loaded_resumed_provenance == ItCheckpointProvenanceV1(
+        task_identity_key=http_bundle.task_identity_key,
+        run_origin="resume",
+        delivery_origin="primary",
+        execution_mode="worker",
+        resumed_from_checkpoint_identity_key=http_bundle.first_checkpoint_identity_key,
+        resume=ItCheckpointResumeProvenanceV1(
+            checkpoint_identity_key=http_bundle.first_checkpoint_identity_key,
+            progress_kind="cursor_v1",
+            continuation=ItCheckpointResumeCursorContinuationV1(
+                exclusive_after_cursor=http_bundle.continuation_cursor
+            ),
+        ),
+    )
+    assert http_bundle.loaded_resumed_parent_checkpoint_identity_key is None
+    assert http_bundle.loaded_resumed_checkpoint_identity_key != http_bundle.task_identity_key
