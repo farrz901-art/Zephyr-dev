@@ -22,17 +22,32 @@ from zephyr_ingest.delivery_idempotency import (
 )
 from zephyr_ingest.destinations.base import Destination
 from zephyr_ingest.destinations.clickhouse import ClickHouseDestination
+from zephyr_ingest.destinations.filesystem import FilesystemDestination
 from zephyr_ingest.destinations.loki import LokiDestination
 from zephyr_ingest.destinations.mongodb import MongoDBDestination, MongoReplaceResultProtocol
 from zephyr_ingest.destinations.opensearch import OpenSearchDestination
 from zephyr_ingest.destinations.s3 import S3Destination
+from zephyr_ingest.destinations.webhook import DeliveryRetryConfig, WebhookDestination
 from zephyr_ingest.runner import RunnerConfig, run_documents
 
 DestinationName = Literal["s3", "opensearch", "clickhouse"]
 RemainingDestinationName = Literal["mongodb", "loki"]
+FullSecondRoundDestinationName = Literal["s3", "opensearch", "clickhouse", "mongodb", "loki"]
 
 _BATCH_DESTINATIONS: tuple[DestinationName, ...] = ("s3", "opensearch", "clickhouse")
 _REMAINING_BATCH_DESTINATIONS: tuple[RemainingDestinationName, ...] = ("mongodb", "loki")
+_FULL_SECOND_ROUND_DESTINATIONS: tuple[FullSecondRoundDestinationName, ...] = (
+    "s3",
+    "opensearch",
+    "clickhouse",
+    "mongodb",
+    "loki",
+)
+_FULL_SECOND_ROUND_COUNT_DETAIL_DESTINATIONS: tuple[FullSecondRoundDestinationName, ...] = (
+    "opensearch",
+    "mongodb",
+    "loki",
+)
 
 
 @dataclass
@@ -178,6 +193,203 @@ def _assert_primary_provenance(*, payload: dict[str, object], sha256: str) -> No
     assert provenance["task_id"] == sha256
     task_identity_key = provenance.get("task_identity_key")
     assert isinstance(task_identity_key, str)
+
+
+def _run_second_round_delivery_case(
+    *,
+    destination_name: FullSecondRoundDestinationName,
+    tmp_path: Path,
+    failure: bool,
+) -> tuple[dict[str, object], dict[str, object], dict[str, object], dict[str, object]]:
+    case_root = tmp_path / destination_name / ("failure" if failure else "success")
+    case_root.mkdir(parents=True, exist_ok=True)
+    doc = _doc(case_root)
+    out_root = case_root / "out"
+    ctx = RunContext.new(
+        pipeline_version="p4-m15",
+        run_id=f"{destination_name}-batch-{'failure' if failure else 'success'}",
+        timestamp_utc="2026-04-09T00:00:00Z",
+    )
+
+    destination: Destination
+    if destination_name == "s3":
+        destination = S3Destination(
+            bucket="archive",
+            region="us-east-1",
+            access_key="ak",
+            secret_key="sk",
+            prefix="deliveries",
+            client=FakeS3Client(calls=[], exc=FakeS3ServiceError() if failure else None),
+        )
+    elif destination_name == "opensearch":
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            del request
+            if failure:
+                return httpx.Response(
+                    429,
+                    json={"error": {"type": "rejected_execution_exception", "reason": "busy"}},
+                )
+            return httpx.Response(201, json={"result": "created", "_version": 1})
+
+        destination = OpenSearchDestination(
+            url="https://search.example.test",
+            index="zephyr-docs",
+            transport=httpx.MockTransport(handler),
+        )
+    elif destination_name == "clickhouse":
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            del request
+            if failure:
+                return httpx.Response(400, text="DB::Exception: Type mismatch in VALUES section")
+            return httpx.Response(200, text="")
+
+        destination = ClickHouseDestination(
+            url="https://clickhouse.example.test",
+            table="delivery_rows",
+            transport=httpx.MockTransport(handler),
+        )
+    elif destination_name == "mongodb":
+        destination = MongoDBDestination(
+            uri="mongodb://db.example.test",
+            database="zephyr",
+            collection="delivery_records",
+            collection_obj=FakeMongoCollection(
+                calls=[],
+                exc=DuplicateKeyError("E11000 duplicate key error") if failure else None,
+            ),
+        )
+    else:
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            del request
+            if failure:
+                return httpx.Response(429, text="ingester rate limit")
+            return httpx.Response(204, text="")
+
+        destination = LokiDestination(
+            url="https://logs.example.test",
+            stream="delivery",
+            tenant_id="tenant-a",
+            transport=httpx.MockTransport(handler),
+        )
+
+    stats = run_documents(
+        docs=[doc],
+        cfg=RunnerConfig(out_root=out_root, workers=1, destination=destination),
+        ctx=ctx,
+        partition_fn=_ok_partition,
+        destination=destination,
+    )
+    assert stats.total == 1
+    assert stats.success == 1
+    assert stats.failed == 0
+
+    out_dir = _single_output_dir(out_root=out_root)
+    receipt = _read_json(out_dir / "delivery_receipt.json")
+    summary_obj = receipt.get("summary")
+    assert isinstance(summary_obj, dict)
+    summary = cast(dict[str, object], summary_obj)
+    details_obj = receipt.get("details")
+    assert isinstance(details_obj, dict)
+    details = cast(dict[str, object], details_obj)
+    report = _read_json(out_root / "batch_report.json")
+    delivery_obj = report.get("delivery")
+    assert isinstance(delivery_obj, dict)
+    delivery = cast(dict[str, object], delivery_obj)
+    return summary, details, delivery, report
+
+
+def _run_filesystem_success_baseline(
+    *,
+    tmp_path: Path,
+) -> tuple[dict[str, object], dict[str, object], dict[str, object], dict[str, object]]:
+    case_root = tmp_path / "baseline" / "filesystem" / "success"
+    case_root.mkdir(parents=True, exist_ok=True)
+    doc = _doc(case_root)
+    out_root = case_root / "out"
+    destination = FilesystemDestination()
+    ctx = RunContext.new(
+        pipeline_version="p4-m15",
+        run_id="filesystem-baseline-success",
+        timestamp_utc="2026-04-09T00:00:00Z",
+    )
+
+    stats = run_documents(
+        docs=[doc],
+        cfg=RunnerConfig(out_root=out_root, workers=1, destination=destination),
+        ctx=ctx,
+        partition_fn=_ok_partition,
+        destination=destination,
+    )
+    assert stats.total == 1
+    assert stats.success == 1
+    assert stats.failed == 0
+
+    out_dir = _single_output_dir(out_root=out_root)
+    receipt = _read_json(out_dir / "delivery_receipt.json")
+    summary_obj = receipt.get("summary")
+    assert isinstance(summary_obj, dict)
+    summary = cast(dict[str, object], summary_obj)
+    details_obj = receipt.get("details")
+    assert isinstance(details_obj, dict)
+    details = cast(dict[str, object], details_obj)
+    report = _read_json(out_root / "batch_report.json")
+    delivery_obj = report.get("delivery")
+    assert isinstance(delivery_obj, dict)
+    delivery = cast(dict[str, object], delivery_obj)
+    return summary, details, delivery, report
+
+
+def _run_webhook_failure_baseline(
+    *,
+    tmp_path: Path,
+) -> tuple[dict[str, object], dict[str, object], dict[str, object], dict[str, object]]:
+    case_root = tmp_path / "baseline" / "webhook" / "failure"
+    case_root.mkdir(parents=True, exist_ok=True)
+    doc = _doc(case_root)
+    out_root = case_root / "out"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        del request
+        return httpx.Response(429, text="retry later")
+
+    destination = WebhookDestination(
+        url="https://hooks.example.test",
+        transport=httpx.MockTransport(handler),
+        retry=DeliveryRetryConfig(enabled=False),
+    )
+    ctx = RunContext.new(
+        pipeline_version="p4-m15",
+        run_id="webhook-baseline-failure",
+        timestamp_utc="2026-04-09T00:00:00Z",
+    )
+
+    stats = run_documents(
+        docs=[doc],
+        cfg=RunnerConfig(out_root=out_root, workers=1, destination=destination),
+        ctx=ctx,
+        partition_fn=_ok_partition,
+        destination=destination,
+    )
+    assert stats.total == 1
+    assert stats.success == 1
+    assert stats.failed == 0
+
+    out_dir = _single_output_dir(out_root=out_root)
+    receipt = _read_json(out_dir / "delivery_receipt.json")
+    summary_obj = receipt.get("summary")
+    assert isinstance(summary_obj, dict)
+    summary = cast(dict[str, object], summary_obj)
+    details_obj = receipt.get("details")
+    assert isinstance(details_obj, dict)
+    details = cast(dict[str, object], details_obj)
+    report = _read_json(out_root / "batch_report.json")
+    delivery_obj = report.get("delivery")
+    assert isinstance(delivery_obj, dict)
+    delivery = cast(dict[str, object], delivery_obj)
+    return summary, details, delivery, report
 
 
 @pytest.mark.parametrize("destination_name", _BATCH_DESTINATIONS)
@@ -825,3 +1037,188 @@ def test_remaining_second_round_destinations_integrate_runner_failure_reporting_
         assert details["line_count"] == 1
         assert details["accepted_count"] == 0
         assert details["rejected_count"] == 1
+
+
+def test_full_second_round_destination_batch_preserves_operator_facing_summary_boundary(
+    tmp_path: Path,
+) -> None:
+    for destination_name in _FULL_SECOND_ROUND_DESTINATIONS:
+        (
+            success_summary,
+            success_details,
+            success_delivery,
+            success_report,
+        ) = _run_second_round_delivery_case(
+            destination_name=destination_name,
+            tmp_path=tmp_path,
+            failure=False,
+        )
+        (
+            failure_summary,
+            failure_details,
+            failure_delivery,
+            failure_report,
+        ) = _run_second_round_delivery_case(
+            destination_name=destination_name,
+            tmp_path=tmp_path,
+            failure=True,
+        )
+
+        assert success_summary == {
+            "delivery_outcome": "delivered",
+            "failure_retryability": "not_failed",
+            "failure_kind": "not_failed",
+            "error_code": "not_failed",
+            "attempt_count": 1,
+            "payload_count": 1,
+        }
+        assert success_delivery["total"] == 1
+        assert success_delivery["ok"] == 1
+        assert success_delivery["failed"] == 0
+        assert success_delivery["failed_retryable"] == 0
+        assert success_delivery["failed_non_retryable"] == 0
+        assert success_delivery["failed_unknown"] == 0
+        success_by_destination_obj = success_delivery.get("by_destination")
+        assert isinstance(success_by_destination_obj, dict)
+        success_by_destination = cast(dict[str, object], success_by_destination_obj)
+        assert success_by_destination[destination_name] == {"total": 1, "ok": 1, "failed": 0}
+        assert success_report["counts_by_error_code"] == {}
+
+        assert set(failure_summary) == {
+            "delivery_outcome",
+            "failure_retryability",
+            "failure_kind",
+            "error_code",
+            "attempt_count",
+            "payload_count",
+        }
+        assert failure_summary["delivery_outcome"] == "failed"
+        assert failure_summary["attempt_count"] == 1
+        assert failure_summary["payload_count"] == 1
+        assert failure_summary["error_code"] == str(ErrorCode.DELIVERY_FAILED)
+        assert failure_delivery["total"] == 1
+        assert failure_delivery["ok"] == 0
+        assert failure_delivery["failed"] == 1
+        failure_by_destination_obj = failure_delivery.get("by_destination")
+        assert isinstance(failure_by_destination_obj, dict)
+        failure_by_destination = cast(dict[str, object], failure_by_destination_obj)
+        assert failure_by_destination[destination_name] == {"total": 1, "ok": 0, "failed": 1}
+        failure_kinds_obj = failure_delivery.get("failure_kinds_by_destination")
+        assert isinstance(failure_kinds_obj, dict)
+        failure_kinds = cast(dict[str, object], failure_kinds_obj)
+        assert failure_kinds[destination_name] == {cast(str, failure_summary["failure_kind"]): 1}
+        assert failure_report["counts_by_error_code"] == {str(ErrorCode.DELIVERY_FAILED): 1}
+        if failure_summary["failure_retryability"] == "retryable":
+            assert failure_delivery["failed_retryable"] == 1
+            assert failure_delivery["failed_non_retryable"] == 0
+            assert failure_delivery["failed_unknown"] == 0
+        else:
+            assert failure_delivery["failed_retryable"] == 0
+            assert failure_delivery["failed_non_retryable"] == 1
+            assert failure_delivery["failed_unknown"] == 0
+
+        if destination_name in _FULL_SECOND_ROUND_COUNT_DETAIL_DESTINATIONS:
+            assert success_details["accepted_count"] == 1
+            assert success_details["rejected_count"] == 0
+            assert failure_details["accepted_count"] == 0
+            assert failure_details["rejected_count"] == 1
+        else:
+            assert "accepted_count" not in success_details
+            assert "rejected_count" not in success_details
+            assert "accepted_count" not in failure_details
+            assert "rejected_count" not in failure_details
+
+
+def test_full_second_round_batch_stays_within_established_shared_delivery_model(
+    tmp_path: Path,
+) -> None:
+    (
+        filesystem_summary,
+        filesystem_details,
+        filesystem_delivery,
+        filesystem_report,
+    ) = _run_filesystem_success_baseline(tmp_path=tmp_path)
+    (
+        webhook_summary,
+        webhook_details,
+        webhook_delivery,
+        webhook_report,
+    ) = _run_webhook_failure_baseline(tmp_path=tmp_path)
+
+    assert filesystem_summary == {
+        "delivery_outcome": "delivered",
+        "failure_retryability": "not_failed",
+        "failure_kind": "not_failed",
+        "error_code": "not_failed",
+        "attempt_count": 1,
+        "payload_count": 1,
+    }
+    assert "out_dir" in filesystem_details
+    filesystem_by_destination_obj = filesystem_delivery.get("by_destination")
+    assert isinstance(filesystem_by_destination_obj, dict)
+    filesystem_by_destination = cast(dict[str, object], filesystem_by_destination_obj)
+    assert filesystem_by_destination["filesystem"] == {"total": 1, "ok": 1, "failed": 0}
+    assert filesystem_report["counts_by_error_code"] == {}
+
+    assert set(webhook_summary) == set(filesystem_summary)
+    assert webhook_summary["delivery_outcome"] == "failed"
+    assert webhook_summary["failure_retryability"] == "retryable"
+    assert webhook_summary["failure_kind"] == "rate_limited"
+    assert webhook_summary["error_code"] == str(ErrorCode.DELIVERY_HTTP_FAILED)
+    assert webhook_details["retryable"] is True
+    assert webhook_details["failure_kind"] == "rate_limited"
+    webhook_by_destination_obj = webhook_delivery.get("by_destination")
+    assert isinstance(webhook_by_destination_obj, dict)
+    webhook_by_destination = cast(dict[str, object], webhook_by_destination_obj)
+    assert webhook_by_destination["webhook"] == {"total": 1, "ok": 0, "failed": 1}
+    assert webhook_report["counts_by_error_code"] == {str(ErrorCode.DELIVERY_HTTP_FAILED): 1}
+
+    for destination_name in _FULL_SECOND_ROUND_DESTINATIONS:
+        (
+            success_summary,
+            _success_details,
+            success_delivery,
+            success_report,
+        ) = _run_second_round_delivery_case(
+            destination_name=destination_name,
+            tmp_path=tmp_path / "second_round",
+            failure=False,
+        )
+        (
+            failure_summary,
+            failure_details,
+            failure_delivery,
+            failure_report,
+        ) = _run_second_round_delivery_case(
+            destination_name=destination_name,
+            tmp_path=tmp_path / "second_round",
+            failure=True,
+        )
+
+        assert success_summary == filesystem_summary
+        assert set(failure_summary) == set(webhook_summary)
+        assert failure_summary["error_code"] == str(ErrorCode.DELIVERY_FAILED)
+        assert failure_summary["error_code"] != webhook_summary["error_code"]
+
+        success_by_destination_obj = success_delivery.get("by_destination")
+        assert isinstance(success_by_destination_obj, dict)
+        success_by_destination = cast(dict[str, object], success_by_destination_obj)
+        assert success_by_destination[destination_name] == {
+            "total": 1,
+            "ok": 1,
+            "failed": 0,
+        }
+        failure_by_destination_obj = failure_delivery.get("by_destination")
+        assert isinstance(failure_by_destination_obj, dict)
+        failure_by_destination = cast(dict[str, object], failure_by_destination_obj)
+        assert failure_by_destination[destination_name] == {
+            "total": 1,
+            "ok": 0,
+            "failed": 1,
+        }
+        assert success_report["counts_by_error_code"] == filesystem_report["counts_by_error_code"]
+        assert failure_report["counts_by_error_code"] == {str(ErrorCode.DELIVERY_FAILED): 1}
+
+        assert failure_details["retryable"] == (
+            failure_summary["failure_retryability"] == "retryable"
+        )
