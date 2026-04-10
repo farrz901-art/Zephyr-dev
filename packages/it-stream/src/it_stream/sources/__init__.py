@@ -1,3 +1,13 @@
+from it_stream.sources.clickhouse_source import (
+    CLICKHOUSE_INCREMENTAL_SOURCE_KIND,
+    ClickHouseIncrementalSourceConfigV1,
+    ClickHouseIncrementalSourceDocumentV1,
+    ClickHouseIncrementalSourceRecordV1,
+    fetch_clickhouse_incremental_source,
+    is_clickhouse_incremental_source_spec,
+    load_clickhouse_incremental_source_config,
+    normalize_clickhouse_incremental_source_identity_sha,
+)
 from it_stream.sources.http_source import (
     HTTP_JSON_CURSOR_SOURCE_KIND,
     HttpJsonCursorSourceConfigV1,
@@ -7,13 +17,39 @@ from it_stream.sources.http_source import (
     load_http_json_cursor_source_config,
     normalize_http_json_cursor_source_identity_sha,
 )
+from it_stream.sources.postgresql_source import (
+    POSTGRESQL_INCREMENTAL_SOURCE_KIND,
+    PostgresqlIncrementalSourceConfigV1,
+    PostgresqlIncrementalSourceDocumentV1,
+    PostgresqlIncrementalSourceRecordV1,
+    fetch_postgresql_incremental_source,
+    is_postgresql_incremental_source_spec,
+    load_postgresql_incremental_source_config,
+    normalize_postgresql_incremental_source_identity_sha,
+)
 
 __all__ = [
+    "CLICKHOUSE_INCREMENTAL_SOURCE_KIND",
+    "ClickHouseIncrementalSourceConfigV1",
+    "ClickHouseIncrementalSourceDocumentV1",
+    "ClickHouseIncrementalSourceRecordV1",
     "HTTP_JSON_CURSOR_SOURCE_KIND",
     "HttpJsonCursorSourceConfigV1",
     "HttpJsonCursorSourceDocumentV1",
+    "POSTGRESQL_INCREMENTAL_SOURCE_KIND",
+    "PostgresqlIncrementalSourceConfigV1",
+    "PostgresqlIncrementalSourceDocumentV1",
+    "PostgresqlIncrementalSourceRecordV1",
+    "fetch_clickhouse_incremental_source",
     "fetch_http_json_cursor_source",
+    "fetch_postgresql_incremental_source",
+    "is_clickhouse_incremental_source_spec",
     "is_http_json_cursor_source_spec",
+    "is_postgresql_incremental_source_spec",
+    "load_clickhouse_incremental_source_config",
     "load_http_json_cursor_source_config",
+    "load_postgresql_incremental_source_config",
+    "normalize_clickhouse_incremental_source_identity_sha",
     "normalize_http_json_cursor_source_identity_sha",
+    "normalize_postgresql_incremental_source_identity_sha",
 ]

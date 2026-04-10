@@ -6,11 +6,23 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import cast
 
+from it_stream.sources.clickhouse_source import (
+    fetch_clickhouse_incremental_source,
+    is_clickhouse_incremental_source_spec,
+    load_clickhouse_incremental_source_config,
+    normalize_clickhouse_incremental_source_identity_sha,
+)
 from it_stream.sources.http_source import (
     fetch_http_json_cursor_source,
     is_http_json_cursor_source_spec,
     load_http_json_cursor_source_config,
     normalize_http_json_cursor_source_identity_sha,
+)
+from it_stream.sources.postgresql_source import (
+    fetch_postgresql_incremental_source,
+    is_postgresql_incremental_source_spec,
+    load_postgresql_incremental_source_config,
+    normalize_postgresql_incremental_source_identity_sha,
 )
 from zephyr_core import (
     DocumentMetadata,
@@ -187,6 +199,48 @@ def _load_http_source_input_document(raw: dict[str, object]) -> ItNormalizedInpu
     )
 
 
+def _load_clickhouse_source_input_document(raw: dict[str, object]) -> ItNormalizedInputDocumentV1:
+    try:
+        config = load_clickhouse_incremental_source_config(raw)
+    except ValueError as err:
+        raise ZephyrError(
+            code=ErrorCode.IO_READ_FAILED,
+            message=str(err),
+            details={"retryable": False, "source_kind": "clickhouse_incremental_v1"},
+        ) from err
+
+    payload = fetch_clickhouse_incremental_source(config=config)
+    return ItNormalizedInputDocumentV1(
+        stream=payload.stream,
+        records=[
+            ItRecordV1(data=record.data, emitted_at=record.cursor) for record in payload.records
+        ],
+        states=[ItStateV1(data=state) for state in payload.states],
+        logs=[ItLogV1(level=level, message=message) for level, message in payload.logs],
+    )
+
+
+def _load_postgresql_source_input_document(raw: dict[str, object]) -> ItNormalizedInputDocumentV1:
+    try:
+        config = load_postgresql_incremental_source_config(raw)
+    except ValueError as err:
+        raise ZephyrError(
+            code=ErrorCode.IO_READ_FAILED,
+            message=str(err),
+            details={"retryable": False, "source_kind": "postgresql_incremental_v1"},
+        ) from err
+
+    payload = fetch_postgresql_incremental_source(config=config)
+    return ItNormalizedInputDocumentV1(
+        stream=payload.stream,
+        records=[
+            ItRecordV1(data=record.data, emitted_at=record.cursor) for record in payload.records
+        ],
+        states=[ItStateV1(data=state) for state in payload.states],
+        logs=[ItLogV1(level=level, message=message) for level, message in payload.logs],
+    )
+
+
 def _load_input_document_and_backend(path: Path) -> tuple[ItNormalizedInputDocumentV1, str]:
     raw = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(raw, dict):
@@ -195,6 +249,10 @@ def _load_input_document_and_backend(path: Path) -> tuple[ItNormalizedInputDocum
 
     if is_http_json_cursor_source_spec(typed_raw):
         return _load_http_source_input_document(typed_raw), "http-json-cursor"
+    if is_clickhouse_incremental_source_spec(typed_raw):
+        return _load_clickhouse_source_input_document(typed_raw), "clickhouse-incremental"
+    if is_postgresql_incremental_source_spec(typed_raw):
+        return _load_postgresql_source_input_document(typed_raw), "postgresql-incremental"
     if "messages" in typed_raw:
         return _load_message_input_document(typed_raw), "airbyte-message-json"
     return _load_legacy_input_document(typed_raw), "airbyte-message-json"
@@ -215,14 +273,25 @@ def normalize_it_input_identity_sha(*, filename: str, default_sha: str) -> str:
     if not isinstance(raw, dict):
         return default_sha
     typed_raw = cast("dict[str, object]", raw)
-    if not is_http_json_cursor_source_spec(typed_raw):
-        return default_sha
-
-    try:
-        config = load_http_json_cursor_source_config(typed_raw)
-    except ValueError:
-        return default_sha
-    return normalize_http_json_cursor_source_identity_sha(config=config)
+    if is_http_json_cursor_source_spec(typed_raw):
+        try:
+            http_config = load_http_json_cursor_source_config(typed_raw)
+        except ValueError:
+            return default_sha
+        return normalize_http_json_cursor_source_identity_sha(config=http_config)
+    if is_clickhouse_incremental_source_spec(typed_raw):
+        try:
+            clickhouse_config = load_clickhouse_incremental_source_config(typed_raw)
+        except ValueError:
+            return default_sha
+        return normalize_clickhouse_incremental_source_identity_sha(config=clickhouse_config)
+    if is_postgresql_incremental_source_spec(typed_raw):
+        try:
+            postgresql_config = load_postgresql_incremental_source_config(typed_raw)
+        except ValueError:
+            return default_sha
+        return normalize_postgresql_incremental_source_identity_sha(config=postgresql_config)
+    return default_sha
 
 
 def partition_input_document(

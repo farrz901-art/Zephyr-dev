@@ -206,6 +206,58 @@ Not first-wave by default:
 - message-bus/streaming connectors that would re-open runtime and checkpoint architecture questions
 - vendor-specific connector proliferation before the candidate classes above are proven
 
+First second-round non-enterprise `it-stream` source batch for P4 (P4-M16-01):
+- after the now-complete second-round non-enterprise destination breadth, expand `it-stream` source
+  breadth through one controlled two-source batch rather than another single-example step
+- the first second-round `it-stream` source batch is:
+  `postgresql`-compatible relational incremental table source and `clickhouse`-compatible warehouse
+  incremental query source
+- this batch is preferred over `stream` and `nosql` source categories right now because both
+  candidates pressure the current `it-stream` governance model through ordered watermark/keyset
+  progression that still fits the already-proven cursor/checkpoint/resume subset, while avoiding an
+  immediate re-open of consumer-group/ack/rebalance or partition-token/shard-recovery architecture
+- this batch is meant to pressure the current `it-stream` model in two distinct but realistic ways
+  without changing its ownership boundaries: relational row-window progression under stable table
+  ordering and warehouse batch-window progression under stable query slice ordering
+
+Shared-governance pressure map for the first second-round `it-stream` source batch:
+- `postgresql`-compatible relational incremental table source. progress-family pressure: prove that
+  ordered relational progress can stay in the current cursor-family model using stable keyset or
+  watermark progression rather than introducing CDC-log or trigger-native progress families.
+  checkpoint/resume pressure: resume must continue from explicit ordered table-selection facts and
+  checkpoint cursor state, not from connection-local transaction handles or server-session state.
+  lineage/provenance pressure: preserve schema/table selector, ordering column set, last confirmed
+  cursor or watermark, read direction, and bounded filter/snapshot facts needed to explain which
+  rows were selected. task-identity pressure: derive identity from stable connection/resource
+  selector, table or query-spec selector, ordering/progress mode, and intended read slice, never
+  transient credentials, session parameters, or inspect-only SQL hints. shared vs local: shared
+  task/checkpoint/provenance/governance semantics stay in current `it-stream` and `zephyr-ingest`
+  surfaces; SQL dialect shaping, pagination query text, consistency/read-mode hints, and local
+  cursor encoding stay source-local
+- `clickhouse`-compatible warehouse incremental query source. progress-family pressure: prove that
+  warehouse-style batch-window reads can still fit the current cursor-family model when the source
+  advances through stable ordered query slices rather than destination-owned bulk-export jobs or
+  async manifest workflows. checkpoint/resume pressure: resume must restart from explicit query
+  slice boundaries and stable watermark/key facts, not ephemeral query ids, server-side cursors, or
+  background job state. lineage/provenance pressure: preserve database/table or query-resource
+  selector, watermark/window bounds, ordering facts, and any stable partition/cluster read facts
+  needed for replay and inspection. task-identity pressure: derive identity from stable warehouse
+  resource selector plus intended read slice and progress mode, never transient execution settings
+  or opportunistic tuning flags. shared vs local: shared checkpoint/provenance/reporting/recovery
+  semantics stay shared; warehouse SQL shaping, batching/window sizing, partition pruning, and
+  engine-specific read tuning stay source-local
+
+Deferred after the first second-round `it-stream` source batch:
+- `stream` sources such as `kafka`-compatible or `redpanda`-compatible connectors remain deferred
+  until a later P4 change explicitly decides how far Zephyr should own consumer-group offsets,
+  acknowledgement/rebalance semantics, and partition-progress recovery without reopening runtime
+  architecture
+- `nosql` sources such as `mongodb`-compatible document reads remain deferred until the relational
+  and warehouse batch proves how far shared cursor/watermark governance can stretch before Zephyr
+  needs a wider source-progress vocabulary for shard/token/document-order semantics
+- log-based CDC, changefeed, or enterprise-managed database/warehouse connectors remain out of scope
+  for this batch because they would introduce new checkpoint/progress families too early
+
 Destination connector expansion:
 - should build on the hardened delivery / receipt / idempotency / replay semantics already in place
 - should not introduce destination-specific shortcuts around the shared delivery path
