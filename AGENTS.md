@@ -255,6 +255,58 @@ Deferred after the first second-round `uns-stream` source batch:
 - enterprise-managed document sources remain out of scope unless a later change explicitly adds
   them to the architecture
 
+Second second-round non-enterprise `uns-stream` source batch for P4 (P4-M20-01):
+- after the object-store and git-style batch is completed and architecture-locked, continue
+  `uns-stream` breadth through one more controlled two-source batch rather than pivoting away from
+  document-native source expansion or returning to one-off source additions
+- the second second-round `uns-stream` source batch is:
+  `google-drive`-compatible cloud document-suite file source and `confluence`-compatible
+  knowledge-space document source
+- this batch is preferred over other remaining document-native candidates right now because it
+  covers the next two high-value non-enterprise `uns` source families, pressures the current
+  acquisition/provenance/partition-entry model through app-native document identities and bounded
+  export/page-version facts, and can still be implemented as explicit snapshot-style document
+  selection rather than long-lived sync, webhook, or app-owned delta-token architecture
+- this batch is meant to pressure the current `uns-stream` model in two new but grounded ways
+  without changing ownership boundaries: document-suite export/download acquisition under stable
+  file/revision identity and knowledge-space page acquisition under stable page/version identity
+
+Shared-governance pressure map for the second second-round `uns-stream` source batch:
+- `google-drive`-compatible cloud document-suite file source. acquisition/discovery pressure:
+  prove that bounded drive/folder/file selection, explicit export-or-download mode, and stable
+  file discovery can remain source-local while still entering `uns` as document-native work rather
+  than as a sync client or workspace mirror. provenance/source-identity pressure: preserve drive or
+  workspace locator, file id, parent/folder selection facts, stable revision/version markers, and
+  chosen export mime where Zephyr owns it so document identity remains inspectable and replay-
+  relevant without depending on ambient OAuth session state. fetch-to-partition-entry pressure:
+  downloaded or exported bytes must enter the current document partition path through Zephyr-owned
+  document artifacts, not through provider-native response envelopes or app-specific file handles.
+  shared vs local: shared task/provenance/artifact ownership and partition-entry semantics stay
+  shared; OAuth/session handling, folder traversal, export-format mapping, permission-scoped
+  discovery, and provider pagination stay source-local
+- `confluence`-compatible knowledge-space document source. acquisition/discovery pressure: prove
+  that explicit site/space/page-rooted acquisition and bounded child-page or attachment discovery
+  can fit the current `uns-stream` model when kept snapshot-oriented rather than becoming a wiki
+  sync engine or webhook-driven content mirror. provenance/source-identity pressure: preserve site
+  locator, space key, page id, stable page version, relative content selection facts, and any
+  bounded attachment identity needed to explain what content was read without relying on mutable UI
+  paths alone. fetch-to-partition-entry pressure: page bodies, rendered exports, or attachment bytes
+  must enter the existing document partition path as Zephyr-owned document artifacts rather than
+  live app-session objects, page trees, or provider-specific payload dumps. shared vs local: shared
+  task/provenance/artifact ownership and partition-entry semantics stay shared; page expansion,
+  attachment download strategy, auth/session handling, ancestor traversal, and provider-specific
+  content rendering adaptation stay source-local
+
+Deferred after the second second-round `uns-stream` source batch:
+- block-native workspace/document tools that lack stable exported revision identity across all
+  document types remain deferred until the drive- and knowledge-space-style batch proves how far
+  shared provenance can stretch without widening the current `uns` contract
+- broader remote-content families that require long-lived sync cursors, webhook-owned change state,
+  or conversation/timeline semantics such as email, chat, or ticket-native sources remain deferred
+  because they still pressure `uns-stream` toward a source-state platform too early
+- enterprise-managed knowledge/content systems remain out of scope unless a later change explicitly
+  adds them to the architecture
+
 First second-round non-enterprise `it-stream` source batch for P4 (P4-M16-01):
 - after the now-complete second-round non-enterprise destination breadth, expand `it-stream` source
   breadth through one controlled two-source batch rather than another single-example step

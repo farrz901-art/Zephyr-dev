@@ -5,7 +5,13 @@ from pathlib import Path
 from typing import cast
 
 from uns_stream.backends.base import PartitionBackend
-from uns_stream.sources import git_source, http_source, s3_source
+from uns_stream.sources import (
+    confluence_source,
+    git_source,
+    google_drive_source,
+    http_source,
+    s3_source,
+)
 from zephyr_core import PartitionResult, PartitionStrategy
 
 
@@ -42,6 +48,16 @@ def normalize_uns_input_identity_sha(*, filename: str, default_sha: str) -> str:
         )
     if source_kind == git_source.GIT_DOCUMENT_SOURCE_KIND:
         return git_source.normalize_uns_input_identity_sha(
+            filename=filename,
+            default_sha=default_sha,
+        )
+    if source_kind == google_drive_source.GOOGLE_DRIVE_DOCUMENT_SOURCE_KIND:
+        return google_drive_source.normalize_uns_input_identity_sha(
+            filename=filename,
+            default_sha=default_sha,
+        )
+    if source_kind == confluence_source.CONFLUENCE_DOCUMENT_SOURCE_KIND:
+        return confluence_source.normalize_uns_input_identity_sha(
             filename=filename,
             default_sha=default_sha,
         )
@@ -82,6 +98,28 @@ def process_file(
             sha256=sha256,
             size_bytes=size_bytes,
         )
+    if source_kind == google_drive_source.GOOGLE_DRIVE_DOCUMENT_SOURCE_KIND:
+        return google_drive_source.process_file(
+            filename=filename,
+            strategy=strategy,
+            unique_element_ids=unique_element_ids,
+            backend=backend,
+            run_id=run_id,
+            pipeline_version=pipeline_version,
+            sha256=sha256,
+            size_bytes=size_bytes,
+        )
+    if source_kind == confluence_source.CONFLUENCE_DOCUMENT_SOURCE_KIND:
+        return confluence_source.process_file(
+            filename=filename,
+            strategy=strategy,
+            unique_element_ids=unique_element_ids,
+            backend=backend,
+            run_id=run_id,
+            pipeline_version=pipeline_version,
+            sha256=sha256,
+            size_bytes=size_bytes,
+        )
     return http_source.process_file(
         filename=filename,
         strategy=strategy,
@@ -95,7 +133,9 @@ def process_file(
 
 
 __all__ = [
+    "confluence_source",
     "git_source",
+    "google_drive_source",
     "http_source",
     "normalize_uns_input_identity_sha",
     "process_file",

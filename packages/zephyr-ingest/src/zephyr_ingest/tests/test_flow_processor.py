@@ -4,6 +4,7 @@ import json
 import sqlite3
 from pathlib import Path
 from typing import cast
+from urllib.request import Request
 
 import pytest
 
@@ -12,7 +13,9 @@ from it_stream import (
     normalize_it_task_identity_key,
 )
 from it_stream.sources import http_source as it_http_source
+from uns_stream.sources import confluence_source as uns_confluence_source
 from uns_stream.sources import git_source as uns_git_source
+from uns_stream.sources import google_drive_source as uns_google_drive_source
 from uns_stream.sources import http_source as uns_http_source
 from uns_stream.sources import s3_source as uns_s3_source
 from zephyr_core import (
@@ -784,6 +787,311 @@ def test_runner_routes_git_document_source_specs_through_uns_execution_chain(
     assert elements[0]["metadata"]["fetched_mime_type"] == "text/plain"
 
 
+def test_runner_routes_google_drive_document_source_specs_through_uns_execution_chain(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    spec_path = tmp_path / "source.json"
+    spec_path.write_text(
+        json.dumps(
+            {
+                "source": {
+                    "kind": "google_drive_document_v1",
+                    "file_id": "file-123",
+                    "drive_id": "drive-1",
+                    "acquisition_mode": "export",
+                    "export_mime_type": "application/pdf",
+                    "access_token": "token-a",
+                }
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    class _FakeResponse:
+        headers = {
+            "Content-Type": "application/pdf",
+            "Content-Disposition": 'attachment; filename="report.pdf"',
+            "ETag": '"etag-1"',
+        }
+
+        def read(self) -> bytes:
+            return b"drive hello"
+
+        def __enter__(self) -> _FakeResponse:
+            return self
+
+        def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+            return None
+
+    def fake_urlopen(request: object, timeout: float = 10.0) -> object:
+        del timeout
+        typed_request = cast("Request", request)
+        assert (
+            typed_request.full_url == "https://www.googleapis.com/drive/v3/files/file-123/export"
+            "?mimeType=application%2Fpdf&supportsAllDrives=true"
+        )
+        assert typed_request.headers["Authorization"] == "Bearer token-a"
+        assert typed_request.headers["Accept"] == "application/pdf"
+        return _FakeResponse()
+
+    def fake_auto_partition(
+        *,
+        filename: str,
+        strategy: PartitionStrategy = PartitionStrategy.AUTO,
+        unique_element_ids: bool = True,
+        backend: object | None = None,
+        run_id: str | None = None,
+        pipeline_version: str | None = None,
+        sha256: str | None = None,
+        size_bytes: int | None = None,
+    ) -> PartitionResult:
+        del strategy, unique_element_ids, backend, run_id, pipeline_version
+        fetched_path = Path(filename)
+        assert fetched_path.read_bytes() == b"drive hello"
+        return PartitionResult(
+            document=DocumentMetadata(
+                filename=fetched_path.name,
+                mime_type="application/pdf",
+                sha256=sha256 or "temp-sha",
+                size_bytes=size_bytes or 0,
+                created_at_utc="2026-01-01T00:00:00Z",
+            ),
+            engine=EngineInfo(
+                name="unstructured",
+                backend="test",
+                version="0",
+                strategy=PartitionStrategy.AUTO,
+            ),
+            elements=[
+                ZephyrElement(
+                    element_id="e1",
+                    type="NarrativeText",
+                    text="drive hello",
+                    metadata={"kind": "text"},
+                )
+            ],
+            normalized_text="drive hello",
+            warnings=[],
+        )
+
+    monkeypatch.setattr(uns_google_drive_source, "urlopen", fake_urlopen)
+    monkeypatch.setattr(uns_google_drive_source, "auto_partition", fake_auto_partition)
+
+    doc = DocumentRef(
+        uri=str(spec_path),
+        source="local_file",
+        discovered_at_utc="2026-01-01T00:00:00Z",
+        filename="source.json",
+        extension=".json",
+        size_bytes=spec_path.stat().st_size,
+    )
+    ctx = RunContext.new(
+        pipeline_version="p-drive", run_id="r-drive", timestamp_utc="2026-01-01T00:00:00Z"
+    )
+    cfg = RunnerConfig(
+        out_root=tmp_path / "out",
+        workers=1,
+        destination=FilesystemDestination(),
+    )
+
+    stats = run_documents(
+        docs=[doc],
+        cfg=cfg,
+        ctx=ctx,
+        flow_kind="uns",
+        destination=FilesystemDestination(),
+    )
+
+    expected_sha = normalize_flow_input_identity_sha(
+        flow_kind="uns",
+        filename=str(spec_path),
+        default_sha=sha256_file(spec_path),
+    )
+
+    assert stats.total == 1
+    assert stats.success == 1
+    out_dir = tmp_path / "out" / expected_sha
+    run_meta = json.loads((out_dir / "run_meta.json").read_text(encoding="utf-8"))
+    elements = json.loads((out_dir / "elements.json").read_text(encoding="utf-8"))
+
+    assert run_meta["document"]["filename"] == "report.pdf"
+    assert run_meta["document"]["mime_type"] == "application/pdf"
+    assert run_meta["document"]["sha256"] == expected_sha
+    assert run_meta["provenance"]["task_identity_key"] == normalize_uns_task_idempotency_key(
+        identity=TaskIdentityV1(
+            pipeline_version="p-drive",
+            sha256=expected_sha,
+        )
+    )
+    assert elements[0]["metadata"]["source_kind"] == "google_drive_document_v1"
+    assert elements[0]["metadata"]["source_file_id"] == "file-123"
+    assert elements[0]["metadata"]["source_drive_id"] == "drive-1"
+    assert elements[0]["metadata"]["source_acquisition_mode"] == "export"
+    assert elements[0]["metadata"]["source_export_mime_type"] == "application/pdf"
+    assert elements[0]["metadata"]["source_etag"] == '"etag-1"'
+    assert elements[0]["metadata"]["fetched_filename"] == "report.pdf"
+    assert elements[0]["metadata"]["fetched_mime_type"] == "application/pdf"
+
+
+def test_runner_routes_confluence_document_source_specs_through_uns_execution_chain(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    spec_path = tmp_path / "source.json"
+    spec_path.write_text(
+        json.dumps(
+            {
+                "source": {
+                    "kind": "confluence_document_v1",
+                    "site_url": "https://example.atlassian.net",
+                    "page_id": "12345",
+                    "space_key": "ENG",
+                    "page_version": 7,
+                    "access_token": "token-a",
+                }
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    class _FakeResponse:
+        def read(self) -> bytes:
+            return json.dumps(
+                {
+                    "title": "Product Spec",
+                    "space": {"key": "ENG"},
+                    "version": {"number": 7},
+                    "body": {"storage": {"value": "<p>hello confluence</p>"}},
+                },
+                ensure_ascii=False,
+            ).encode("utf-8")
+
+        def __enter__(self) -> _FakeResponse:
+            return self
+
+        def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+            return None
+
+    def fake_urlopen(request: object, timeout: float = 10.0) -> object:
+        del timeout
+        typed_request = request if isinstance(request, Request) else None
+        assert typed_request is not None
+        assert (
+            typed_request.full_url == "https://example.atlassian.net/wiki/rest/api/content/12345"
+            "?expand=space,version,body.storage"
+        )
+        assert typed_request.headers["Authorization"] == "Bearer token-a"
+        assert typed_request.headers["Accept"] == "application/json"
+        return _FakeResponse()
+
+    def fake_auto_partition(
+        *,
+        filename: str,
+        strategy: PartitionStrategy = PartitionStrategy.AUTO,
+        unique_element_ids: bool = True,
+        backend: object | None = None,
+        run_id: str | None = None,
+        pipeline_version: str | None = None,
+        sha256: str | None = None,
+        size_bytes: int | None = None,
+    ) -> PartitionResult:
+        del strategy, unique_element_ids, backend, run_id, pipeline_version
+        fetched_path = Path(filename)
+        assert fetched_path.read_text(encoding="utf-8") == "<p>hello confluence</p>"
+        return PartitionResult(
+            document=DocumentMetadata(
+                filename=fetched_path.name,
+                mime_type="text/html",
+                sha256=sha256 or "temp-sha",
+                size_bytes=size_bytes or 0,
+                created_at_utc="2026-01-01T00:00:00Z",
+            ),
+            engine=EngineInfo(
+                name="unstructured",
+                backend="test",
+                version="0",
+                strategy=PartitionStrategy.AUTO,
+            ),
+            elements=[
+                ZephyrElement(
+                    element_id="e1",
+                    type="NarrativeText",
+                    text="hello confluence",
+                    metadata={"kind": "text"},
+                )
+            ],
+            normalized_text="hello confluence",
+            warnings=[],
+        )
+
+    monkeypatch.setattr(uns_confluence_source, "urlopen", fake_urlopen)
+    monkeypatch.setattr(uns_confluence_source, "auto_partition", fake_auto_partition)
+
+    doc = DocumentRef(
+        uri=str(spec_path),
+        source="local_file",
+        discovered_at_utc="2026-01-01T00:00:00Z",
+        filename="source.json",
+        extension=".json",
+        size_bytes=spec_path.stat().st_size,
+    )
+    ctx = RunContext.new(
+        pipeline_version="p-confluence",
+        run_id="r-confluence",
+        timestamp_utc="2026-01-01T00:00:00Z",
+    )
+    cfg = RunnerConfig(
+        out_root=tmp_path / "out",
+        workers=1,
+        destination=FilesystemDestination(),
+    )
+
+    stats = run_documents(
+        docs=[doc],
+        cfg=cfg,
+        ctx=ctx,
+        flow_kind="uns",
+        destination=FilesystemDestination(),
+    )
+
+    expected_sha = normalize_flow_input_identity_sha(
+        flow_kind="uns",
+        filename=str(spec_path),
+        default_sha=sha256_file(spec_path),
+    )
+
+    assert stats.total == 1
+    assert stats.success == 1
+    out_dir = tmp_path / "out" / expected_sha
+    run_meta = json.loads((out_dir / "run_meta.json").read_text(encoding="utf-8"))
+    elements = json.loads((out_dir / "elements.json").read_text(encoding="utf-8"))
+
+    assert run_meta["document"]["filename"] == "product-spec.html"
+    assert run_meta["document"]["mime_type"] == "text/html"
+    assert run_meta["document"]["sha256"] == expected_sha
+    assert run_meta["provenance"]["task_identity_key"] == normalize_uns_task_idempotency_key(
+        identity=TaskIdentityV1(
+            pipeline_version="p-confluence",
+            sha256=expected_sha,
+        )
+    )
+    assert elements[0]["metadata"]["source_kind"] == "confluence_document_v1"
+    assert elements[0]["metadata"]["source_site_url"] == "https://example.atlassian.net"
+    assert elements[0]["metadata"]["source_page_id"] == "12345"
+    assert elements[0]["metadata"]["source_space_key"] == "ENG"
+    assert elements[0]["metadata"]["source_requested_page_version"] == 7
+    assert elements[0]["metadata"]["source_page_version"] == 7
+    assert elements[0]["metadata"]["source_body_format"] == "storage"
+    assert elements[0]["metadata"]["source_page_title"] == "Product Spec"
+    assert elements[0]["metadata"]["fetched_filename"] == "product-spec.html"
+    assert elements[0]["metadata"]["fetched_mime_type"] == "text/html"
+
+
 def test_runner_routes_second_round_uns_source_batch_through_shared_execution_chain(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -1062,6 +1370,310 @@ def test_runner_routes_second_round_uns_source_batch_through_shared_execution_ch
         assert elements[0]["metadata"]["source_kind"] == expected_source_kinds[name]
         assert elements[0]["metadata"]["fetched_filename"] == expected_filenames[name]
         assert elements[0]["metadata"]["fetched_mime_type"] == "text/plain"
+        for key, value in expected_metadata[name].items():
+            assert elements[0]["metadata"][key] == value
+
+
+def test_runner_routes_second_second_round_uns_source_batch_through_shared_execution_chain(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    http_spec = tmp_path / "http-source.json"
+    drive_spec = tmp_path / "drive-source.json"
+    confluence_spec = tmp_path / "confluence-source.json"
+
+    http_spec.write_text(
+        json.dumps(
+            {
+                "source": {
+                    "kind": "http_document_v1",
+                    "url": "https://example.test/docs/http-report.txt",
+                    "accept": "text/plain",
+                }
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    drive_spec.write_text(
+        json.dumps(
+            {
+                "source": {
+                    "kind": "google_drive_document_v1",
+                    "file_id": "file-123",
+                    "drive_id": "drive-1",
+                    "acquisition_mode": "export",
+                    "export_mime_type": "application/pdf",
+                    "access_token": "token-a",
+                }
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    confluence_spec.write_text(
+        json.dumps(
+            {
+                "source": {
+                    "kind": "confluence_document_v1",
+                    "site_url": "https://example.atlassian.net",
+                    "page_id": "12345",
+                    "space_key": "ENG",
+                    "page_version": 7,
+                    "access_token": "token-a",
+                }
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    class _FakeHttpResponse:
+        headers = {"Content-Type": "text/plain; charset=utf-8"}
+
+        def read(self) -> bytes:
+            return b"http hello"
+
+        def __enter__(self) -> _FakeHttpResponse:
+            return self
+
+        def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+            return None
+
+    class _FakeDriveResponse:
+        headers = {
+            "Content-Type": "application/pdf",
+            "Content-Disposition": 'attachment; filename="report.pdf"',
+            "ETag": '"etag-1"',
+        }
+
+        def read(self) -> bytes:
+            return b"drive hello"
+
+        def __enter__(self) -> _FakeDriveResponse:
+            return self
+
+        def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+            return None
+
+    class _FakeConfluenceResponse:
+        def read(self) -> bytes:
+            return json.dumps(
+                {
+                    "title": "Product Spec",
+                    "space": {"key": "ENG"},
+                    "version": {"number": 7},
+                    "body": {"storage": {"value": "<p>hello confluence</p>"}},
+                },
+                ensure_ascii=False,
+            ).encode("utf-8")
+
+        def __enter__(self) -> _FakeConfluenceResponse:
+            return self
+
+        def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+            return None
+
+    def fake_http_urlopen(request: object, timeout: float = 10.0) -> object:
+        del timeout
+        assert getattr(request, "full_url") == "https://example.test/docs/http-report.txt"
+        return _FakeHttpResponse()
+
+    def fake_drive_urlopen(request: object, timeout: float = 10.0) -> object:
+        del timeout
+        typed_request = request if isinstance(request, Request) else None
+        assert typed_request is not None
+        assert (
+            typed_request.full_url == "https://www.googleapis.com/drive/v3/files/file-123/export"
+            "?mimeType=application%2Fpdf&supportsAllDrives=true"
+        )
+        return _FakeDriveResponse()
+
+    def fake_confluence_urlopen(request: object, timeout: float = 10.0) -> object:
+        del timeout
+        typed_request = request if isinstance(request, Request) else None
+        assert typed_request is not None
+        assert (
+            typed_request.full_url == "https://example.atlassian.net/wiki/rest/api/content/12345"
+            "?expand=space,version,body.storage"
+        )
+        return _FakeConfluenceResponse()
+
+    def fake_uns_auto_partition(
+        *,
+        filename: str,
+        strategy: PartitionStrategy = PartitionStrategy.AUTO,
+        unique_element_ids: bool = True,
+        backend: object | None = None,
+        run_id: str | None = None,
+        pipeline_version: str | None = None,
+        sha256: str | None = None,
+        size_bytes: int | None = None,
+    ) -> PartitionResult:
+        del strategy, unique_element_ids, backend, run_id, pipeline_version
+        fetched_path = Path(filename)
+        if fetched_path.suffix == ".pdf":
+            text = "drive hello"
+            mime_type = "application/pdf"
+        elif fetched_path.suffix == ".html":
+            text = fetched_path.read_text(encoding="utf-8")
+            mime_type = "text/html"
+        else:
+            text = fetched_path.read_text(encoding="utf-8")
+            mime_type = "text/plain"
+        return PartitionResult(
+            document=DocumentMetadata(
+                filename=fetched_path.name,
+                mime_type=mime_type,
+                sha256=sha256 or "temp-sha",
+                size_bytes=size_bytes or 0,
+                created_at_utc="2026-01-01T00:00:00Z",
+            ),
+            engine=EngineInfo(
+                name="unstructured",
+                backend="test",
+                version="0",
+                strategy=PartitionStrategy.AUTO,
+            ),
+            elements=[
+                ZephyrElement(
+                    element_id="e1",
+                    type="NarrativeText",
+                    text=text,
+                    metadata={"kind": "text"},
+                )
+            ],
+            normalized_text=text,
+            warnings=[],
+        )
+
+    monkeypatch.setattr(uns_http_source, "urlopen", fake_http_urlopen)
+    monkeypatch.setattr(uns_http_source, "auto_partition", fake_uns_auto_partition)
+    monkeypatch.setattr(uns_google_drive_source, "urlopen", fake_drive_urlopen)
+    monkeypatch.setattr(uns_google_drive_source, "auto_partition", fake_uns_auto_partition)
+    monkeypatch.setattr(uns_confluence_source, "urlopen", fake_confluence_urlopen)
+    monkeypatch.setattr(uns_confluence_source, "auto_partition", fake_uns_auto_partition)
+
+    docs = [
+        DocumentRef(
+            uri=str(http_spec),
+            source="local_file",
+            discovered_at_utc="2026-01-01T00:00:00Z",
+            filename="http-source.json",
+            extension=".json",
+            size_bytes=http_spec.stat().st_size,
+        ),
+        DocumentRef(
+            uri=str(drive_spec),
+            source="local_file",
+            discovered_at_utc="2026-01-01T00:00:00Z",
+            filename="drive-source.json",
+            extension=".json",
+            size_bytes=drive_spec.stat().st_size,
+        ),
+        DocumentRef(
+            uri=str(confluence_spec),
+            source="local_file",
+            discovered_at_utc="2026-01-01T00:00:00Z",
+            filename="confluence-source.json",
+            extension=".json",
+            size_bytes=confluence_spec.stat().st_size,
+        ),
+    ]
+    ctx = RunContext.new(
+        pipeline_version="p-uns-batch-2",
+        run_id="r-uns-batch-2",
+        timestamp_utc="2026-01-01T00:00:00Z",
+    )
+    out_root = tmp_path / "out"
+    cfg = RunnerConfig(
+        out_root=out_root,
+        workers=1,
+        destination=FilesystemDestination(),
+    )
+
+    stats = run_documents(
+        docs=docs,
+        cfg=cfg,
+        ctx=ctx,
+        flow_kind="uns",
+        destination=FilesystemDestination(),
+    )
+
+    expected_shas = {
+        "http": normalize_flow_input_identity_sha(
+            flow_kind="uns",
+            filename=str(http_spec),
+            default_sha=sha256_file(http_spec),
+        ),
+        "drive": normalize_flow_input_identity_sha(
+            flow_kind="uns",
+            filename=str(drive_spec),
+            default_sha=sha256_file(drive_spec),
+        ),
+        "confluence": normalize_flow_input_identity_sha(
+            flow_kind="uns",
+            filename=str(confluence_spec),
+            default_sha=sha256_file(confluence_spec),
+        ),
+    }
+
+    assert stats.total == 3
+    assert stats.success == 3
+    assert len(set(expected_shas.values())) == 3
+
+    expected_filenames = {
+        "http": "http-report.txt",
+        "drive": "report.pdf",
+        "confluence": "product-spec.html",
+    }
+    expected_mime_types = {
+        "http": "text/plain",
+        "drive": "application/pdf",
+        "confluence": "text/html",
+    }
+    expected_source_kinds = {
+        "http": "http_document_v1",
+        "drive": "google_drive_document_v1",
+        "confluence": "confluence_document_v1",
+    }
+    expected_metadata: dict[str, dict[str, object]] = {
+        "http": {"source_url": "https://example.test/docs/http-report.txt"},
+        "drive": {
+            "source_file_id": "file-123",
+            "source_drive_id": "drive-1",
+            "source_acquisition_mode": "export",
+            "source_export_mime_type": "application/pdf",
+        },
+        "confluence": {
+            "source_site_url": "https://example.atlassian.net",
+            "source_page_id": "12345",
+            "source_space_key": "ENG",
+            "source_requested_page_version": 7,
+            "source_page_version": 7,
+            "source_body_format": "storage",
+        },
+    }
+
+    for name, expected_sha in expected_shas.items():
+        out_dir = out_root / expected_sha
+        run_meta = json.loads((out_dir / "run_meta.json").read_text(encoding="utf-8"))
+        elements = json.loads((out_dir / "elements.json").read_text(encoding="utf-8"))
+        assert run_meta["document"]["filename"] == expected_filenames[name]
+        assert run_meta["document"]["mime_type"] == expected_mime_types[name]
+        assert run_meta["document"]["sha256"] == expected_sha
+        assert run_meta["provenance"]["task_identity_key"] == normalize_uns_task_idempotency_key(
+            identity=TaskIdentityV1(
+                pipeline_version="p-uns-batch-2",
+                sha256=expected_sha,
+            )
+        )
+        assert elements[0]["metadata"]["source_kind"] == expected_source_kinds[name]
+        assert elements[0]["metadata"]["fetched_filename"] == expected_filenames[name]
+        assert elements[0]["metadata"]["fetched_mime_type"] == expected_mime_types[name]
         for key, value in expected_metadata[name].items():
             assert elements[0]["metadata"][key] == value
 
