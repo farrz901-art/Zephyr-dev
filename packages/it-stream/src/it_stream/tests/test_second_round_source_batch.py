@@ -198,15 +198,14 @@ def _write_clickhouse_source_spec(
 
 
 def _write_http_source_spec(path: Path, *, url: str) -> None:
-    payload = {
-        "source": {
-            "kind": "http_json_cursor_v1",
-            "stream": "customers",
-            "url": url,
-            "cursor_param": "cursor",
-            "query": {},
-        }
+    source_payload: dict[str, object] = {
+        "kind": "http_json_cursor_v1",
+        "stream": "customers",
+        "url": url,
+        "cursor_param": "cursor",
+        "query": {},
     }
+    payload: dict[str, object] = {"source": source_payload}
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
