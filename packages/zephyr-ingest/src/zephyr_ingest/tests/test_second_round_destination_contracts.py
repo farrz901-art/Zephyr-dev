@@ -63,6 +63,29 @@ _SHARED_SUMMARY_KEYS = {
     "attempt_count",
     "payload_count",
 }
+_SOURCE_AND_RECOVERY_GOVERNANCE_KEYS = {
+    "source_kind",
+    "source_url",
+    "source_bucket",
+    "source_key",
+    "source_version_id",
+    "source_relative_path",
+    "source_file_id",
+    "source_drive_id",
+    "source_page_id",
+    "source_site_url",
+    "source_page_version",
+    "source_acquisition_mode",
+    "source_export_mime_type",
+    "cursor",
+    "progress_kind",
+    "checkpoint_identity_key",
+    "parent_checkpoint_identity_key",
+    "task_identity_key",
+    "run_origin",
+    "delivery_origin",
+    "execution_mode",
+}
 
 
 @dataclass
@@ -203,6 +226,13 @@ def _assert_remaining_shared_boundary(receipt: DeliveryReceipt) -> None:
     assert "stream" not in receipt.shared_summary
     assert "tenant_id" not in receipt.shared_summary
     assert "line_count" not in receipt.shared_summary
+
+
+def _assert_no_source_or_recovery_governance_leakage(receipt: DeliveryReceipt) -> None:
+    for key in _SOURCE_AND_RECOVERY_GOVERNANCE_KEYS:
+        assert key not in receipt.shared_summary
+        if receipt.details is not None:
+            assert key not in receipt.details
 
 
 def _write_replay_record(*, out_root: Path, sha256: str, run_id: str) -> None:
@@ -940,6 +970,23 @@ def test_full_second_round_destination_batch_shares_stable_details_and_summary_b
             assert "rejected_count" not in success_receipt.details
             assert "accepted_count" not in failure_receipt.details
             assert "rejected_count" not in failure_receipt.details
+
+
+def test_full_second_round_destination_batch_keeps_source_and_recovery_governance_local(
+    tmp_path: Path,
+) -> None:
+    for destination_name in _FULL_SECOND_ROUND_DESTINATIONS:
+        success_receipt = _build_second_round_success_receipt(
+            destination_name=destination_name,
+            tmp_path=tmp_path,
+        )
+        failure_receipt = _build_second_round_failure_receipt(
+            destination_name=destination_name,
+            tmp_path=tmp_path,
+        )
+
+        _assert_no_source_or_recovery_governance_leakage(success_receipt)
+        _assert_no_source_or_recovery_governance_leakage(failure_receipt)
 
 
 def test_full_second_round_batch_shares_stable_replay_idempotency_and_provenance_boundary(

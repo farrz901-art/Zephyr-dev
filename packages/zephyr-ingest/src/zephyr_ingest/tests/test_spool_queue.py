@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+from typing import Mapping
 
 import pytest
 
@@ -17,6 +18,38 @@ from zephyr_ingest.task_v1 import (
     TaskInputsV1,
     TaskV1,
 )
+
+_NON_OPERATOR_SURFACE_KEYS = {
+    "delivery_outcome",
+    "failure_retryability",
+    "failure_kind",
+    "error_code",
+    "attempt_count",
+    "payload_count",
+    "accepted_count",
+    "rejected_count",
+    "backend_error_code",
+    "object_key",
+    "document_id",
+    "table",
+    "row_count",
+    "stream",
+    "tenant_id",
+    "line_count",
+    "source_kind",
+    "source_url",
+    "source_page_id",
+    "source_page_version",
+    "source_relative_path",
+    "cursor",
+    "progress_kind",
+    "checkpoint_identity_key",
+    "parent_checkpoint_identity_key",
+    "task_identity_key",
+    "run_origin",
+    "delivery_origin",
+    "execution_mode",
+}
 
 
 def _make_task(task_id: str) -> TaskV1:
@@ -59,6 +92,11 @@ def _read_json(path: Path) -> dict[str, object]:
     obj: dict[str, object] = json.loads(path.read_text(encoding="utf-8"))
     assert isinstance(obj, dict)
     return obj
+
+
+def _assert_no_non_operator_surface_leakage(payload: Mapping[str, object]) -> None:
+    for key in _NON_OPERATOR_SURFACE_KEYS:
+        assert key not in payload
 
 
 def test_enqueue_writes_pending_task(tmp_path: Path) -> None:
@@ -401,6 +439,172 @@ def test_requeue_inflight_task_moves_to_pending_and_preserves_governance(tmp_pat
             "recorded_at_utc": result_payload["recorded_at_utc"],
         }
     ]
+
+
+def test_cross_flow_queue_operator_surfaces_keep_shared_boundary_and_local_identity_explicit(
+    tmp_path: Path,
+) -> None:
+    queue = LocalSpoolQueue(root=tmp_path / "spool", max_task_attempts=1, max_orphan_requeues=2)
+
+    queue.enqueue(_make_identified_task("task-it-operator"))
+    claimed_it = queue.claim_next()
+    assert claimed_it is not None
+    queue.ack_failure(claimed_it)
+
+    queue.enqueue(_make_task("task-uns-operator"))
+    claimed_uns = queue.claim_next()
+    assert claimed_uns is not None
+
+    poison_view = inspect_local_spool_queue(root=queue.root, bucket="poison").to_dict()
+    inflight_view = inspect_local_spool_queue(root=queue.root, bucket="inflight").to_dict()
+
+    assert poison_view["summary"] == {
+        "pending": 0,
+        "inflight": 1,
+        "done": 0,
+        "failed": 0,
+        "poison": 1,
+        "listed_tasks": 1,
+        "governance_problem_tasks": 1,
+        "visible_requeue_history_tasks": 0,
+        "recovery_audit_support": "persisted_in_history",
+    }
+    assert inflight_view["summary"] == {
+        "pending": 0,
+        "inflight": 1,
+        "done": 0,
+        "failed": 0,
+        "poison": 1,
+        "listed_tasks": 1,
+        "governance_problem_tasks": 0,
+        "visible_requeue_history_tasks": 0,
+        "recovery_audit_support": "persisted_in_history",
+    }
+
+    poison_task = poison_view["tasks"][0]
+    inflight_task = inflight_view["tasks"][0]
+
+    assert poison_task["task_id"] == "task-it-operator"
+    assert poison_task["kind"] == "it"
+    assert poison_task["governance_problem"] == "poison_attempts_exhausted"
+    assert poison_task["handling_expectation"] == "requeue_supported"
+    assert poison_task["recovery_audit_support"] == "persisted_in_history"
+    assert poison_task["identity"] == {
+        "pipeline_version": "2026.04.06",
+        "sha256": "sha256-task-it-operator",
+    }
+    assert poison_task["latest_recovery"] is None
+    _assert_no_non_operator_surface_leakage(poison_task)
+
+    assert inflight_task["task_id"] == "task-uns-operator"
+    assert inflight_task["kind"] == "uns"
+    assert inflight_task["governance_problem"] == "none"
+    assert inflight_task["handling_expectation"] == "requeue_supported"
+    assert inflight_task["recovery_audit_support"] == "persisted_in_history"
+    assert inflight_task["identity"] is None
+    assert inflight_task["latest_recovery"] is None
+    _assert_no_non_operator_surface_leakage(inflight_task)
+
+    it_result = requeue_local_spool_task(
+        root=queue.root,
+        source_bucket="poison",
+        task_id="task-it-operator",
+    )
+    uns_result = requeue_local_spool_task(
+        root=queue.root,
+        source_bucket="inflight",
+        task_id="task-uns-operator",
+    )
+    it_result_payload = it_result.to_dict()
+    uns_result_payload = uns_result.to_dict()
+
+    assert it_result_payload["action"] == "requeue"
+    assert it_result_payload["support_status"] == "supported"
+    assert it_result_payload["governance_result"] == "moved_to_pending"
+    assert it_result_payload["redrive_support"] == "not_modeled"
+    assert it_result_payload["audit_support"] == "persisted_in_history"
+    assert it_result_payload["kind"] == "it"
+    assert it_result_payload["source_bucket"] == "poison"
+    assert it_result_payload["target_bucket"] == "pending"
+    _assert_no_non_operator_surface_leakage(it_result_payload)
+
+    assert uns_result_payload["action"] == "requeue"
+    assert uns_result_payload["support_status"] == "supported"
+    assert uns_result_payload["governance_result"] == "moved_to_pending"
+    assert uns_result_payload["redrive_support"] == "not_modeled"
+    assert uns_result_payload["audit_support"] == "persisted_in_history"
+    assert uns_result_payload["kind"] == "uns"
+    assert uns_result_payload["source_bucket"] == "inflight"
+    assert uns_result_payload["target_bucket"] == "pending"
+    _assert_no_non_operator_surface_leakage(uns_result_payload)
+
+    assert it_result.to_run_provenance().to_dict() == {
+        "run_origin": "requeue",
+        "delivery_origin": "primary",
+        "execution_mode": "worker",
+        "task_id": "task-it-operator",
+        "task_identity_key": (
+            '{"kind":"it","pipeline_version":"2026.04.06","sha256":"sha256-task-it-operator"}'
+        ),
+    }
+    assert uns_result.to_run_provenance().to_dict() == {
+        "run_origin": "requeue",
+        "delivery_origin": "primary",
+        "execution_mode": "worker",
+        "task_id": "task-uns-operator",
+    }
+
+    pending_view = inspect_local_spool_queue(root=queue.root, bucket="pending").to_dict()
+    assert pending_view["summary"] == {
+        "pending": 2,
+        "inflight": 0,
+        "done": 0,
+        "failed": 0,
+        "poison": 0,
+        "listed_tasks": 2,
+        "governance_problem_tasks": 0,
+        "visible_requeue_history_tasks": 2,
+        "recovery_audit_support": "persisted_in_history",
+    }
+
+    pending_tasks = {task["task_id"]: task for task in pending_view["tasks"]}
+    it_pending_task = pending_tasks["task-it-operator"]
+    uns_pending_task = pending_tasks["task-uns-operator"]
+
+    assert it_pending_task["governance_labels"] == ["requeued"]
+    assert it_pending_task["governance_problem"] == "none"
+    assert it_pending_task["handling_expectation"] == "none"
+    assert it_pending_task["identity"] == {
+        "pipeline_version": "2026.04.06",
+        "sha256": "sha256-task-it-operator",
+    }
+    assert it_pending_task["latest_recovery"] is not None
+    assert set(it_pending_task["latest_recovery"]) == {
+        "action",
+        "source_bucket",
+        "target_bucket",
+        "recorded_at_utc",
+    }
+    assert it_pending_task["latest_recovery"]["action"] == "requeue"
+    assert it_pending_task["latest_recovery"]["source_bucket"] == "poison"
+    assert it_pending_task["latest_recovery"]["target_bucket"] == "pending"
+    _assert_no_non_operator_surface_leakage(it_pending_task)
+
+    assert uns_pending_task["governance_labels"] == ["requeued"]
+    assert uns_pending_task["governance_problem"] == "none"
+    assert uns_pending_task["handling_expectation"] == "none"
+    assert uns_pending_task["identity"] is None
+    assert uns_pending_task["latest_recovery"] is not None
+    assert set(uns_pending_task["latest_recovery"]) == {
+        "action",
+        "source_bucket",
+        "target_bucket",
+        "recorded_at_utc",
+    }
+    assert uns_pending_task["latest_recovery"]["action"] == "requeue"
+    assert uns_pending_task["latest_recovery"]["source_bucket"] == "inflight"
+    assert uns_pending_task["latest_recovery"]["target_bucket"] == "pending"
+    _assert_no_non_operator_surface_leakage(uns_pending_task)
 
 
 def test_requeue_task_rejects_invalid_source_state(tmp_path: Path) -> None:

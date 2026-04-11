@@ -12,7 +12,12 @@ from it_stream import (
     ItTaskIdentityV1,
     normalize_it_task_identity_key,
 )
+from it_stream import service as it_service
+from it_stream.sources import clickhouse_source as it_clickhouse_source
 from it_stream.sources import http_source as it_http_source
+from it_stream.sources import kafka_source as it_kafka_source
+from it_stream.sources import mongodb_source as it_mongodb_source
+from it_stream.sources import postgresql_source as it_postgresql_source
 from uns_stream.sources import confluence_source as uns_confluence_source
 from uns_stream.sources import git_source as uns_git_source
 from uns_stream.sources import google_drive_source as uns_google_drive_source
@@ -1950,6 +1955,714 @@ def test_uns_http_source_and_sqlite_destination_integrate_through_runner(
     assert "records_path" not in payload["artifacts"]
     assert "state_path" not in payload["artifacts"]
     assert "logs_path" not in payload["artifacts"]
+
+
+def test_shared_sqlite_delivery_keeps_expanded_source_world_architecture_locked(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    def _write_spec(path: Path, payload: dict[str, object]) -> None:
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    def _doc_for(path: Path) -> DocumentRef:
+        return DocumentRef(
+            uri=str(path),
+            source="local_file",
+            discovered_at_utc="2026-01-01T00:00:00Z",
+            filename=path.name,
+            extension=path.suffix,
+            size_bytes=path.stat().st_size,
+        )
+
+    def _read_json_dict(path: Path) -> dict[str, object]:
+        return cast("dict[str, object]", json.loads(path.read_text(encoding="utf-8")))
+
+    it_http_spec = tmp_path / "it-http-source.json"
+    postgresql_spec = tmp_path / "postgresql-source.json"
+    clickhouse_spec = tmp_path / "clickhouse-source.json"
+    kafka_spec = tmp_path / "kafka-source.json"
+    mongodb_spec = tmp_path / "mongodb-source.json"
+    uns_http_spec = tmp_path / "uns-http-source.json"
+    s3_spec = tmp_path / "s3-source.json"
+    git_spec = tmp_path / "git-source.json"
+    drive_spec = tmp_path / "drive-source.json"
+    confluence_spec = tmp_path / "confluence-source.json"
+
+    _write_spec(
+        it_http_spec,
+        {
+            "source": {
+                "kind": "http_json_cursor_v1",
+                "stream": "customers",
+                "url": "https://example.test/api/customers",
+                "cursor_param": "cursor",
+                "query": {"limit": "2"},
+            }
+        },
+    )
+    _write_spec(
+        postgresql_spec,
+        {
+            "source": {
+                "kind": "postgresql_incremental_v1",
+                "stream": "customers",
+                "connection_name": "warehouse-primary",
+                "dsn": "postgresql://reader:secret@db.test/app",
+                "schema": "public",
+                "table": "customers",
+                "columns": ["id", "updated_at", "name"],
+                "cursor_column": "updated_at",
+                "cursor_start": "2026-01-01T00:00:00Z",
+                "batch_size": 2,
+            }
+        },
+    )
+    _write_spec(
+        clickhouse_spec,
+        {
+            "source": {
+                "kind": "clickhouse_incremental_v1",
+                "stream": "warehouse_customers",
+                "connection_name": "analytics-primary",
+                "url": "https://clickhouse.example.test:8443",
+                "database": "analytics",
+                "table": "customer_events",
+                "columns": ["customer_id", "event_ts", "segment"],
+                "cursor_column": "event_ts",
+                "cursor_start": "2026-02-01T00:00:00Z",
+                "batch_size": 2,
+                "username": "reader",
+                "password": "secret",
+            }
+        },
+    )
+    _write_spec(
+        kafka_spec,
+        {
+            "source": {
+                "kind": "kafka_partition_offset_v1",
+                "stream": "orders",
+                "connection_name": "events-primary",
+                "brokers": ["kafka-1.example.test:9092"],
+                "topic": "orders.events",
+                "partition": 2,
+                "offset_start": 9,
+                "batch_size": 2,
+            }
+        },
+    )
+    _write_spec(
+        mongodb_spec,
+        {
+            "source": {
+                "kind": "mongodb_incremental_v1",
+                "stream": "customer_docs",
+                "connection_name": "mongo-primary",
+                "uri": "mongodb://reader:secret@mongo.test:27017/?replicaSet=rs0",
+                "database": "analytics",
+                "collection": "customer_docs",
+                "fields": ["doc_id", "doc_cursor", "segment"],
+                "cursor_field": "doc_cursor",
+                "cursor_start": "cust-0000",
+                "batch_size": 2,
+            }
+        },
+    )
+    _write_spec(
+        uns_http_spec,
+        {
+            "source": {
+                "kind": "http_document_v1",
+                "url": "https://example.test/docs/http-report.txt",
+                "accept": "text/plain",
+            }
+        },
+    )
+    _write_spec(
+        s3_spec,
+        {
+            "source": {
+                "kind": "s3_document_v1",
+                "bucket": "docs-bucket",
+                "key": "reports/s3-report.txt",
+                "region": "us-east-1",
+                "endpoint_url": "https://s3.example.test",
+                "version_id": "v1",
+                "access_key": "key-a",
+                "secret_key": "secret-a",
+            }
+        },
+    )
+    _write_spec(
+        git_spec,
+        {
+            "source": {
+                "kind": "git_document_v1",
+                "repo_root": str(tmp_path / "repo"),
+                "commit": "abc1234",
+                "relative_path": "docs/git-report.txt",
+            }
+        },
+    )
+    _write_spec(
+        drive_spec,
+        {
+            "source": {
+                "kind": "google_drive_document_v1",
+                "file_id": "file-123",
+                "drive_id": "drive-1",
+                "acquisition_mode": "export",
+                "export_mime_type": "application/pdf",
+                "access_token": "token-a",
+            }
+        },
+    )
+    _write_spec(
+        confluence_spec,
+        {
+            "source": {
+                "kind": "confluence_document_v1",
+                "site_url": "https://example.atlassian.net",
+                "page_id": "12345",
+                "space_key": "ENG",
+                "page_version": 7,
+                "access_token": "token-a",
+            }
+        },
+    )
+
+    def fake_fetch_http_json_cursor_source(
+        *,
+        config: it_http_source.HttpJsonCursorSourceConfigV1,
+    ) -> it_http_source.HttpJsonCursorSourceDocumentV1:
+        assert config.stream == "customers"
+        assert config.url == "https://example.test/api/customers"
+        return it_http_source.HttpJsonCursorSourceDocumentV1(
+            stream=config.stream,
+            records=[{"id": 1}, {"id": 2}],
+            states=[{"cursor": "c-1"}],
+            logs=[("INFO", "http page fetched")],
+        )
+
+    def fake_fetch_postgresql_incremental_source(
+        *,
+        config: it_postgresql_source.PostgresqlIncrementalSourceConfigV1,
+    ) -> it_postgresql_source.PostgresqlIncrementalSourceDocumentV1:
+        assert config.connection_name == "warehouse-primary"
+        return it_postgresql_source.PostgresqlIncrementalSourceDocumentV1(
+            stream=config.stream,
+            records=[
+                it_postgresql_source.PostgresqlIncrementalSourceRecordV1(
+                    data={
+                        "id": "cust-1",
+                        "updated_at": "2026-01-02T00:00:00Z",
+                        "name": "Ada",
+                    },
+                    cursor="2026-01-02T00:00:00Z",
+                )
+            ],
+            states=[{"cursor": "2026-01-02T00:00:00Z"}],
+            logs=[("INFO", "postgresql page fetched")],
+        )
+
+    def fake_fetch_clickhouse_incremental_source(
+        *,
+        config: it_clickhouse_source.ClickHouseIncrementalSourceConfigV1,
+    ) -> it_clickhouse_source.ClickHouseIncrementalSourceDocumentV1:
+        assert config.connection_name == "analytics-primary"
+        return it_clickhouse_source.ClickHouseIncrementalSourceDocumentV1(
+            stream=config.stream,
+            records=[
+                it_clickhouse_source.ClickHouseIncrementalSourceRecordV1(
+                    data={
+                        "customer_id": "cust-1",
+                        "event_ts": "2026-02-02T00:00:00Z",
+                        "segment": "gold",
+                    },
+                    cursor="2026-02-02T00:00:00Z",
+                )
+            ],
+            states=[{"cursor": "2026-02-02T00:00:00Z"}],
+            logs=[("INFO", "clickhouse page fetched")],
+        )
+
+    def fake_fetch_kafka_partition_source(
+        *,
+        config: it_kafka_source.KafkaPartitionSourceConfigV1,
+    ) -> it_kafka_source.KafkaPartitionSourceDocumentV1:
+        assert config.topic == "orders.events"
+        assert config.partition == 2
+        return it_kafka_source.KafkaPartitionSourceDocumentV1(
+            stream=config.stream,
+            records=[
+                it_kafka_source.KafkaPartitionSourceRecordV1(
+                    data={"order_id": "ord-1", "status": "created"},
+                    cursor="00000000000000000009",
+                )
+            ],
+            states=[{"offset": "00000000000000000009"}],
+            logs=[("INFO", "kafka page fetched")],
+        )
+
+    def fake_fetch_mongodb_incremental_source(
+        *,
+        config: it_mongodb_source.MongoDBIncrementalSourceConfigV1,
+    ) -> it_mongodb_source.MongoDBIncrementalSourceDocumentV1:
+        assert config.database == "analytics"
+        assert config.collection == "customer_docs"
+        return it_mongodb_source.MongoDBIncrementalSourceDocumentV1(
+            stream=config.stream,
+            records=[
+                it_mongodb_source.MongoDBIncrementalSourceRecordV1(
+                    data={
+                        "doc_id": "cust-1",
+                        "doc_cursor": "cust-0001",
+                        "segment": "gold",
+                    },
+                    cursor="cust-0001",
+                )
+            ],
+            states=[{"cursor": "cust-0001"}],
+            logs=[("INFO", "mongodb page fetched")],
+        )
+
+    class _FakeUnsHttpResponse:
+        headers = {"Content-Type": "text/plain; charset=utf-8"}
+
+        def read(self) -> bytes:
+            return b"http hello"
+
+        def __enter__(self) -> _FakeUnsHttpResponse:
+            return self
+
+        def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+            return None
+
+    class _FakeDriveResponse:
+        headers = {
+            "Content-Type": "application/pdf",
+            "Content-Disposition": 'attachment; filename="report.pdf"',
+            "ETag": '"etag-1"',
+        }
+
+        def read(self) -> bytes:
+            return b"drive hello"
+
+        def __enter__(self) -> _FakeDriveResponse:
+            return self
+
+        def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+            return None
+
+    class _FakeConfluenceResponse:
+        def read(self) -> bytes:
+            return json.dumps(
+                {
+                    "title": "Product Spec",
+                    "space": {"key": "ENG"},
+                    "version": {"number": 7},
+                    "body": {"storage": {"value": "<p>hello confluence</p>"}},
+                },
+                ensure_ascii=False,
+            ).encode("utf-8")
+
+        def __enter__(self) -> _FakeConfluenceResponse:
+            return self
+
+        def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+            return None
+
+    class _FakeS3Body:
+        def read(self) -> bytes:
+            return b"s3 hello"
+
+    class _FakeS3Client:
+        def get_object(
+            self,
+            *,
+            Bucket: str,
+            Key: str,
+            VersionId: str | None = None,
+        ) -> dict[str, object]:
+            assert Bucket == "docs-bucket"
+            assert Key == "reports/s3-report.txt"
+            assert VersionId == "v1"
+            return {
+                "Body": _FakeS3Body(),
+                "ContentType": "text/plain; charset=utf-8",
+                "ETag": '"etag-1"',
+                "VersionId": "v1",
+            }
+
+    def fake_uns_http_urlopen(request: object, timeout: float = 10.0) -> object:
+        del timeout
+        typed_request = request if isinstance(request, Request) else None
+        assert typed_request is not None
+        assert typed_request.full_url == "https://example.test/docs/http-report.txt"
+        return _FakeUnsHttpResponse()
+
+    def fake_drive_urlopen(request: object, timeout: float = 10.0) -> object:
+        del timeout
+        typed_request = request if isinstance(request, Request) else None
+        assert typed_request is not None
+        assert (
+            typed_request.full_url == "https://www.googleapis.com/drive/v3/files/file-123/export"
+            "?mimeType=application%2Fpdf&supportsAllDrives=true"
+        )
+        assert typed_request.headers["Authorization"] == "Bearer token-a"
+        assert typed_request.headers["Accept"] == "application/pdf"
+        return _FakeDriveResponse()
+
+    def fake_confluence_urlopen(request: object, timeout: float = 10.0) -> object:
+        del timeout
+        typed_request = request if isinstance(request, Request) else None
+        assert typed_request is not None
+        assert (
+            typed_request.full_url == "https://example.atlassian.net/wiki/rest/api/content/12345"
+            "?expand=space,version,body.storage"
+        )
+        return _FakeConfluenceResponse()
+
+    def fake_build_s3_document_source_client(
+        *,
+        config: uns_s3_source.S3DocumentSourceConfigV1,
+    ) -> uns_s3_source.S3DocumentSourceClientProtocol:
+        assert config.bucket == "docs-bucket"
+        return _FakeS3Client()
+
+    def fake_fetch_git_document_source(
+        *,
+        config: uns_git_source.GitDocumentSourceConfigV1,
+    ) -> uns_git_source.GitDocumentSourceFetchV1:
+        assert config.commit == "abc1234"
+        return uns_git_source.GitDocumentSourceFetchV1(
+            repo_root=config.repo_root,
+            commit=config.commit,
+            resolved_commit="abcdef1234567890",
+            relative_path=config.relative_path,
+            blob_sha="blob1234567890",
+            filename="git-report.txt",
+            mime_type="text/plain",
+            content=b"git hello",
+        )
+
+    def fake_uns_auto_partition(
+        *,
+        filename: str,
+        strategy: PartitionStrategy = PartitionStrategy.AUTO,
+        unique_element_ids: bool = True,
+        backend: object | None = None,
+        run_id: str | None = None,
+        pipeline_version: str | None = None,
+        sha256: str | None = None,
+        size_bytes: int | None = None,
+    ) -> PartitionResult:
+        del strategy, unique_element_ids, backend, run_id, pipeline_version
+        fetched_path = Path(filename)
+        text = fetched_path.read_text(encoding="utf-8")
+        return PartitionResult(
+            document=DocumentMetadata(
+                filename=fetched_path.name,
+                mime_type="application/pdf" if fetched_path.suffix == ".pdf" else "text/plain",
+                sha256=sha256 or "temp-sha",
+                size_bytes=size_bytes or 0,
+                created_at_utc="2026-01-01T00:00:00Z",
+            ),
+            engine=EngineInfo(
+                name="unstructured",
+                backend="test",
+                version="0",
+                strategy=PartitionStrategy.AUTO,
+            ),
+            elements=[
+                ZephyrElement(
+                    element_id="e1",
+                    type="NarrativeText",
+                    text=text,
+                    metadata={"kind": "text"},
+                )
+            ],
+            normalized_text=text,
+            warnings=[],
+        )
+
+    monkeypatch.setattr(
+        it_service, "fetch_http_json_cursor_source", fake_fetch_http_json_cursor_source
+    )
+    monkeypatch.setattr(
+        it_service,
+        "fetch_postgresql_incremental_source",
+        fake_fetch_postgresql_incremental_source,
+    )
+    monkeypatch.setattr(
+        it_service,
+        "fetch_clickhouse_incremental_source",
+        fake_fetch_clickhouse_incremental_source,
+    )
+    monkeypatch.setattr(
+        it_service,
+        "fetch_kafka_partition_source",
+        fake_fetch_kafka_partition_source,
+    )
+    monkeypatch.setattr(
+        it_service,
+        "fetch_mongodb_incremental_source",
+        fake_fetch_mongodb_incremental_source,
+    )
+    monkeypatch.setattr(uns_http_source, "urlopen", fake_uns_http_urlopen)
+    monkeypatch.setattr(uns_http_source, "auto_partition", fake_uns_auto_partition)
+    monkeypatch.setattr(
+        uns_s3_source,
+        "_build_s3_document_source_client",
+        fake_build_s3_document_source_client,
+    )
+    monkeypatch.setattr(uns_s3_source, "auto_partition", fake_uns_auto_partition)
+    monkeypatch.setattr(uns_git_source, "fetch_git_document_source", fake_fetch_git_document_source)
+    monkeypatch.setattr(uns_git_source, "auto_partition", fake_uns_auto_partition)
+    monkeypatch.setattr(uns_google_drive_source, "urlopen", fake_drive_urlopen)
+    monkeypatch.setattr(uns_google_drive_source, "auto_partition", fake_uns_auto_partition)
+    monkeypatch.setattr(uns_confluence_source, "urlopen", fake_confluence_urlopen)
+    monkeypatch.setattr(uns_confluence_source, "auto_partition", fake_uns_auto_partition)
+
+    it_docs = [
+        _doc_for(it_http_spec),
+        _doc_for(postgresql_spec),
+        _doc_for(clickhouse_spec),
+        _doc_for(kafka_spec),
+        _doc_for(mongodb_spec),
+    ]
+    uns_docs = [
+        _doc_for(uns_http_spec),
+        _doc_for(s3_spec),
+        _doc_for(git_spec),
+        _doc_for(drive_spec),
+        _doc_for(confluence_spec),
+    ]
+
+    sqlite_destination = SqliteDestination(
+        db_path=tmp_path / "delivery.db",
+        table_name="delivery_rows",
+    )
+    it_out_root = tmp_path / "it-out"
+    uns_out_root = tmp_path / "uns-out"
+    it_ctx = RunContext.new(
+        pipeline_version="p-expanded-it",
+        run_id="r-expanded-it",
+        timestamp_utc="2026-01-01T00:00:00Z",
+    )
+    uns_ctx = RunContext.new(
+        pipeline_version="p-expanded-uns",
+        run_id="r-expanded-uns",
+        timestamp_utc="2026-01-01T00:00:00Z",
+    )
+
+    it_stats = run_documents(
+        docs=it_docs,
+        cfg=RunnerConfig(out_root=it_out_root, workers=1, destination=sqlite_destination),
+        ctx=it_ctx,
+        flow_kind="it",
+        destination=sqlite_destination,
+    )
+    uns_stats = run_documents(
+        docs=uns_docs,
+        cfg=RunnerConfig(out_root=uns_out_root, workers=1, destination=sqlite_destination),
+        ctx=uns_ctx,
+        flow_kind="uns",
+        destination=sqlite_destination,
+    )
+
+    expected_it = {
+        "http": (
+            normalize_flow_input_identity_sha(
+                flow_kind="it",
+                filename=str(it_http_spec),
+                default_sha=sha256_file(it_http_spec),
+            ),
+            "http-json-cursor",
+        ),
+        "postgresql": (
+            normalize_flow_input_identity_sha(
+                flow_kind="it",
+                filename=str(postgresql_spec),
+                default_sha=sha256_file(postgresql_spec),
+            ),
+            "postgresql-incremental",
+        ),
+        "clickhouse": (
+            normalize_flow_input_identity_sha(
+                flow_kind="it",
+                filename=str(clickhouse_spec),
+                default_sha=sha256_file(clickhouse_spec),
+            ),
+            "clickhouse-incremental",
+        ),
+        "kafka": (
+            normalize_flow_input_identity_sha(
+                flow_kind="it",
+                filename=str(kafka_spec),
+                default_sha=sha256_file(kafka_spec),
+            ),
+            "kafka-partition-offset",
+        ),
+        "mongodb": (
+            normalize_flow_input_identity_sha(
+                flow_kind="it",
+                filename=str(mongodb_spec),
+                default_sha=sha256_file(mongodb_spec),
+            ),
+            "mongodb-incremental",
+        ),
+    }
+    expected_uns = {
+        "http": (
+            normalize_flow_input_identity_sha(
+                flow_kind="uns",
+                filename=str(uns_http_spec),
+                default_sha=sha256_file(uns_http_spec),
+            ),
+            "http-report.txt",
+            "text/plain",
+        ),
+        "s3": (
+            normalize_flow_input_identity_sha(
+                flow_kind="uns",
+                filename=str(s3_spec),
+                default_sha=sha256_file(s3_spec),
+            ),
+            "s3-report.txt",
+            "text/plain",
+        ),
+        "git": (
+            normalize_flow_input_identity_sha(
+                flow_kind="uns",
+                filename=str(git_spec),
+                default_sha=sha256_file(git_spec),
+            ),
+            "git-report.txt",
+            "text/plain",
+        ),
+        "drive": (
+            normalize_flow_input_identity_sha(
+                flow_kind="uns",
+                filename=str(drive_spec),
+                default_sha=sha256_file(drive_spec),
+            ),
+            "report.pdf",
+            "application/pdf",
+        ),
+        "confluence": (
+            normalize_flow_input_identity_sha(
+                flow_kind="uns",
+                filename=str(confluence_spec),
+                default_sha=sha256_file(confluence_spec),
+            ),
+            "product-spec.html",
+            "text/html",
+        ),
+    }
+
+    assert it_stats.total == 5
+    assert it_stats.success == 5
+    assert uns_stats.total == 5
+    assert uns_stats.success == 5
+    assert (
+        len(
+            {
+                *[sha for sha, _backend in expected_it.values()],
+                *[sha for sha, _filename, _mime_type in expected_uns.values()],
+            }
+        )
+        == 10
+    )
+
+    it_batch_report = _read_json_dict(it_out_root / "batch_report.json")
+    uns_batch_report = _read_json_dict(uns_out_root / "batch_report.json")
+    assert cast("dict[str, object]", it_batch_report["delivery"])["total"] == 5
+    assert cast("dict[str, object]", it_batch_report["delivery"])["ok"] == 5
+    assert cast("dict[str, object]", it_batch_report["delivery"])["failed"] == 0
+    assert cast("dict[str, object]", it_batch_report["delivery"])["dlq_written_total"] == 0
+    assert cast("dict[str, object]", it_batch_report["delivery"])["by_destination"] == {
+        "sqlite": {"total": 5, "ok": 5, "failed": 0}
+    }
+    assert cast("dict[str, object]", uns_batch_report["delivery"])["total"] == 5
+    assert cast("dict[str, object]", uns_batch_report["delivery"])["ok"] == 5
+    assert cast("dict[str, object]", uns_batch_report["delivery"])["failed"] == 0
+    assert cast("dict[str, object]", uns_batch_report["delivery"])["dlq_written_total"] == 0
+    assert cast("dict[str, object]", uns_batch_report["delivery"])["by_destination"] == {
+        "sqlite": {"total": 5, "ok": 5, "failed": 0}
+    }
+
+    conn = sqlite3.connect(tmp_path / "delivery.db")
+    try:
+        rows = conn.execute("SELECT payload_json FROM delivery_rows").fetchall()
+    finally:
+        conn.close()
+
+    payloads_by_sha: dict[str, dict[str, object]] = {}
+    for row in rows:
+        payload = cast("dict[str, object]", json.loads(cast("str", row[0])))
+        sha = cast("str", payload["sha256"])
+        payloads_by_sha[sha] = payload
+
+    assert len(payloads_by_sha) == 10
+
+    observed_task_identity_keys: set[str] = set()
+
+    for name, (expected_sha, expected_backend) in expected_it.items():
+        payload = payloads_by_sha[expected_sha]
+        run_meta = cast("dict[str, object]", payload["run_meta"])
+        provenance = cast("dict[str, object]", run_meta["provenance"])
+        artifacts = cast("dict[str, object]", payload["artifacts"])
+
+        expected_task_identity_key = normalize_it_task_identity_key(
+            identity=ItTaskIdentityV1(
+                pipeline_version="p-expanded-it",
+                sha256=expected_sha,
+            )
+        )
+
+        assert cast("dict[str, object]", run_meta["engine"])["name"] == "it-stream", name
+        assert cast("dict[str, object]", run_meta["engine"])["backend"] == expected_backend, name
+        assert provenance["run_origin"] == "intake"
+        assert provenance["delivery_origin"] == "primary"
+        assert provenance["execution_mode"] == "batch"
+        assert provenance["task_id"] == expected_sha
+        assert provenance["task_identity_key"] == expected_task_identity_key
+        observed_task_identity_keys.add(expected_task_identity_key)
+        assert cast("str", artifacts["out_dir"]).endswith(expected_sha)
+        assert cast("str", artifacts["records_path"]).endswith("records.jsonl")
+        assert cast("str", artifacts["state_path"]).endswith("checkpoint.json")
+        assert cast("str", artifacts["logs_path"]).endswith("logs.jsonl")
+
+    for name, (expected_sha, expected_filename, expected_mime_type) in expected_uns.items():
+        payload = payloads_by_sha[expected_sha]
+        run_meta = cast("dict[str, object]", payload["run_meta"])
+        provenance = cast("dict[str, object]", run_meta["provenance"])
+        artifacts = cast("dict[str, object]", payload["artifacts"])
+        document = cast("dict[str, object]", run_meta["document"])
+
+        expected_task_identity_key = normalize_uns_task_idempotency_key(
+            identity=TaskIdentityV1(
+                pipeline_version="p-expanded-uns",
+                sha256=expected_sha,
+            )
+        )
+
+        assert cast("dict[str, object]", run_meta["engine"])["name"] == "unstructured", name
+        assert provenance["run_origin"] == "intake"
+        assert provenance["delivery_origin"] == "primary"
+        assert provenance["execution_mode"] == "batch"
+        assert provenance["task_id"] == expected_sha
+        assert provenance["task_identity_key"] == expected_task_identity_key
+        observed_task_identity_keys.add(expected_task_identity_key)
+        assert cast("str", artifacts["out_dir"]).endswith(expected_sha)
+        assert "records_path" not in artifacts
+        assert "state_path" not in artifacts
+        assert "logs_path" not in artifacts
+        assert document["filename"] == expected_filename
+        assert document["mime_type"] == expected_mime_type
+
+    assert len(observed_task_identity_keys) == 10
 
 
 def json_dumps_messages(messages: list[dict[str, object]]) -> str:
