@@ -1961,6 +1961,24 @@ def test_shared_sqlite_delivery_keeps_expanded_source_world_architecture_locked(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
+    forbidden_persisted_surface_keys = {
+        "scheduler",
+        "autoscaling",
+        "deployment_profile",
+        "environment_overlay",
+        "dashboard",
+        "alerting",
+        "tracing",
+        "worker_pool",
+    }
+    forbidden_credential_values = {
+        "secret-a",
+        "key-a",
+        "token-a",
+        "mongodb://reader:secret@mongo.test:27017/?replicaSet=rs0",
+        "postgresql://reader:secret@db.test/app",
+    }
+
     def _write_spec(path: Path, payload: dict[str, object]) -> None:
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -2584,6 +2602,26 @@ def test_shared_sqlite_delivery_keeps_expanded_source_world_architecture_locked(
     assert cast("dict[str, object]", it_batch_report["delivery"])["by_destination"] == {
         "sqlite": {"total": 5, "ok": 5, "failed": 0}
     }
+    assert it_batch_report["workers"] == 1
+    assert it_batch_report["executor"] == "serial"
+    assert cast("dict[str, object]", it_batch_report["retry"]) == {
+        "enabled": True,
+        "max_attempts": 3,
+        "base_backoff_ms": 200,
+        "max_backoff_ms": 5000,
+        "retry_attempts_total": 0,
+        "retried_success": 0,
+        "retryable_failed": 0,
+    }
+    assert cast("dict[str, object]", it_batch_report["metrics"])["docs_total"] == 5
+    assert cast("dict[str, object]", it_batch_report["metrics"])["docs_success_total"] == 5
+    assert cast("dict[str, object]", it_batch_report["metrics"])["delivery_total"] == 5
+    assert cast("dict[str, object]", it_batch_report["metrics"])["dlq_written_total"] == 0
+    assert set(cast("dict[str, object]", it_batch_report["stage_durations_ms"])) == {
+        "hash_ms",
+        "partition_ms",
+        "delivery_ms",
+    }
     assert cast("dict[str, object]", uns_batch_report["delivery"])["total"] == 5
     assert cast("dict[str, object]", uns_batch_report["delivery"])["ok"] == 5
     assert cast("dict[str, object]", uns_batch_report["delivery"])["failed"] == 0
@@ -2591,6 +2629,31 @@ def test_shared_sqlite_delivery_keeps_expanded_source_world_architecture_locked(
     assert cast("dict[str, object]", uns_batch_report["delivery"])["by_destination"] == {
         "sqlite": {"total": 5, "ok": 5, "failed": 0}
     }
+    assert uns_batch_report["workers"] == 1
+    assert uns_batch_report["executor"] == "serial"
+    assert cast("dict[str, object]", uns_batch_report["retry"]) == {
+        "enabled": True,
+        "max_attempts": 3,
+        "base_backoff_ms": 200,
+        "max_backoff_ms": 5000,
+        "retry_attempts_total": 0,
+        "retried_success": 0,
+        "retryable_failed": 0,
+    }
+    assert cast("dict[str, object]", uns_batch_report["metrics"])["docs_total"] == 5
+    assert cast("dict[str, object]", uns_batch_report["metrics"])["docs_success_total"] == 5
+    assert cast("dict[str, object]", uns_batch_report["metrics"])["delivery_total"] == 5
+    assert cast("dict[str, object]", uns_batch_report["metrics"])["dlq_written_total"] == 0
+    assert set(cast("dict[str, object]", uns_batch_report["stage_durations_ms"])) == {
+        "hash_ms",
+        "partition_ms",
+        "delivery_ms",
+    }
+
+    for report in (it_batch_report, uns_batch_report):
+        report_json = json.dumps(report, sort_keys=True)
+        for key in forbidden_persisted_surface_keys:
+            assert key not in report_json
 
     conn = sqlite3.connect(tmp_path / "delivery.db")
     try:
@@ -2599,12 +2662,21 @@ def test_shared_sqlite_delivery_keeps_expanded_source_world_architecture_locked(
         conn.close()
 
     payloads_by_sha: dict[str, dict[str, object]] = {}
+    persisted_payload_jsons: list[str] = []
     for row in rows:
-        payload = cast("dict[str, object]", json.loads(cast("str", row[0])))
+        payload_json = cast("str", row[0])
+        persisted_payload_jsons.append(payload_json)
+        payload = cast("dict[str, object]", json.loads(payload_json))
         sha = cast("str", payload["sha256"])
         payloads_by_sha[sha] = payload
 
     assert len(payloads_by_sha) == 10
+
+    for payload_json in persisted_payload_jsons:
+        for key in forbidden_persisted_surface_keys:
+            assert key not in payload_json
+        for value in forbidden_credential_values:
+            assert value not in payload_json
 
     observed_task_identity_keys: set[str] = set()
 

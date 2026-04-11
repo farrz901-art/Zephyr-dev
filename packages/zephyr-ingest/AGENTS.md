@@ -173,6 +173,127 @@ Any runtime-facing parameter added here must stay consistent across:
 
 Do not add knobs that are not reflected through the existing config discipline.
 
+## Current deployment / config handoff shape
+Treat the late-P4 deployment/config shape as a bounded handoff into P5, not as a finished
+production deployment system.
+
+The following config shape is already shared across the current expanded connector world:
+- Zephyr-owned task/orchestration/runtime settings stay ingest-owned and flow-agnostic where they
+  are already shared: runner/worker execution mode, queue/lock/runtime selection, delivery path
+  selection, retry policy, and observability/reporting wiring
+- shared delivery config stays bounded to Zephyr-owned destination selection plus the existing
+  delivery payload/receipt/replay/DLQ discipline
+- config/spec projection must continue to line up across runtime behavior, snapshot output, and
+  reporting/observability surfaces
+
+The following config remains intentionally stream-local or connector-local:
+- source connector selectors, source-local read modes, checkpoint/progress inputs, auth/session
+  material, provider-specific request/query settings, and document-acquisition parameters
+- destination-local transport/auth settings, backend write-mode details, and backend-specific
+  request tuning or acknowledgement enrichment
+- flow-local execution semantics that still belong to `it-stream` or `uns-stream` rather than to a
+  shared deployment/config contract
+
+The following runtime/deployment assumptions are already implicit today and should be treated as
+explicit at the P4 handoff boundary:
+- deployment wiring is still driven by the current config/spec surfaces and local runtime
+  composition, not by a separate environment-packaging layer
+- connector-specific credentials/config are expected to remain outside shared Zephyr contracts
+  until a later change explicitly stabilizes them
+- snapshots, reporting, provenance, and delivery/replay behavior are part of the current
+  deployable/configurable surface and must stay aligned with runtime inputs
+- the current support boundary does not imply uniform environment variables, secret packaging,
+  service manifests, or cloud/Kubernetes deployment conventions yet
+
+Deferred to P5 or later unless a future change explicitly narrows and re-authorizes them sooner:
+- standardized deployment packaging such as Docker/Kubernetes/Helm-oriented config layout
+- secret-distribution conventions or environment-level config normalization across all connectors
+- production-grade deployment profiles, environment overlays, or cloud-specific packaging
+- broader config abstraction work that would re-open runtime, queue, lock, or connector ownership
+  boundaries
+
+## Current runtime / concurrency handoff shape
+Treat the late-P4 runtime shape as a bounded execution handoff into P5, not as a finished runtime
+platform.
+
+The following execution shape is already shared across the current expanded connector world:
+- `TaskV1 -> FlowProcessor -> Delivery` remains the shared execution chain for both runner-style
+  and worker-style execution
+- ingest owns task intake, queue/lock/runtime wiring, delivery dispatch, replay/DLQ handling, and
+  shared governance/reporting surfaces around execution
+- source-side execution still converges through the same orchestration path before delivery, even
+  when source-local semantics differ inside `it-stream` or `uns-stream`
+- destination-side execution stays bounded to the existing shared delivery/replay path rather than
+  destination-owned worker or batch-job models
+
+The following concurrency and sequencing assumptions are already implicit today and should be
+treated as explicit at the P4 handoff boundary:
+- task execution is coordinated through the current ingest-owned queue/lock/runtime boundaries;
+  those boundaries are shared, but not yet broadened into a distributed orchestration platform
+- sequencing, retry, replay, and recovery facts must remain inspectable through current Zephyr-
+  owned provenance/governance surfaces rather than connector-owned side channels
+- source-local fetch/progress/checkpoint behavior may differ by flow, but shared orchestration
+  still assumes one Zephyr-owned task execution path per unit of work
+- delivery happens through the current one-payload-at-a-time shared delivery discipline unless a
+  destination-specific bounded subset already says otherwise
+
+The following execution assumptions remain intentionally stream-local or connector-local:
+- `it-stream` progress/checkpoint/resume sequencing and source-local cursor handling
+- `uns-stream` acquisition/fetch-to-partition-entry behavior and document-local processing details
+- connector-local request/fetch batching, backoff behavior, and provider-specific read/write
+  sequencing that do not change shared orchestration ownership
+- backend-shaped acknowledgement or write semantics that stay inside current destination-local
+  boundaries
+
+Deferred to P5 or later unless a future change explicitly narrows and re-authorizes them sooner:
+- distributed worker coordination, scheduler ownership, autoscaling, or work-pool orchestration
+- broader multi-worker concurrency guarantees beyond the current ingest-owned runtime boundaries
+- destination-owned execution models or source-owned runtime platforms that bypass the shared
+  `TaskV1 -> FlowProcessor -> Delivery` chain
+- runtime abstraction work that would re-open queue, lock, task, or flow ownership boundaries
+
+## Current operator / metrics / provenance handoff shape
+Treat the late-P4 operator/provenance shape as a bounded handoff into P5, not as a finished
+observability platform.
+
+The following operator-facing surfaces are already shared and dependable across the current
+expanded connector world:
+- ingest-owned inspection, recovery, replay/DLQ, batch reporting, and delivery/governance summary
+  surfaces
+- shared run/delivery provenance facts that stay Zephyr-owned and inspectable through the current
+  task/execution/delivery path
+- shared operator-facing delivery facts such as retryability, failure classification,
+  by-destination totals, replay compatibility, and bounded delivery summaries
+
+The following reporting/summary/provenance facts are already stable enough to rely on for
+production-like paths:
+- task/run/delivery provenance that explains execution origin, delivery origin, task identity where
+  supported, and replay/resume lineage where currently modeled
+- batch-report counters and summaries that remain aligned with runtime behavior, delivery outcomes,
+  retry behavior, and DLQ/replay facts
+- shared delivery summary fields and bounded receipt/reporting facts already formalized in the
+  current destination boundary
+- source and flow provenance facts only where current shared boundaries already say they are stable
+  and inspectable
+
+The following metrics/provenance assumptions remain intentionally stream-local, connector-local, or
+deliberately narrow:
+- `it-stream` checkpoint/progress/resume provenance and recovery details beyond the shared
+  orchestration-facing subset
+- `uns-stream` acquisition/fetch/provenance details beyond the shared document-identity and
+  partition-entry subset
+- connector-local detail fields, backend counters, provider-specific identifiers, and source/dest
+  adaptation facts that do not belong in the shared operator surface
+- higher-level operational interpretation such as alert thresholds, SLO semantics, or cross-run
+  rollups that are not yet part of the current Zephyr-owned contract
+
+Deferred to P5 or later unless a future change explicitly narrows and re-authorizes them sooner:
+- dashboards, alerting policy, tracing backends, or broader observability-platform integration
+- stronger metric-shape or cardinality guarantees beyond the current bounded reporting surfaces
+- richer cross-run operator analytics, fleet-level health views, or broader governance workflows
+- operator abstractions that would collapse flow-local or connector-local provenance into a fake
+  universal model
+
 ## Reading guidance
 Start from:
 - `runner.py`
