@@ -165,6 +165,57 @@ For source connector work, treat the source placement rules, onboarding checklis
 candidate list in this file as the P4-M1 architecture lock. Future connector PRs should either
 follow them or explicitly update this section and its anti-drift coverage in the same change.
 
+## Current unsupported / experimental / deferred boundary
+Treat the current expanded connector world as a bounded support surface, not an open-ended signal
+that Zephyr now supports whole connector families.
+
+Current support means only the connector surfaces and supported subsets explicitly named in:
+- `packages/it-stream/AGENTS.md`
+- `packages/uns-stream/AGENTS.md`
+- `packages/zephyr-ingest/AGENTS.md`
+
+Treat those package-level matrices plus this root-level unsupported/deferred section as the current
+authoritative connector-world support boundary for P4.
+
+Do not infer broader support from implementation similarity, vendor family overlap, or passing
+tests around one bounded connector subset.
+
+There is no separate broad experimental connector tier right now:
+- a connector or capability is either explicitly supported in a narrow subset, or it is not part of
+  current support
+- narrow supported subsets must not be over-read as support for broader source-state, sync, batch,
+  or delivery-platform behavior
+
+The following capabilities are intentionally not part of current support:
+- source-state platforms that require consumer-group ownership, CDC/changefeed/oplog recovery, or
+  other non-cursor progress families
+- source families that imply long-lived sync, webhook-owned delta state, workspace mirroring, or
+  multi-document/app-owned replication semantics
+- destination-owned async job, bulk-manifest, export/import, or partial-commit coordination models
+- backend-native replay or recovery paths that bypass current Zephyr replay/DLQ ownership
+- any connector family not explicitly listed in the current package-level support matrices
+
+Deferred to later P4 only if they can extend the current ownership model without re-opening shared
+architecture boundaries:
+- carefully bounded expansion of existing source or destination families
+- additional connectors that still fit current task/provenance/checkpoint/delivery/governance
+  semantics
+- tighter support statements or anti-drift coverage for already-proven shared boundaries
+
+Deferred to P5 or later unless a future change explicitly narrows and re-authorizes them sooner:
+- broader source-runtime/platform capabilities that would re-open checkpoint/progress/recovery
+  ownership
+- multi-partition, consumer-group, or long-lived lease/ack coordination semantics
+- long-lived sync/mirror/stateful document-suite or content-platform ownership
+- destination transaction/bulk async workflow semantics that exceed the current one-payload-at-a-
+  time delivery model
+- wider productization/operator guarantees that require architecture changes rather than support-
+  matrix clarification
+
+Enterprise-managed connectors and enterprise-oriented capability layers remain out of scope for the
+current P4 support surface unless a later change explicitly adds them to the architecture and to
+focused anti-drift coverage.
+
 Source connector expansion:
 - is not the immediate priority until the current `it` governance/runtime path is mature enough
 - should not bypass the existing task / provenance / checkpoint discipline

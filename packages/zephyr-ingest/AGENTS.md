@@ -84,6 +84,68 @@ Connector expansion guidance:
 - new destinations should plug into the existing delivery pipeline, not bypass it
 - connector count is less important than preserving the shared orchestration and delivery model
 
+## Current supported destination surface
+The current non-enterprise destination surface is explicitly supported as this bounded set:
+- `s3`
+- `opensearch`
+- `clickhouse`
+- `mongodb`
+- `loki`
+
+These destinations are supported only in the narrow subsets already proven by code and anti-drift
+tests:
+- `s3`: one shared delivery payload per object write, explicit bucket plus prefix subset,
+  identity-key-based object naming, shared receipt classification, and shared replay through the
+  current replay sink path
+- `opensearch`: one shared delivery payload per document write, explicit index plus document-id
+  subset, bounded request/response normalization, shared receipt classification, and shared replay
+  through the current replay sink path
+- `clickhouse`: one shared delivery payload per row-style write, explicit table/write-mode subset,
+  bounded row normalization, shared receipt classification, and shared replay through the current
+  replay sink path
+- `mongodb`: one shared delivery payload per document replace/upsert, explicit database plus
+  collection subset, identity-key-based document selection, shared receipt classification, and
+  shared replay through the current replay sink path
+- `loki`: one shared delivery payload per bounded log push, explicit stream/tenant label subset,
+  bounded line-count acceptance subset, shared receipt classification, and shared replay through
+  the current replay sink path
+
+Across that full current supported surface, these semantics are currently shared and should be
+treated as the stable destination boundary:
+- destinations accept the shared Zephyr delivery payload as the durable input contract; they do not
+  redefine payload ownership
+- success/failure classification stays inside the shared delivery vocabulary:
+  retryable vs non-retryable, shared `failure_kind`, and shared `error_code`
+- shared summary meaning is bounded and explicit: `delivery_outcome`, `failure_retryability`,
+  `failure_kind`, `error_code`, `attempt_count`, and `payload_count`
+- replay/idempotency/provenance stay shared where currently supported: delivery identity remains
+  stable, replay uses the shared replay path, and replayed payload provenance keeps
+  `delivery_origin="replay"` with the current Zephyr-owned provenance shape
+- operator-facing/reporting facts stay shared at the delivery layer: by-destination totals, shared
+  failure classification, retryability, and replay/DLQ compatibility remain inspectable without
+  inventing destination-owned operator surfaces
+
+The following semantics remain intentionally destination-local and should not be normalized further
+right now:
+- client construction, auth/session handling, transport protocol details, and backend request
+  shaping
+- backend-specific detail keys such as object key/version facts, document id/index facts, row
+  counts, attempted/accepted/rejected counts, stream labels, tenant identifiers, and backend error
+  codes
+- destination-local batching limits, write modes, acknowledgement enrichment, and request tuning
+- backend-native conflict, throttling, or constraint details beyond the shared Zephyr failure
+  classification boundary
+
+The following categories or deeper capabilities remain deferred beyond the current P4 support
+boundary:
+- destination-owned bulk-job, manifest, export/import, or asynchronous workflow semantics
+- multi-record transactional coordination or destination-owned partial-commit recovery models
+- broader fan-out or destination-side routing abstractions beyond the current one-payload-at-a-time
+  delivery discipline
+- backend-native replay mechanisms that bypass the shared Zephyr replay/DLQ path
+- additional destination families outside the currently listed five-destination breadth
+- enterprise-managed destination connectors
+
 ## Change discipline
 Before editing:
 - identify the exact orchestration entrypoint

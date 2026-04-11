@@ -36,15 +36,19 @@ source-specific shortcuts.
   cursor-state continuation is supported, while record-level continuation on that path remains
   blocked unless resumable record timestamps exist.
 
-## Current second-round `it-stream` source breadth
-The current second-round non-enterprise `it-stream` source breadth is explicitly supported as this
-bounded set:
+## Current supported `it-stream` source surface
+The current non-enterprise `it-stream` source surface is explicitly supported as this bounded set:
+- `http_json_cursor_v1`
 - `postgresql_incremental_v1`
 - `clickhouse_incremental_v1`
 - `kafka_partition_offset_v1`
 - `mongodb_incremental_v1`
 
 These sources are supported only in the narrow subsets already proven by code and anti-drift tests:
+- `http_json_cursor_v1`: explicit HTTP JSON cursor reads over one stream, explicit URL plus query
+  subset, one explicit cursor parameter, JSON-object response subset, optional next-cursor
+  continuation, and shared `cursor_v1` checkpoint/resume behavior within the current bounded HTTP
+  cursor path
 - `postgresql_incremental_v1`: ordered incremental table reads over one ascending cursor column,
   explicit selected columns, optional starting cursor, bounded batch size, and shared
   `cursor_v1` checkpoint/resume behavior
@@ -58,8 +62,8 @@ These sources are supported only in the narrow subsets already proven by code an
   projected fields, optional starting cursor, bounded batch size, and shared `cursor_v1`
   checkpoint/resume behavior
 
-Across that full second-round breadth, these semantics are currently shared and should be treated
-as the stable batch boundary:
+Across that full current supported surface, these semantics are currently shared and should be
+treated as the stable `it-stream` source boundary:
 - task identity is derived from stable source selector plus intended read slice; secrets, transient
   sessions, and inspect-only toggles must not affect identity
 - progress family stays explicit as `cursor_v1`
@@ -73,6 +77,8 @@ as the stable batch boundary:
 
 The following semantics remain intentionally source-local and should not be normalized further
 right now:
+- HTTP request shaping, query parameter details, response-envelope adaptation, and cursor parameter
+  naming
 - SQL/query shaping, ordering-column selection, and row/document projection details
 - Kafka broker/client construction, partition assignment, JSON decoding, and offset fetch behavior
 - Mongo query/projection shaping, BSON mapping, and local cursor encoding
@@ -85,10 +91,12 @@ The following categories or deeper capabilities remain deferred beyond the curre
 boundary:
 - non-cursor progress families
 - CDC, changefeed, oplog-token, or log-native recovery models
+- broader HTTP polling/session variants that require record-level continuation, rate-limit-owned
+  recovery, or long-lived sync/runtime semantics
 - multi-partition or consumer-group-managed stream reads
 - broader warehouse export/job workflows or staged-query recovery
 - snapshot/session/transaction-owned database recovery semantics
-- additional `it` source families outside the currently listed four-source breadth
+- additional `it` source families outside the currently listed five-source breadth
 - enterprise-managed source connectors
 
 ## Change discipline
