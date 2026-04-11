@@ -216,6 +216,62 @@ Enterprise-managed connectors and enterprise-oriented capability layers remain o
 current P4 support surface unless a later change explicitly adds them to the architecture and to
 focused anti-drift coverage.
 
+## P4 closeout / P5 handoff boundary
+Treat late P4 as a bounded pre-production handoff surface, not as proof that Zephyr is already a
+finished production platform.
+
+P4 closeout state:
+- the current supported connector world is the package-level source and destination support surface
+  explicitly named in `packages/it-stream/AGENTS.md`, `packages/uns-stream/AGENTS.md`, and
+  `packages/zephyr-ingest/AGENTS.md`
+- expanded source and destination breadth is now architecture-locked against shared-vs-local
+  governance drift, delivery drift, and operator-surface drift through focused anti-drift coverage
+- the current support boundary, unsupported/deferred boundary, deployment/config handoff shape,
+  runtime/concurrency handoff shape, and operator/metrics/provenance handoff shape are now explicit
+- P4 does not claim distributed runtime ownership, deployment packaging, benchmark harnesses,
+  chaos/fault platforms, dashboards/alerting/tracing systems, or broader production guarantees
+
+Initial P5 bench / scale / SLI candidates:
+- first pressure the existing `TaskV1 -> FlowProcessor -> Delivery` path on one representative
+  structured flow (`it`) and one representative document flow (`uns`) using already-supported
+  sources and destinations rather than inventing a new benchmark-only topology
+- first pressure the current shared delivery path through the already-proven destination surface,
+  especially the durable/object style path and one structured sink path
+- treat current bounded run/reporting facts as the initial SLI candidate surface: end-to-end run
+  completion, delivery success/failure totals, retry counts, replay/DLQ entry counts, and stable
+  stage-duration facts already emitted by current reporting surfaces
+- do not treat autoscaling efficiency, fleet-wide utilization, backend-native throughput claims,
+  or dashboard-derived SLO policy as part of current support
+
+Initial P5 failure / recovery drill entry points:
+- queue intake to worker execution boundary, especially stuck/requeued/orphaned task handling
+- lock acquisition and task ownership boundary, especially the current single-runtime ownership and
+  recovery semantics around re-drive rather than distributed lease choreography
+- delivery failure to replay/DLQ boundary, especially retryable vs non-retryable classification and
+  shared receipt/provenance preservation
+- flow-local recovery boundaries that are already real today: `it-stream` checkpoint/resume
+  continuation and `uns-stream` bounded document reacquisition/repartition from preserved source
+  provenance
+- anchor drills on existing operator-facing surfaces in `zephyr-ingest`: inspect, recovery,
+  replay/DLQ, batch reporting, and shared governance summaries
+- do not treat chaos systems, distributed fault injection, broker partition loss simulation, or
+  multi-region failover as part of current support
+
+P5 handoff matrix:
+- P5 inherits the current package-level support matrices and supported subsets as the starting
+  connector boundary; broader connector-family claims remain out of scope until explicitly added
+- P5 inherits the current `zephyr-ingest` handoff shape as the starting deployment/config,
+  runtime/concurrency, and operator/provenance boundary
+- P5 should first measure and pressure what already exists: shared execution path behavior, bounded
+  retry/replay/recovery behavior, current operator/reporting surfaces, and the most important
+  supported source/destination combinations
+- P5 should first add productionization depth around measurement, drillability, packaging, and
+  operational confidence without re-opening source placement, delivery ownership, or flow-local
+  governance boundaries by default
+- anything that requires new connector families, new source-progress vocabularies, destination-
+  owned async workflow semantics, distributed runtime ownership, or enterprise capability layers
+  remains outside the current handoff boundary until separately authorized
+
 Source connector expansion:
 - is not the immediate priority until the current `it` governance/runtime path is mature enough
 - should not bypass the existing task / provenance / checkpoint discipline
