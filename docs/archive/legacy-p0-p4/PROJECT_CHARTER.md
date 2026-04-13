@@ -27,6 +27,6 @@ Zephyr does NOT aim to re-implement Unstructured’s core algorithms. Zephyr’s
 - all recommendations must be validated against a fixed commit SHA
 
 ## Current stable milestone
-- Latest stable SHA: 49ffa9bec0c785c0dfc31c82ddf6319c0027f237
-- Completed: Phase0/Phase1, Phase2 M1..M5, Phase2 M6-01 (DeliveryPayloadV1)
-- Next: Phase2 M6-02 KafkaDestination, then M6-03 WeaviateDestination
+- Latest stable SHA: 8863aeb9acf6f40b09fea9c8d6157e95c8edf7bc
+- Completed: Phase0\1\2\3\4
+- Next: Phase5

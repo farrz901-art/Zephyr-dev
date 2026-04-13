@@ -1,4 +1,4 @@
-# 2.仓库地图
+# 2.仓库地图（部分与repo-map.md文件互补）
 
 # Repo Map (Zephyr-dev)
 
