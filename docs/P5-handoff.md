@@ -2,8 +2,11 @@
 
 ## Repository anchor
 - Repo: https://github.com/farrz901-art/Zephyr-dev
-- Branch: main
-- Documentation-reorg baseline: `dd1b4834ab2b8f7684f1f121bc614a157ec54f4d`
+- Working branch: `master`
+- Phase-sync branch: `main`
+- Repository / phase baseline: `8863aeb9acf6f40b09fea9c8d6157e95c8edf7bc`
+- Current docs-alignment state: `7193d13229367524f643d89cfc3127612fc0a908`
+- Earlier docs-reorg checkpoint: `dd1b4834ab2b8f7684f1f121bc614a157ec54f4d`
 
 ## Current phase state
 - P3 complete
