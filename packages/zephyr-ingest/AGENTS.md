@@ -85,15 +85,27 @@ Connector expansion guidance:
 - connector count is less important than preserving the shared orchestration and delivery model
 
 ## Current supported destination surface
-The current non-enterprise destination surface is explicitly supported as this bounded set:
-- `s3`
-- `opensearch`
-- `clickhouse`
-- `mongodb`
-- `loki`
+The current retained non-enterprise destination surface is explicitly supported as this bounded
+ten-destination set:
+- baseline: `filesystem`, `webhook`, `sqlite`, `kafka`, `weaviate`
+- second-round: `s3`, `opensearch`, `clickhouse`, `mongodb`, `loki`
 
 These destinations are supported only in the narrow subsets already proven by code and anti-drift
 tests:
+- `filesystem`: one shared delivery payload per local artifact write, explicit output-root subset,
+  bounded file-layout semantics, shared receipt classification, and shared replay compatibility
+- `webhook`: one shared delivery payload per HTTP delivery attempt, explicit endpoint/header subset,
+  bounded response normalization, shared receipt classification, and shared replay through the
+  current replay sink path
+- `sqlite`: one shared delivery payload per bounded row-style write, explicit database/table subset,
+  bounded row normalization, shared receipt classification, and shared replay through the current
+  replay sink path
+- `kafka`: one shared delivery payload per bounded message write, explicit topic/key subset,
+  bounded producer acknowledgement normalization, shared receipt classification, and shared replay
+  through the current replay sink path
+- `weaviate`: one shared delivery payload per bounded object write, explicit collection/object-id
+  subset, bounded request/response normalization, shared receipt classification, and shared replay
+  through the current replay sink path
 - `s3`: one shared delivery payload per object write, explicit bucket plus prefix subset,
   identity-key-based object naming, shared receipt classification, and shared replay through the
   current replay sink path
@@ -110,8 +122,11 @@ tests:
   bounded line-count acceptance subset, shared receipt classification, and shared replay through
   the current replay sink path
 
-Across that full current supported surface, these semantics are currently shared and should be
-treated as the stable destination boundary:
+Baseline vs second-round is historical lineage only. For P4.5 authenticity hardening, all ten
+retained destinations are in scope and must not be held to different authenticity standards.
+
+Across that full retained supported surface, these semantics are currently shared and should be
+treated as the stable destination boundary everywhere they are currently supported:
 - destinations accept the shared Zephyr delivery payload as the durable input contract; they do not
   redefine payload ownership
 - success/failure classification stays inside the shared delivery vocabulary:
@@ -124,6 +139,11 @@ treated as the stable destination boundary:
 - operator-facing/reporting facts stay shared at the delivery layer: by-destination totals, shared
   failure classification, retryability, and replay/DLQ compatibility remain inspectable without
   inventing destination-owned operator surfaces
+
+Different validation form is acceptable across the retained destination world, but a weaker
+authenticity standard is not. Some destinations are remote service destinations that require
+live-backed hardening. Some are local/runtime-shaped destinations that require production-like
+local/runtime hardening against the same shared delivery semantics.
 
 The following semantics remain intentionally destination-local and should not be normalized further
 right now:
@@ -143,7 +163,7 @@ boundary:
 - broader fan-out or destination-side routing abstractions beyond the current one-payload-at-a-time
   delivery discipline
 - backend-native replay mechanisms that bypass the shared Zephyr replay/DLQ path
-- additional destination families outside the currently listed five-destination breadth
+- additional destination families outside the current retained ten-destination surface
 - enterprise-managed destination connectors
 
 ## Change discipline
@@ -174,8 +194,8 @@ Any runtime-facing parameter added here must stay consistent across:
 Do not add knobs that are not reflected through the existing config discipline.
 
 ## Current deployment / config handoff shape
-Treat the late-P4 deployment/config shape as a bounded handoff into P5, not as a finished
-production deployment system.
+Treat the completed-P4 and current-P4.5 deployment/config shape as a bounded handoff into P5, not
+as a finished production deployment system.
 
 The following config shape is already shared across the current expanded connector world:
 - Zephyr-owned task/orchestration/runtime settings stay ingest-owned and flow-agnostic where they
@@ -195,7 +215,7 @@ The following config remains intentionally stream-local or connector-local:
   shared deployment/config contract
 
 The following runtime/deployment assumptions are already implicit today and should be treated as
-explicit at the P4 handoff boundary:
+explicit at the current P4.5 pre-P5 boundary:
 - deployment wiring is still driven by the current config/spec surfaces and local runtime
   composition, not by a separate environment-packaging layer
 - connector-specific credentials/config are expected to remain outside shared Zephyr contracts
@@ -213,8 +233,8 @@ Deferred to P5 or later unless a future change explicitly narrows and re-authori
   boundaries
 
 ## Current runtime / concurrency handoff shape
-Treat the late-P4 runtime shape as a bounded execution handoff into P5, not as a finished runtime
-platform.
+Treat the completed-P4 and current-P4.5 runtime shape as a bounded execution handoff into P5, not
+as a finished runtime platform.
 
 The following execution shape is already shared across the current expanded connector world:
 - `TaskV1 -> FlowProcessor -> Delivery` remains the shared execution chain for both runner-style
@@ -227,7 +247,7 @@ The following execution shape is already shared across the current expanded conn
   destination-owned worker or batch-job models
 
 The following concurrency and sequencing assumptions are already implicit today and should be
-treated as explicit at the P4 handoff boundary:
+treated as explicit at the current P4.5 pre-P5 boundary:
 - task execution is coordinated through the current ingest-owned queue/lock/runtime boundaries;
   those boundaries are shared, but not yet broadened into a distributed orchestration platform
 - sequencing, retry, replay, and recovery facts must remain inspectable through current Zephyr-
@@ -253,8 +273,8 @@ Deferred to P5 or later unless a future change explicitly narrows and re-authori
 - runtime abstraction work that would re-open queue, lock, task, or flow ownership boundaries
 
 ## Current operator / metrics / provenance handoff shape
-Treat the late-P4 operator/provenance shape as a bounded handoff into P5, not as a finished
-observability platform.
+Treat the completed-P4 and current-P4.5 operator/provenance shape as a bounded handoff into P5,
+not as a finished observability platform.
 
 The following operator-facing surfaces are already shared and dependable across the current
 expanded connector world:

@@ -3,7 +3,12 @@
 ## Repo anchor
 - Repo: https://github.com/farrz901-art/Zephyr-dev
 - Branch: main
-- Baseline: 8863aeb9acf6f40b09fea9c8d6157e95c8edf7bc
+- Documentation-reorg baseline: `dd1b4834ab2b8f7684f1f121bc614a157ec54f4d`
+
+## Current phase
+- P4 is complete
+- P4.5 authenticity hardening is current
+- P5 has not started
 
 ## Most important rule files
 - `/AGENTS.md`
@@ -12,16 +17,16 @@
 - `/packages/uns-stream/AGENTS.md`
 - `/packages/zephyr-core/AGENTS.md`
 
-These files are authoritative surfaces for:
-- support boundary
-- supported subsets
-- deferred/unsupported boundaries
-- P4->P5 handoff shape
+These `AGENTS.md` files are the current authoritative rules and architecture surfaces.
+
+## Historical doc rule
+- `docs/archive/legacy-p0-p4/` is historical reference only
+- `docs/review-needed/` is not current truth by default
 
 ## Core packages
 ### `packages/zephyr-ingest`
 Shared ingest/delivery world:
-- shared destination handling
+- shared delivery semantics across the retained destination surface
 - flow processor
 - replay / DLQ / provenance / operator-facing surfaces
 
@@ -29,39 +34,17 @@ Shared ingest/delivery world:
 Structured source world:
 - task identity
 - progress/checkpoint/resume
-- lineage/provenance
-- bounded structured-source support
+- retained `it` source support
+- preserved `airbyte-message-json` input path
 
 ### `packages/uns-stream`
 Document-native source world:
 - source identity
 - acquisition/discovery
 - fetch-to-partition-entry
-- provenance
-- bounded document-source support
+- retained `uns` source support
 
-## Key batch-protection tests
-### Destination-side
-- second-round destination contract tests
-- second-round destination integration tests
-- replay/delivery-related tests
-- flow_processor tests where directly relevant
-
-### it-stream source-side
-- second-round source batch tests
-- representative connector-local tests
-- flow/identity/checkpoint/provenance-related tests
-
-### uns-stream source-side
-- second-round uns source batch tests
-- representative connector-local tests
-- flow/acquisition/provenance-related tests
-
-## Doc usage rule
-Do not treat the whole `docs/` folder as authoritative.
-Many old docs may be stale.
-Prefer:
-1. current `AGENTS.md` files
-2. new `Phase.md`
-3. explicit handoff documents
-4. tests and representative implementation files
+## Current support-surface framing
+- retained destinations: 10 total across baseline and second-round groups
+- retained sources: 10 total across `it-stream` and `uns-stream`
+- preserved `airbyte-message-json` remains in current P4.5 hardening scope

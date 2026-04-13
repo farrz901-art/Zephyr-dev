@@ -98,6 +98,18 @@ treated as the stable `uns-stream` source boundary:
 - shared output ownership remains document metadata, partition results, and Zephyr-owned normalized
   elements rather than source-native response envelopes
 
+## P4.5 authenticity-hardening rule
+The full retained `uns-stream` source surface is in P4.5 authenticity-hardening scope:
+- `http_document_v1`
+- `s3_document_v1`
+- `git_document_v1`
+- `google_drive_document_v1`
+- `confluence_document_v1`
+
+`http_document_v1` as the baseline source and the later-added sources must not use dual
+authenticity standards during P4.5. For `uns`, authenticity hardening includes real fetch plus
+real partition-path combination evidence where that path is part of the supported subset.
+
 The following semantics remain intentionally source-local and should not be normalized further
 right now:
 - HTTP request shaping, accept/header details, redirect/auth behavior, and content-type inference
@@ -112,7 +124,7 @@ right now:
 - source-local provenance/detail fields such as URL, bucket/key/version, commit/blob/path, drive or
   file identifiers, export mime, page id, page version, and body format
 
-The following categories or deeper capabilities remain deferred beyond the current P4 support
+The following categories or deeper capabilities remain deferred beyond the current retained support
 boundary:
 - directory, folder, prefix, space-tree, or other multi-document discovery that would widen the
   current one-document-per-task acquisition subset

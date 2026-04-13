@@ -4,9 +4,11 @@ This repository is a strict contract-first Python monorepo for Zephyr.
 
 Zephyr is a data logistics / preprocessing platform.
 Current state:
-- P2 is completed.
-- P3 is completed through P3-M9.
-- P4 preparation is beginning from the P3 end-state architecture.
+- P2 is complete.
+- P3 is complete.
+- P4 is complete.
+- Current stage: P4.5 authenticity hardening.
+- P5 has not started.
 
 ## Branch / delivery model
 - Active development happens on `master`.
@@ -175,7 +177,18 @@ Current support means only the connector surfaces and supported subsets explicit
 - `packages/zephyr-ingest/AGENTS.md`
 
 Treat those package-level matrices plus this root-level unsupported/deferred section as the current
-authoritative connector-world support boundary for P4.
+authoritative connector-world support boundary for the retained P4/P4.5 support surface.
+
+P4.5 authenticity hardening applies across the full retained support surface, not just the late-P4
+second-round focus:
+- retained destinations are the baseline plus second-round set named in `packages/zephyr-ingest/AGENTS.md`
+- retained sources are the full current `it-stream` and `uns-stream` sets named in their package
+  `AGENTS.md` files
+- `airbyte-message-json` remains a preserved `it-stream` input path with its own explicit
+  authenticity-hardening treatment
+
+During P4.5, baseline and second-round connectors must not be held to different authenticity
+standards.
 
 Do not infer broader support from implementation similarity, vendor family overlap, or passing
 tests around one bounded connector subset.
@@ -217,13 +230,18 @@ current P4 support surface unless a later change explicitly adds them to the arc
 focused anti-drift coverage.
 
 ## P4 closeout / P5 handoff boundary
-Treat late P4 as a bounded pre-production handoff surface, not as proof that Zephyr is already a
-finished production platform.
+Treat completed P4 plus current P4.5 as a bounded pre-production handoff surface, not as proof
+that Zephyr is already a finished production platform.
 
-P4 closeout state:
+Current state at the P4/P4.5 boundary:
+- P4 is complete
+- P4.5 is the current pre-P5 authenticity-hardening phase
+- P5 begins only after P4.5 exit criteria are met
 - the current supported connector world is the package-level source and destination support surface
   explicitly named in `packages/it-stream/AGENTS.md`, `packages/uns-stream/AGENTS.md`, and
   `packages/zephyr-ingest/AGENTS.md`
+- P4.5 hardening covers the full retained destination surface, the full retained source surface,
+  and the preserved `airbyte-message-json` `it-stream` input path
 - expanded source and destination breadth is now architecture-locked against shared-vs-local
   governance drift, delivery drift, and operator-surface drift through focused anti-drift coverage
 - the current support boundary, unsupported/deferred boundary, deployment/config handoff shape,

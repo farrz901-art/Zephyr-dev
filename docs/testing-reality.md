@@ -1,46 +1,39 @@
 # Zephyr Testing Reality
 
-## What current tests DO prove
-Current tests do prove that Zephyr has real shared contracts and bounded integration coverage across:
-- source identity / task identity
-- checkpoint / progress / resume
-- delivery payload / receipt / replay / DLQ
-- failure vocabulary
-- provenance and operator-facing reporting
-- flow_processor-centered execution paths
+## What current tests do prove
+Current tests do prove that Zephyr has real shared contracts and bounded integration coverage
+across:
+- real contract tests
+- real orchestration / flow-boundary tests
+- local-real integration tests
+- fake backend, fixture-driven, or other bounded-subset tests
 
-## What current tests DO NOT fully prove
-Current tests do NOT yet prove full production-grade real-environment correctness across all backends.
+## What current tests do not fully prove
+Current tests do not yet prove full production-grade real-environment correctness across the full
+retained support surface.
 
 ## Most accurate current description
-Current testing is a mixed model:
-- real contract tests
-- real orchestration / flow boundary tests
-- bounded integration tests
-- plus some fake backend / fake connector / fixture-driven tests
+Current testing is mixed:
+- real contract tests defend shape and semantics
+- real orchestration / flow-boundary tests defend shared execution and governance paths
+- local-real integration tests exercise production-like local/runtime-backed paths where available
+- fake backend / fixture-driven / bounded-subset tests still cover parts of the retained surface
 
-## Interpretation rule
-Passing `make test` means:
-- the current bounded support surface is largely coherent
-- Zephyr’s shared contracts are defended
-- current anti-drift coverage exists
+Passing `make test` means the current bounded support surface is largely coherent and anti-drift
+coverage exists. It does not mean every backend or provider path has full live production-grade
+validation.
 
-Passing `make test` does NOT automatically mean:
-- all external backends are production-grade validated
-- all provider quirks are covered
-- all auth/network/timeout/retry cases are production-ready
-- concurrency/scaling behavior is production-proven
+## P4.5 implication
+P4.5 exists to raise the full retained support surface to a higher authenticity level.
 
-## P5 testing upgrade target
-P5 should progressively upgrade the most important paths toward:
-1. real-backend integration testing
-2. production-like validation
-3. benchmark / scale validation
-4. failure and recovery drills
+Current support/authenticity discussions must use the retained surface framing:
+- the destination world is not only the late-P4 second-round destinations
+- the source world is not only the late-P4 source additions
+- preserved `airbyte-message-json` is also part of the current retained hardening scope
 
 ## Decision rule for future conversations
-Never describe current testing as "full real production validation".
+Do not describe current testing as full real production validation.
 Use wording like:
 - bounded pre-production validation
-- real contract/integration + fake-backend mixed testing
-- not yet production-grade full-real testing
+- real contract/orchestration coverage plus mixed local-real and fake-backed testing
+- not yet production-grade full-real validation

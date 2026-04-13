@@ -75,6 +75,28 @@ treated as the stable `it-stream` source boundary:
   `delivery_origin="primary"`, explicit resumed-from checkpoint identity, and explicit cursor
   continuation
 
+## Preserved `it-stream` input paths
+The following input path remains part of the current retained `it-stream` surface even though it is
+not a remote source connector:
+- `airbyte-message-json` / legacy message-json path
+
+`airbyte-message-json` remains a real preserved input surface and must receive the same level of
+P4.5 authenticity hardening as the connector-based source set. Its hardening emphasis is protocol,
+corpus, checkpoint/recovery, and replay-relevant path evidence rather than remote-source fetch
+validation.
+
+## P4.5 authenticity-hardening rule
+All current retained `it-stream` source surfaces are in P4.5 authenticity-hardening scope:
+- `http_json_cursor_v1`
+- `postgresql_incremental_v1`
+- `clickhouse_incremental_v1`
+- `kafka_partition_offset_v1`
+- `mongodb_incremental_v1`
+- preserved `airbyte-message-json`
+
+Baseline and later-added `it-stream` surfaces must not use dual authenticity standards during
+P4.5.
+
 The following semantics remain intentionally source-local and should not be normalized further
 right now:
 - HTTP request shaping, query parameter details, response-envelope adaptation, and cursor parameter
@@ -87,7 +109,7 @@ right now:
 - source-local progress payload fields such as `schema`, `query_mode`, `topic`, `partition`,
   `last_offset`, `collection`, `cursor_field`, `row_count`, and `document_count`
 
-The following categories or deeper capabilities remain deferred beyond the current P4 support
+The following categories or deeper capabilities remain deferred beyond the current retained support
 boundary:
 - non-cursor progress families
 - CDC, changefeed, oplog-token, or log-native recovery models

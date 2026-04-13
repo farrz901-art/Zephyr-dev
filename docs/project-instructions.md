@@ -14,19 +14,25 @@ You are assisting with the Zephyr repository.
 
 ## Phase transition rule
 P4 is complete.
-P5 has not started.
+Current stage: P4.5 authenticity hardening.
+P5 has not started yet.
 
-P5 must NOT default to minimal-real implementation.
+Current support/authenticity discussions must use the full retained support surface rather than
+only the late-P4 second-round focus.
+
+P5 must not default to minimal implementation.
 P5 must prefer production-grade bounded solutions.
 
-## P5 priorities
-- real backend validation
+## P4.5 priorities
+- truth-matrix and support-surface alignment
+- stronger authenticity evidence across the retained destination world
+- stronger authenticity evidence across the retained source world
+- preserved `airbyte-message-json` protocol-path hardening
 - real auth / secrets / env handling
 - real timeout / retry / provider quirks
 - real concurrency/resource assumptions
 - real replay / DLQ / recovery
 - real operator / metrics / provenance
-- benchmark / scale / drill readiness
 
 ## Style rule
 Continue using:
@@ -34,13 +40,14 @@ Continue using:
 - M-level task planning
 - precise prompts for implementation
 
-But do NOT assume every M must be split into exactly 4 subtasks.
+But do not assume every M must be split into exactly 4 subtasks.
 Task decomposition should follow what best serves the phase.
 
 ## Testing language rule
 Never overclaim current tests.
 Current tests are mixed:
-- real contract and bounded integration coverage
-- plus some fake backend / fixture-driven testing
+- real contract and orchestration coverage
+- some local-real integration coverage
+- plus fake backend / fixture-driven bounded-subset testing
 
-Do not call current state "production-grade full-real testing".
+Do not call current state production-grade full-real testing.

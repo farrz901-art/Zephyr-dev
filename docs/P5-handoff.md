@@ -3,12 +3,14 @@
 ## Repository anchor
 - Repo: https://github.com/farrz901-art/Zephyr-dev
 - Branch: main
-- Baseline commit: 8863aeb9acf6f40b09fea9c8d6157e95c8edf7bc
+- Documentation-reorg baseline: `dd1b4834ab2b8f7684f1f121bc614a157ec54f4d`
 
 ## Current phase state
 - P3 complete
 - P4 complete
-- P5 not started yet
+- Current phase: P4.5 authenticity hardening
+- P5 has not started
+- P5 begins only after P4.5 exit criteria are met
 
 ## Core architecture rules
 - Strict contract-first Python monorepo
@@ -16,35 +18,36 @@
 - `it-stream` owns `it` sources
 - `uns-stream` owns `uns` sources
 - Destination connectors continue to be shared in `zephyr-ingest`
-- Shared governance, provenance, replay, operator-facing surfaces are important and already partially formalized
+- Shared governance, provenance, replay, and operator-facing surfaces remain important and already
+  formalized in bounded ways
 
 ## What P4 achieved
-1. Second-round non-enterprise destination breadth completed, validated, support-bounded, and integration-locked
-2. Second-round `it-stream` source breadth completed, validated, support-bounded, and integration-locked
-3. Second-round `uns-stream` source breadth completed, validated, support-bounded, and integration-locked
-4. Expanded connector-world governance/operator/anti-drift validation completed
-5. Source support matrix formalized
-6. Destination support matrix formalized
-7. Unsupported / experimental / deferred boundary formalized
-8. P4 -> P5 handoff shape formalized:
-   - deployment/config shape
-   - runtime/concurrency assumptions
-   - operator/metrics/provenance shape
-   - bench/scale/SLI candidates
-   - failure/recovery drill entry points
-   - P5 handoff matrix
+1. Source breadth and destination breadth were completed as a bounded retained support surface.
+2. Shared orchestration, delivery, replay, provenance, and operator-facing boundaries were
+   formalized.
+3. Unsupported and deferred boundaries were made explicit.
+4. P4 handoff inputs for deployment/config, runtime/concurrency, and operator/provenance were
+   prepared without claiming full productionization.
+
+## Current P4.5 gate
+P4.5 is the pre-P5 authenticity-hardening gate. It covers the full retained support surface, not
+just the late-P4 second-round focus:
+- 10 retained destinations
+- 10 retained sources
+- preserved `airbyte-message-json` as its own real `it-stream` input path
+
+Baseline and later-added connectors must not be held to different authenticity standards during
+P4.5.
 
 ## Important reality check
-Zephyr is not just a concept prototype anymore.
-It is currently a bounded pre-production system.
-
-It has real source/destination breadth and real shared contracts.
-However, it is NOT yet production-proven.
+Zephyr is a bounded pre-production system with real source and destination breadth plus real shared
+contracts. It is not yet production-proven, and P5 has not started because the current gate is
+P4.5 authenticity hardening.
 
 ## Critical instruction for P5
-Do NOT default to "minimal viable implementation" anymore.
+Do not default to minimal implementation.
 
-From P5 onward, decision priority changes to:
+P5 should begin from a production-grade bounded-solution mindset:
 1. real production constraints
 2. real backend behavior
 3. real auth/secrets/env handling
@@ -52,7 +55,7 @@ From P5 onward, decision priority changes to:
 5. real concurrency/resource limits
 6. real replay/DLQ/recovery paths
 7. real operator/metrics/provenance
-8. benchmark / scale / drill / recovery validation
+8. benchmark, scale, drill, and recovery validation
 
 Still preserve:
 - contract-first thinking
@@ -61,8 +64,7 @@ Still preserve:
 
 ## Expected P5 working style
 - Continue using Phase -> M -> detailed task -> precise prompt workflow
-- M tasks do NOT need to be mechanically split into 4 subtasks
-- Task granularity should be chosen to best complete the phase safely and well
+- Task granularity should be chosen to complete the phase safely and well
 - Always distinguish:
   - currently supported
   - bounded-subset supported
