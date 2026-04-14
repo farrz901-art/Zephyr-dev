@@ -225,6 +225,16 @@ explicit at the current P4.5 pre-P5 boundary:
 - the current support boundary does not imply uniform environment variables, secret packaging,
   service manifests, or cloud/Kubernetes deployment conventions yet
 
+P4.5 runtime-location rule:
+- `zephyr-ingest` helper code, tests, fixture servers, truth-matrix wiring, and repo-owned example
+  compose/env files remain in the repository control plane
+- real local/live authenticity validation runtime assets belong to the external runtime plane rooted
+  by `ZEPHYR_P45_HOME`
+- real env/secrets, compose entrypoints or overrides, data volumes, and logs must not default to
+  repo-root
+- repo-root example/template files may exist as fallback/bootstrap aids, but they are not the
+  canonical runtime location for real validation
+
 Deferred to P5 or later unless a future change explicitly narrows and re-authorizes them sooner:
 - standardized deployment packaging such as Docker/Kubernetes/Helm-oriented config layout
 - secret-distribution conventions or environment-level config normalization across all connectors

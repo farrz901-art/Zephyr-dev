@@ -190,6 +190,15 @@ second-round focus:
 During P4.5, baseline and second-round connectors must not be held to different authenticity
 standards.
 
+P4.5 runtime-location rule:
+- the repository is the control plane for code, tests, helper modules, fixtures, scripts, truth
+  matrix artifacts, and example templates
+- real local/live authenticity runtime assets belong to the external runtime plane rooted by
+  `ZEPHYR_P45_HOME`
+- real env/secrets/compose files, service state, logs, and data must not default to repo-root
+- repo-root template/example files are allowed as fallback/bootstrap inputs, but they are not the
+  canonical real runtime location
+
 Do not infer broader support from implementation similarity, vendor family overlap, or passing
 tests around one bounded connector subset.
 

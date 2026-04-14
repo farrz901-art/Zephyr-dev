@@ -24,18 +24,25 @@ test:
 	uv run --locked --no-sync pytest -n auto
 
 P45_PYTEST = uv run --locked --no-sync pytest -n 0
+P45_HEALTHCHECK = uv run --locked --no-sync python tools/p45_substrate_healthcheck.py
+P45_RUNTIME_HOME = $(shell uv run --locked --no-sync python tools/p45_substrate_healthcheck.py --print-runtime-home)
+P45_COMPOSE_PATH = $(shell uv run --locked --no-sync python tools/p45_substrate_healthcheck.py --print-compose-path)
 
 .PHONY: p45-substrate-up
 p45-substrate-up:
-	docker compose -f docker-compose.p45-validation.yml up -d
+	@echo P4.5 runtime home: $(P45_RUNTIME_HOME)
+	@echo P4.5 compose file: $(P45_COMPOSE_PATH)
+	docker compose -f "$(P45_COMPOSE_PATH)" up -d
 
 .PHONY: p45-substrate-down
 p45-substrate-down:
-	docker compose -f docker-compose.p45-validation.yml down --remove-orphans
+	@echo P4.5 runtime home: $(P45_RUNTIME_HOME)
+	@echo P4.5 compose file: $(P45_COMPOSE_PATH)
+	docker compose -f "$(P45_COMPOSE_PATH)" down --remove-orphans
 
 .PHONY: p45-substrate-healthcheck
 p45-substrate-healthcheck:
-	uv run --locked --no-sync python tools/p45_substrate_healthcheck.py --tier all
+	$(P45_HEALTHCHECK) --tier all
 
 .PHONY: p45-test-local-real
 p45-test-local-real:

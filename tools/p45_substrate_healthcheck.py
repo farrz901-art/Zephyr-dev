@@ -5,16 +5,21 @@ from typing import cast
 
 from zephyr_ingest.testing.p45 import (
     check_services,
-    default_compose_path,
     format_probe_results,
     format_redacted_env_summary,
+    format_runtime_resolution,
     load_p45_env,
+    resolve_p45_runtime_paths,
 )
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="P4.5 substrate availability healthcheck for local-real and service-live tiers."
+        description=(
+            "Resolve P4.5 runtime assets from ZEPHYR_P45_HOME or the external default runtime "
+            "home, "
+            "then probe the local-real and service-live substrate tiers."
+        )
     )
     parser.add_argument(
         "--tier",
@@ -39,17 +44,42 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print a redacted summary of the loaded P4.5 validation environment.",
     )
+    parser.add_argument(
+        "--print-runtime-home",
+        action="store_true",
+        help="Print only the resolved P4.5 runtime home path and exit.",
+    )
+    parser.add_argument(
+        "--print-env-dir",
+        action="store_true",
+        help="Print only the resolved P4.5 runtime env directory and exit.",
+    )
+    parser.add_argument(
+        "--print-compose-path",
+        action="store_true",
+        help="Print only the resolved P4.5 compose file path and exit.",
+    )
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    runtime_paths = resolve_p45_runtime_paths()
+    if args.print_runtime_home:
+        print(runtime_paths.home)
+        return 0
+    if args.print_env_dir:
+        print(runtime_paths.env_dir)
+        return 0
+    if args.print_compose_path:
+        print(runtime_paths.compose_path)
+        return 0
     tier = None if args.tier == "all" else cast(str, args.tier)
     env = load_p45_env()
+    print(format_runtime_resolution(runtime_paths))
     if args.show_env:
         print(format_redacted_env_summary(env))
-    print(f"P4.5 compose file: {default_compose_path()}")
     results = check_services(
         env,
         tier=tier,
