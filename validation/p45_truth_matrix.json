@@ -1,0 +1,339 @@
+{
+  "schema_version": 1,
+  "phase": "P4.5 authenticity hardening",
+  "truth_state": {
+    "phase_sync_branch": "main",
+    "repository_phase_baseline": "8863aeb9acf6f40b09fea9c8d6157e95c8edf7bc",
+    "docs_alignment_truth_state": "414be2baa97f1a84964d209da4fab61dbf95f21f",
+    "p4_complete": true,
+    "current_stage": "P4.5 authenticity hardening",
+    "p5_started": false,
+    "p45_covers_full_retained_support_surface": true,
+    "baseline_and_second_round_use_dual_authenticity_standards": false
+  },
+  "taxonomy": [
+    "contract",
+    "orchestration",
+    "local-real",
+    "service-live",
+    "saas-live",
+    "recovery-drill"
+  ],
+  "surfaces": [
+    {
+      "name": "filesystem",
+      "kind": "destination",
+      "owner": "zephyr-ingest",
+      "retained": true,
+      "lineage": "baseline",
+      "authenticity": {
+        "contract": { "status": "planned" },
+        "orchestration": { "status": "planned" },
+        "local-real": { "status": "planned" },
+        "service-live": { "status": "not_applicable" },
+        "saas-live": { "status": "not_applicable" },
+        "recovery-drill": { "status": "planned" }
+      }
+    },
+    {
+      "name": "webhook",
+      "kind": "destination",
+      "owner": "zephyr-ingest",
+      "retained": true,
+      "lineage": "baseline",
+      "authenticity": {
+        "contract": { "status": "planned" },
+        "orchestration": { "status": "planned" },
+        "local-real": { "status": "planned" },
+        "service-live": { "status": "planned" },
+        "saas-live": { "status": "not_applicable" },
+        "recovery-drill": { "status": "planned" }
+      }
+    },
+    {
+      "name": "sqlite",
+      "kind": "destination",
+      "owner": "zephyr-ingest",
+      "retained": true,
+      "lineage": "baseline",
+      "authenticity": {
+        "contract": { "status": "planned" },
+        "orchestration": { "status": "planned" },
+        "local-real": { "status": "planned" },
+        "service-live": { "status": "not_applicable" },
+        "saas-live": { "status": "not_applicable" },
+        "recovery-drill": { "status": "planned" }
+      }
+    },
+    {
+      "name": "kafka",
+      "kind": "destination",
+      "owner": "zephyr-ingest",
+      "retained": true,
+      "lineage": "baseline",
+      "authenticity": {
+        "contract": { "status": "planned" },
+        "orchestration": { "status": "planned" },
+        "local-real": { "status": "not_applicable" },
+        "service-live": { "status": "planned" },
+        "saas-live": { "status": "not_applicable" },
+        "recovery-drill": { "status": "planned" }
+      }
+    },
+    {
+      "name": "weaviate",
+      "kind": "destination",
+      "owner": "zephyr-ingest",
+      "retained": true,
+      "lineage": "baseline",
+      "authenticity": {
+        "contract": { "status": "planned" },
+        "orchestration": { "status": "planned" },
+        "local-real": { "status": "not_applicable" },
+        "service-live": { "status": "planned" },
+        "saas-live": { "status": "not_applicable" },
+        "recovery-drill": { "status": "planned" }
+      }
+    },
+    {
+      "name": "s3",
+      "kind": "destination",
+      "owner": "zephyr-ingest",
+      "retained": true,
+      "lineage": "second-round",
+      "authenticity": {
+        "contract": { "status": "planned" },
+        "orchestration": { "status": "planned" },
+        "local-real": { "status": "not_applicable" },
+        "service-live": { "status": "planned" },
+        "saas-live": { "status": "not_applicable" },
+        "recovery-drill": { "status": "planned" }
+      }
+    },
+    {
+      "name": "opensearch",
+      "kind": "destination",
+      "owner": "zephyr-ingest",
+      "retained": true,
+      "lineage": "second-round",
+      "authenticity": {
+        "contract": { "status": "planned" },
+        "orchestration": { "status": "planned" },
+        "local-real": { "status": "not_applicable" },
+        "service-live": { "status": "planned" },
+        "saas-live": { "status": "not_applicable" },
+        "recovery-drill": { "status": "planned" }
+      }
+    },
+    {
+      "name": "clickhouse",
+      "kind": "destination",
+      "owner": "zephyr-ingest",
+      "retained": true,
+      "lineage": "second-round",
+      "authenticity": {
+        "contract": { "status": "planned" },
+        "orchestration": { "status": "planned" },
+        "local-real": { "status": "not_applicable" },
+        "service-live": { "status": "planned" },
+        "saas-live": { "status": "not_applicable" },
+        "recovery-drill": { "status": "planned" }
+      }
+    },
+    {
+      "name": "mongodb",
+      "kind": "destination",
+      "owner": "zephyr-ingest",
+      "retained": true,
+      "lineage": "second-round",
+      "authenticity": {
+        "contract": { "status": "planned" },
+        "orchestration": { "status": "planned" },
+        "local-real": { "status": "not_applicable" },
+        "service-live": { "status": "planned" },
+        "saas-live": { "status": "not_applicable" },
+        "recovery-drill": { "status": "planned" }
+      }
+    },
+    {
+      "name": "loki",
+      "kind": "destination",
+      "owner": "zephyr-ingest",
+      "retained": true,
+      "lineage": "second-round",
+      "authenticity": {
+        "contract": { "status": "planned" },
+        "orchestration": { "status": "planned" },
+        "local-real": { "status": "not_applicable" },
+        "service-live": { "status": "planned" },
+        "saas-live": { "status": "not_applicable" },
+        "recovery-drill": { "status": "planned" }
+      }
+    },
+    {
+      "name": "http_json_cursor_v1",
+      "kind": "source",
+      "owner": "it-stream",
+      "retained": true,
+      "lineage": "baseline",
+      "authenticity": {
+        "contract": { "status": "planned" },
+        "orchestration": { "status": "planned" },
+        "local-real": { "status": "planned" },
+        "service-live": { "status": "not_applicable" },
+        "saas-live": { "status": "not_applicable" },
+        "recovery-drill": { "status": "planned" }
+      }
+    },
+    {
+      "name": "postgresql_incremental_v1",
+      "kind": "source",
+      "owner": "it-stream",
+      "retained": true,
+      "lineage": "second-round",
+      "authenticity": {
+        "contract": { "status": "planned" },
+        "orchestration": { "status": "planned" },
+        "local-real": { "status": "not_applicable" },
+        "service-live": { "status": "planned" },
+        "saas-live": { "status": "not_applicable" },
+        "recovery-drill": { "status": "planned" }
+      }
+    },
+    {
+      "name": "clickhouse_incremental_v1",
+      "kind": "source",
+      "owner": "it-stream",
+      "retained": true,
+      "lineage": "second-round",
+      "authenticity": {
+        "contract": { "status": "planned" },
+        "orchestration": { "status": "planned" },
+        "local-real": { "status": "not_applicable" },
+        "service-live": { "status": "planned" },
+        "saas-live": { "status": "not_applicable" },
+        "recovery-drill": { "status": "planned" }
+      }
+    },
+    {
+      "name": "kafka_partition_offset_v1",
+      "kind": "source",
+      "owner": "it-stream",
+      "retained": true,
+      "lineage": "second-round",
+      "authenticity": {
+        "contract": { "status": "planned" },
+        "orchestration": { "status": "planned" },
+        "local-real": { "status": "not_applicable" },
+        "service-live": { "status": "planned" },
+        "saas-live": { "status": "not_applicable" },
+        "recovery-drill": { "status": "planned" }
+      }
+    },
+    {
+      "name": "mongodb_incremental_v1",
+      "kind": "source",
+      "owner": "it-stream",
+      "retained": true,
+      "lineage": "second-round",
+      "authenticity": {
+        "contract": { "status": "planned" },
+        "orchestration": { "status": "planned" },
+        "local-real": { "status": "not_applicable" },
+        "service-live": { "status": "planned" },
+        "saas-live": { "status": "not_applicable" },
+        "recovery-drill": { "status": "planned" }
+      }
+    },
+    {
+      "name": "http_document_v1",
+      "kind": "source",
+      "owner": "uns-stream",
+      "retained": true,
+      "lineage": "baseline",
+      "authenticity": {
+        "contract": { "status": "planned" },
+        "orchestration": { "status": "planned" },
+        "local-real": { "status": "planned" },
+        "service-live": { "status": "not_applicable" },
+        "saas-live": { "status": "not_applicable" },
+        "recovery-drill": { "status": "planned" }
+      }
+    },
+    {
+      "name": "s3_document_v1",
+      "kind": "source",
+      "owner": "uns-stream",
+      "retained": true,
+      "lineage": "second-round",
+      "authenticity": {
+        "contract": { "status": "planned" },
+        "orchestration": { "status": "planned" },
+        "local-real": { "status": "not_applicable" },
+        "service-live": { "status": "planned" },
+        "saas-live": { "status": "not_applicable" },
+        "recovery-drill": { "status": "planned" }
+      }
+    },
+    {
+      "name": "git_document_v1",
+      "kind": "source",
+      "owner": "uns-stream",
+      "retained": true,
+      "lineage": "second-round",
+      "authenticity": {
+        "contract": { "status": "planned" },
+        "orchestration": { "status": "planned" },
+        "local-real": { "status": "planned" },
+        "service-live": { "status": "not_applicable" },
+        "saas-live": { "status": "not_applicable" },
+        "recovery-drill": { "status": "planned" }
+      }
+    },
+    {
+      "name": "google_drive_document_v1",
+      "kind": "source",
+      "owner": "uns-stream",
+      "retained": true,
+      "lineage": "second-round",
+      "authenticity": {
+        "contract": { "status": "planned" },
+        "orchestration": { "status": "planned" },
+        "local-real": { "status": "not_applicable" },
+        "service-live": { "status": "not_applicable" },
+        "saas-live": { "status": "planned" },
+        "recovery-drill": { "status": "planned" }
+      }
+    },
+    {
+      "name": "confluence_document_v1",
+      "kind": "source",
+      "owner": "uns-stream",
+      "retained": true,
+      "lineage": "second-round",
+      "authenticity": {
+        "contract": { "status": "planned" },
+        "orchestration": { "status": "planned" },
+        "local-real": { "status": "not_applicable" },
+        "service-live": { "status": "not_applicable" },
+        "saas-live": { "status": "planned" },
+        "recovery-drill": { "status": "planned" }
+      }
+    },
+    {
+      "name": "airbyte-message-json",
+      "kind": "input-path",
+      "owner": "it-stream",
+      "retained": true,
+      "lineage": "preserved",
+      "authenticity": {
+        "contract": { "status": "planned" },
+        "orchestration": { "status": "planned" },
+        "local-real": { "status": "planned" },
+        "service-live": { "status": "not_applicable" },
+        "saas-live": { "status": "not_applicable" },
+        "recovery-drill": { "status": "planned" }
+      }
+    }
+  ]
+}

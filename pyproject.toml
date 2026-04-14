@@ -115,6 +115,12 @@ testpaths = ["packages"]
 addopts = ["-q", "-n", "auto", "--basetemp=.tmp/pytest"]
 markers = [
   "integration: requires optional extras and fixture files",
+  "auth_contract: P4.5 authenticity contract tier",
+  "auth_orchestration: P4.5 authenticity orchestration tier",
+  "auth_local_real: P4.5 authenticity local-real tier",
+  "auth_service_live: P4.5 authenticity service-live tier",
+  "auth_saas_live: P4.5 authenticity saas-live tier",
+  "auth_recovery_drill: P4.5 authenticity recovery-drill tier",
 ]
 
 
