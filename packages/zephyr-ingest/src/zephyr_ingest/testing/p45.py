@@ -681,7 +681,7 @@ def _check_http_probe(
     port = _resolve_port(env, probe)
     url = f"http://{host}:{port}{probe.path}"
     try:
-        response = httpx.get(url, timeout=timeout_s)
+        response = httpx.get(url, timeout=timeout_s, trust_env=False)
     except httpx.HTTPError as exc:
         return ProbeResult(service=service, probe=probe.label, ok=False, detail=f"{url} ({exc})")
     if response.status_code in probe.expected_statuses:

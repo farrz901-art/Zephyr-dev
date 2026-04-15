@@ -57,7 +57,7 @@ services:
       plugins.security.disabled: "true"
       DISABLE_INSTALL_DEMO_CONFIG: "true"
       DISABLE_SECURITY_PLUGIN: "true"
-      OPENSEARCH_INITIAL_ADMIN_PASSWORD: "unused-password"
+      OPENSEARCH_INITIAL_ADMIN_PASSWORD: "Az201!#911@laodeng"
     restart: unless-stopped
 
   clickhouse:

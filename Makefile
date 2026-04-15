@@ -32,13 +32,20 @@ P45_COMPOSE_PATH = $(shell uv run --locked --no-sync python tools/p45_substrate_
 p45-substrate-up:
 	@echo P4.5 runtime home: $(P45_RUNTIME_HOME)
 	@echo P4.5 compose file: $(P45_COMPOSE_PATH)
-	docker compose -f "$(P45_COMPOSE_PATH)" up -d
+	docker compose \
+  		--env-file "$(P45_RUNTIME_HOME)\env\.env.p45.local" \
+  		-f "$(P45_COMPOSE_PATH)" \
+  		up -d --quiet-pull
 
 .PHONY: p45-substrate-down
 p45-substrate-down:
 	@echo P4.5 runtime home: $(P45_RUNTIME_HOME)
 	@echo P4.5 compose file: $(P45_COMPOSE_PATH)
-	docker compose -f "$(P45_COMPOSE_PATH)" down --remove-orphans
+	#docker compose -f "$(P45_COMPOSE_PATH)" down --remove-orphans
+	docker compose \
+	  --env-file "$(P45_RUNTIME_HOME)\env\.env.p45.local" \
+	  -f "$(P45_COMPOSE_PATH)" \
+	  down --remove-orphans
 
 .PHONY: p45-substrate-healthcheck
 p45-substrate-healthcheck:
