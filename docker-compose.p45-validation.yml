@@ -54,7 +54,6 @@ services:
       - "${ZEPHYR_P45_OPENSEARCH_PORT:-19200}:9200"
     environment:
       discovery.type: single-node
-      plugins.security.disabled: "true"
       DISABLE_INSTALL_DEMO_CONFIG: "true"
       DISABLE_SECURITY_PLUGIN: "true"
     restart: unless-stopped
