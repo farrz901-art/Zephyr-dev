@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import argparse
-from typing import cast
 
 from zephyr_ingest.testing.p45 import (
+    ServiceTier,
     check_services,
     format_probe_results,
     format_redacted_env_summary,
@@ -75,7 +75,13 @@ def main(argv: list[str] | None = None) -> int:
     if args.print_compose_path:
         print(runtime_paths.compose_path)
         return 0
-    tier = None if args.tier == "all" else cast(str, args.tier)
+    tier: ServiceTier | None
+    if args.tier == "all":
+        tier = None
+    elif args.tier == "local-real":
+        tier = "local-real"
+    else:
+        tier = "service-live"
     env = load_p45_env()
     print(format_runtime_resolution(runtime_paths))
     if args.show_env:
