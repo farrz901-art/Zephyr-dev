@@ -53,7 +53,6 @@ def send_delivery_payload_v1_to_sqlite(
     _validate_table_name(table_name=table_name)
 
     resolved_db_path = db_path.expanduser().resolve()
-    resolved_db_path.parent.mkdir(parents=True, exist_ok=True)
     payload_json = json.dumps(payload, ensure_ascii=False)
     run_meta = payload.get("run_meta", {})
     run_id = run_meta.get("run_id")
@@ -67,6 +66,7 @@ def send_delivery_payload_v1_to_sqlite(
     }
 
     try:
+        resolved_db_path.parent.mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(resolved_db_path, timeout=timeout_s)
         try:
             conn.execute(
@@ -113,6 +113,13 @@ def send_delivery_payload_v1_to_sqlite(
         details["exc"] = str(exc)
         details["retryable"] = _is_retryable_sqlite_exception(exc)
         details["failure_kind"] = _failure_kind_for_sqlite_exception(exc)
+        details["error_code"] = str(ErrorCode.DELIVERY_FAILED)
+        return DeliveryReceipt(destination="sqlite", ok=False, details=details)
+    except OSError as exc:
+        details["exc_type"] = type(exc).__name__
+        details["exc"] = str(exc)
+        details["retryable"] = False
+        details["failure_kind"] = "operational"
         details["error_code"] = str(ErrorCode.DELIVERY_FAILED)
         return DeliveryReceipt(destination="sqlite", ok=False, details=details)
 

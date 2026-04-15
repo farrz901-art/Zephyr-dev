@@ -7,6 +7,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, Literal
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -657,6 +658,41 @@ def _resolve_port(env: LoadedP45Env, probe: ProbeDefinition) -> int:
     return int(raw_port)
 
 
+def _env_flag(raw_value: str | None, *, default: bool = False) -> bool:
+    normalized = _normalize_env_value(raw_value)
+    if normalized is None:
+        return default
+    return normalized.lower() in {"1", "true", "yes", "on"}
+
+
+def get_p45_opensearch_url(env: LoadedP45Env) -> str:
+    explicit_url = env.get("ZEPHYR_P45_OPENSEARCH_URL")
+    if explicit_url is not None:
+        return explicit_url.rstrip("/")
+    host = env.get("ZEPHYR_P45_OPENSEARCH_HOST", "127.0.0.1") or "127.0.0.1"
+    port = env.get("ZEPHYR_P45_OPENSEARCH_PORT", "19200") or "19200"
+    scheme = env.get("ZEPHYR_P45_OPENSEARCH_SCHEME")
+    if scheme is None:
+        scheme = "https" if env.get("ZEPHYR_P45_OPENSEARCH_PASSWORD") is not None else "http"
+    return f"{scheme}://{host}:{port}".rstrip("/")
+
+
+def get_p45_opensearch_auth(env: LoadedP45Env) -> tuple[str, str] | None:
+    username = env.get("ZEPHYR_P45_OPENSEARCH_USERNAME")
+    password = env.get("ZEPHYR_P45_OPENSEARCH_PASSWORD")
+    if username is None or password is None:
+        return None
+    return (username, password)
+
+
+def get_p45_opensearch_verify_tls(env: LoadedP45Env) -> bool:
+    raw_skip_verify = env.values.get("ZEPHYR_P45_OPENSEARCH_SKIP_TLS_VERIFY")
+    if raw_skip_verify is not None:
+        return not _env_flag(raw_skip_verify)
+    parsed = urlsplit(get_p45_opensearch_url(env))
+    return not (parsed.scheme == "https" and parsed.hostname in {"127.0.0.1", "localhost", "::1"})
+
+
 def _check_tcp_probe(
     *, service: ServiceName, probe: ProbeDefinition, env: LoadedP45Env, timeout_s: float
 ) -> ProbeResult:
@@ -680,8 +716,21 @@ def _check_http_probe(
     host = _resolve_host(env, probe)
     port = _resolve_port(env, probe)
     url = f"http://{host}:{port}{probe.path}"
+    auth: tuple[str, str] | None = None
+    verify_tls = True
+    if service == "opensearch":
+        base_url = get_p45_opensearch_url(env)
+        url = f"{base_url.rstrip('/')}{probe.path}"
+        auth = get_p45_opensearch_auth(env)
+        verify_tls = get_p45_opensearch_verify_tls(env)
     try:
-        response = httpx.get(url, timeout=timeout_s, trust_env=False)
+        response = httpx.get(
+            url,
+            timeout=timeout_s,
+            trust_env=False,
+            auth=auth,
+            verify=verify_tls,
+        )
     except httpx.HTTPError as exc:
         return ProbeResult(service=service, probe=probe.label, ok=False, detail=f"{url} ({exc})")
     if response.status_code in probe.expected_statuses:

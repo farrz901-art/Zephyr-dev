@@ -72,7 +72,13 @@ def send_delivery_payload_v1_to_opensearch(
     auth: tuple[str, str] | None = None
     if username is not None and password is not None:
         auth = (username, password)
-    client = httpx.Client(timeout=timeout_s, verify=verify_tls, auth=auth, transport=transport)
+    client = httpx.Client(
+        timeout=timeout_s,
+        verify=verify_tls,
+        auth=auth,
+        transport=transport,
+        trust_env=False,
+    )
     try:
         response = client.put(
             f"{url.rstrip('/')}/{index}/_doc/{idempotency_key}",

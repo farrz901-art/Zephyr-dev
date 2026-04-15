@@ -4,6 +4,7 @@ import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
+from shutil import copy2
 from typing import Any, Protocol, cast
 
 import httpx
@@ -243,6 +244,92 @@ class SqliteReplaySink:
             idempotency_key=idempotency_key,
             timeout_s=self.timeout_s,
         )
+
+
+@dataclass(frozen=True, slots=True)
+class FilesystemReplaySink:
+    out_root: Path
+
+    @property
+    def name(self) -> str:
+        return "filesystem"
+
+    def send(self, *, payload: DeliveryPayloadV1, idempotency_key: str) -> DeliveryReceipt:
+        del idempotency_key
+        artifacts = payload["artifacts"]
+        resolved_out_root = self.out_root.expanduser().resolve()
+        out_dir = resolved_out_root / payload["sha256"]
+        details: dict[str, object] = {"out_dir": str(out_dir)}
+
+        try:
+            out_dir.mkdir(parents=True, exist_ok=True)
+            (out_dir / "run_meta.json").write_text(
+                json.dumps(payload["run_meta"], ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            for key in (
+                "elements_path",
+                "normalized_path",
+                "records_path",
+                "state_path",
+                "logs_path",
+            ):
+                raw_source = artifacts.get(key)
+                if raw_source is None:
+                    if key in {"records_path", "state_path", "logs_path"}:
+                        continue
+                    return DeliveryReceipt(
+                        destination="filesystem",
+                        ok=False,
+                        details={
+                            **details,
+                            "retryable": False,
+                            "failure_kind": "operational",
+                            "reason": f"missing_{key}",
+                            "error_code": str(ErrorCode.DELIVERY_INVALID_PAYLOAD),
+                        },
+                    )
+                if not isinstance(raw_source, str):
+                    return DeliveryReceipt(
+                        destination="filesystem",
+                        ok=False,
+                        details={
+                            **details,
+                            "retryable": False,
+                            "failure_kind": "operational",
+                            "reason": f"invalid_{key}",
+                            "error_code": str(ErrorCode.DELIVERY_INVALID_PAYLOAD),
+                        },
+                    )
+                source_path = Path(raw_source)
+                copy2(source_path, out_dir / source_path.name)
+        except FileNotFoundError as exc:
+            return DeliveryReceipt(
+                destination="filesystem",
+                ok=False,
+                details={
+                    **details,
+                    "retryable": False,
+                    "failure_kind": "operational",
+                    "exc_type": type(exc).__name__,
+                    "exc": str(exc),
+                    "error_code": str(ErrorCode.DELIVERY_INVALID_PAYLOAD),
+                },
+            )
+        except OSError as exc:
+            return DeliveryReceipt(
+                destination="filesystem",
+                ok=False,
+                details={
+                    **details,
+                    "retryable": False,
+                    "failure_kind": "operational",
+                    "exc_type": type(exc).__name__,
+                    "exc": str(exc),
+                    "error_code": str(ErrorCode.DELIVERY_FAILED),
+                },
+            )
+        return DeliveryReceipt(destination="filesystem", ok=True, details=details)
 
 
 @dataclass(frozen=True, slots=True)

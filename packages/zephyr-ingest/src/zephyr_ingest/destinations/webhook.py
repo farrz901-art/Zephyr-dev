@@ -180,7 +180,11 @@ class WebhookDestination:
         last_exc: str | None = None
         last_exc_type: str | None = None
 
-        client = httpx.Client(timeout=self.timeout_s, transport=self.transport)
+        client = httpx.Client(
+            timeout=self.timeout_s,
+            transport=self.transport,
+            trust_env=False,
+        )
         try:
             while True:
                 attempts += 1

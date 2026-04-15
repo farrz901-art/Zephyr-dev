@@ -33,28 +33,29 @@ def _qualified_table(*, database: str | None, table: str) -> str:
     return f"{database}.{table}"
 
 
-def _should_retry_status(*, status_code: int) -> bool:
-    return status_code == 429 or 500 <= status_code <= 599
-
-
-def _status_failure_kind(*, status_code: int, response_text: str) -> str:
-    if status_code == 429:
-        return "rate_limited"
-    if 500 <= status_code <= 599:
-        return "server_error"
+def _failure_kind_and_retryability(*, status_code: int, response_text: str) -> tuple[str, bool]:
     lowered = response_text.lower()
+    if "authentication failed" in lowered:
+        return "client_error", False
     if any(
         marker in lowered
         for marker in (
             "type mismatch",
             "cannot parse",
+            "does not exist",
             "unknown table",
+            "unknown_table",
+            "unknown database",
             "unknown column",
             "unknown identifier",
         )
     ):
-        return "constraint"
-    return "client_error"
+        return "constraint", False
+    if status_code == 429:
+        return "rate_limited", True
+    if 500 <= status_code <= 599:
+        return "server_error", True
+    return "client_error", False
 
 
 def _http_error_failure_kind(*, exc: httpx.HTTPError) -> str:
@@ -108,7 +109,12 @@ def send_delivery_payload_v1_to_clickhouse(
     auth: tuple[str, str] | None = None
     if username is not None and password is not None:
         auth = (username, password)
-    client = httpx.Client(timeout=timeout_s, auth=auth, transport=transport)
+    client = httpx.Client(
+        timeout=timeout_s,
+        auth=auth,
+        transport=transport,
+        trust_env=False,
+    )
     try:
         response = client.post(url, params={"query": query}, content=json.dumps(row) + "\n")
     except httpx.HTTPError as exc:
@@ -127,11 +133,12 @@ def send_delivery_payload_v1_to_clickhouse(
         return DeliveryReceipt(destination="clickhouse", ok=True, details=details)
 
     details["response_text"] = response.text[:500]
-    details["retryable"] = _should_retry_status(status_code=response.status_code)
-    details["failure_kind"] = _status_failure_kind(
+    failure_kind, retryable = _failure_kind_and_retryability(
         status_code=response.status_code,
         response_text=response.text,
     )
+    details["retryable"] = retryable
+    details["failure_kind"] = failure_kind
     details["error_code"] = str(ErrorCode.DELIVERY_FAILED)
     return DeliveryReceipt(destination="clickhouse", ok=False, details=details)
 

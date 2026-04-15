@@ -54,8 +54,7 @@ services:
       - "${ZEPHYR_P45_OPENSEARCH_PORT:-19200}:9200"
     environment:
       discovery.type: single-node
-      DISABLE_INSTALL_DEMO_CONFIG: "true"
-      DISABLE_SECURITY_PLUGIN: "true"
+      OPENSEARCH_INITIAL_ADMIN_PASSWORD: "${ZEPHYR_P45_OPENSEARCH_PASSWORD}"
     restart: unless-stopped
 
   clickhouse:
