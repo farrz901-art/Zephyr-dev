@@ -62,6 +62,10 @@ class KafkaConsumerProtocol(Protocol):
     def close(self) -> object: ...
 
 
+class _KafkaMetadataConsumerProtocol(KafkaConsumerProtocol, Protocol):
+    def list_topics(self, topic: str | None = None, timeout: float = ...) -> object: ...
+
+
 def is_kafka_partition_source_spec(raw: dict[str, object]) -> bool:
     source = raw.get("source")
     if not isinstance(source, dict):
@@ -232,11 +236,19 @@ def _kafka_error_code(value: object) -> str | int | None:
         code_value = code_attr
     if isinstance(code_value, (str, int)) and not isinstance(code_value, bool):
         return code_value
+    args = getattr(value, "args", None)
+    typed_args = cast("tuple[object, ...] | None", args)
+    if typed_args:
+        return _kafka_error_code(typed_args[0])
     return None
 
 
 def _is_retryable_kafka_error(err: object) -> bool:
     if isinstance(err, (OSError, TimeoutError)):
+        return True
+    args = getattr(err, "args", None)
+    typed_args = cast("tuple[object, ...] | None", args)
+    if typed_args and typed_args[0] is not err and _is_retryable_kafka_error(typed_args[0]):
         return True
     retriable = getattr(err, "retriable", None)
     if callable(retriable):
@@ -247,7 +259,16 @@ def _is_retryable_kafka_error(err: object) -> bool:
         return isinstance(result, bool) and result
     if isinstance(retriable, bool):
         return retriable
-    return False
+    message = str(err).lower()
+    return any(
+        token in message
+        for token in (
+            "broker transport failure",
+            "all brokers down",
+            "_transport",
+            "timed out",
+        )
+    )
 
 
 class _ConfluentKafkaConsumerAdapter:
@@ -318,6 +339,24 @@ def _connect_kafka_partition_source(
     except Exception as err:
         raise _source_error(
             message="it-stream Kafka source connection failed",
+            retryable=_is_retryable_kafka_error(err),
+            details={
+                "connection_name": config.connection_name,
+                "topic": config.topic,
+                "partition": config.partition,
+                "error_code": _kafka_error_code(err),
+            },
+        ) from err
+
+    metadata_consumer = cast("_KafkaMetadataConsumerProtocol", consumer)
+    try:
+        metadata_consumer.list_topics(config.topic, timeout=_DEFAULT_POLL_TIMEOUT_S)
+    except Exception as err:
+        close = getattr(consumer, "close", None)
+        if callable(close):
+            close()
+        raise _source_error(
+            message="it-stream Kafka source metadata probe failed",
             retryable=_is_retryable_kafka_error(err),
             details={
                 "connection_name": config.connection_name,
