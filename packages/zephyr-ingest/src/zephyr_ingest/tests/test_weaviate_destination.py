@@ -119,7 +119,7 @@ def test_weaviate_destination_inserts_one_object(tmp_path: Path) -> None:
 
 def test_weaviate_destination_reports_failed_objects(tmp_path: Path) -> None:
     fake_batch = FakeBatch(number_errors=0)
-    mgr = FakeBatchManager(batch=fake_batch, failed_objects=[{"err": "x"}])
+    mgr = FakeBatchManager(batch=fake_batch, failed_objects=[{"status": 422, "err": "x"}])
     coll = FakeCollection(batch=mgr)
     dest = WeaviateDestination(collection_name="ZephyrDoc", collection=coll)
 
@@ -128,9 +128,9 @@ def test_weaviate_destination_reports_failed_objects(tmp_path: Path) -> None:
     )
     assert receipt.ok is False
     assert receipt.details is not None
-    assert receipt.details["retryable"] is True
+    assert receipt.details["retryable"] is False
     assert receipt.details["batch_status"] == "partial"
-    assert receipt.details["failure_kind"] == "partial_failure"
+    assert receipt.details["failure_kind"] == "constraint"
     assert receipt.details["max_batch_errors"] == 0
 
 
@@ -165,5 +165,5 @@ def test_weaviate_destination_fails_when_batch_errors_exceed_threshold(tmp_path:
     assert receipt.details["retryable"] is True
     assert receipt.details["batch_errors"] == 2
     assert receipt.details["max_batch_errors"] == 1
-    assert receipt.details["failure_kind"] == "error_threshold_exceeded"
+    assert receipt.details["failure_kind"] == "operational"
     assert receipt.details["batch_status"] == "partial"

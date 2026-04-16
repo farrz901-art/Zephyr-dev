@@ -83,7 +83,7 @@ def test_kafka_destination_success(tmp_path: Path) -> None:
 
 
 def test_kafka_destination_producer_exception() -> None:
-    """Producer exception results in ok=False receipt with retryable=True."""
+    """Producer exception results in ok=False receipt with shared retryable mapping."""
     fake = FakeProducer(should_raise=RuntimeError("broker unreachable"))
     dest = KafkaDestination(topic="test-topic", producer=fake)
 
@@ -108,7 +108,7 @@ def test_kafka_destination_producer_exception() -> None:
 
     assert receipt.details["retryable"] is True
     assert receipt.details["exc_type"] == "RuntimeError"
-    assert receipt.details["failure_kind"] == "producer_error"
+    assert receipt.details["failure_kind"] == "connection"
     assert receipt.details["flush_attempted"] is False
     assert receipt.details["flush_completed"] is False
     assert "broker unreachable" in receipt.details["exc"]
@@ -140,7 +140,7 @@ def test_kafka_destination_unflushed() -> None:
 
     assert receipt.details["unflushed"] == 5
     assert receipt.details["retryable"] is True
-    assert receipt.details["failure_kind"] == "flush_incomplete"
+    assert receipt.details["failure_kind"] == "timeout"
     assert receipt.details["flush_attempted"] is True
     assert receipt.details["flush_completed"] is True
 
@@ -171,3 +171,28 @@ def test_kafka_destination_timeout_exception_maps_to_timeout_failure_kind() -> N
     assert receipt.details["failure_kind"] == "timeout"
     assert receipt.details["flush_attempted"] is False
     assert receipt.details["flush_completed"] is False
+
+
+def test_kafka_destination_invalid_topic_maps_to_non_retryable_client_error() -> None:
+    fake = FakeProducer(should_raise=ValueError("embedded null character"))
+    dest = KafkaDestination(topic="bad\x00topic", producer=fake)
+
+    ctx = RunContext.new()
+    meta = RunMetaV1(
+        run_id=ctx.run_id,
+        pipeline_version=ctx.pipeline_version,
+        timestamp_utc=ctx.timestamp_utc,
+        schema_version=ctx.run_meta_schema_version,
+        outcome=RunOutcome.SUCCESS,
+        engine=None,
+        document=None,
+        error=None,
+        warnings=[],
+    )
+
+    receipt = dest(out_root=Path("/tmp"), sha256="xyz", meta=meta, result=None)
+
+    assert receipt.ok is False
+    assert receipt.details is not None
+    assert receipt.details["retryable"] is False
+    assert receipt.details["failure_kind"] == "client_error"

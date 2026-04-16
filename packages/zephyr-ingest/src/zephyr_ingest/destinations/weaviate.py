@@ -4,7 +4,7 @@ import logging
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from zephyr_core import ErrorCode, PartitionResult, RunMetaV1
 from zephyr_ingest.delivery_idempotency import normalize_weaviate_delivery_object_id
@@ -30,17 +30,77 @@ class WeaviateCollectionProtocol(Protocol):
     def batch(self) -> WeaviateBatchManagerProtocol: ...
 
 
-def _failure_kind_for_batch_outcome(
-    *,
-    batch_errors: int,
-    failed_objects: int,
-    max_batch_errors: int,
-) -> str | None:
-    if batch_errors > max_batch_errors:
-        return "error_threshold_exceeded"
-    if failed_objects > 0:
-        return "partial_failure"
+def _status_failure_kind(*, status_code: int) -> str:
+    if status_code == 429:
+        return "rate_limited"
+    if status_code in {401, 403}:
+        return "client_error"
+    if 500 <= status_code <= 599:
+        return "server_error"
+    if status_code in {400, 404, 409, 422}:
+        return "constraint"
+    return "operational"
+
+
+def _status_retryable(*, status_code: int) -> bool:
+    return status_code == 429 or 500 <= status_code <= 599
+
+
+def weaviate_failed_object_status(value: object) -> int | None:
+    if isinstance(value, dict):
+        typed_value = cast(dict[object, object], value)
+        raw_status = typed_value.get("status")
+        if isinstance(raw_status, int):
+            return raw_status
+        if isinstance(raw_status, str) and raw_status.isdigit():
+            return int(raw_status)
     return None
+
+
+def classify_weaviate_failed_objects(*, failed_objects: list[Any]) -> tuple[bool, str]:
+    statuses = [
+        status
+        for item in failed_objects
+        if (status := weaviate_failed_object_status(item)) is not None
+    ]
+    if not statuses:
+        return True, "operational"
+    if any(_status_retryable(status_code=status) for status in statuses):
+        retryable_status = next(
+            status for status in statuses if _status_retryable(status_code=status)
+        )
+        return True, _status_failure_kind(status_code=retryable_status)
+    return False, _status_failure_kind(status_code=statuses[0])
+
+
+def weaviate_exception_failure_kind(*, exc: Exception) -> str:
+    response = getattr(exc, "response", None)
+    status_code = getattr(response, "status_code", None)
+    if isinstance(status_code, int):
+        return _status_failure_kind(status_code=status_code)
+    status_code_attr = getattr(exc, "status_code", None)
+    if isinstance(status_code_attr, int):
+        return _status_failure_kind(status_code=status_code_attr)
+    text = str(exc).lower()
+    if "timeout" in text:
+        return "timeout"
+    if "connect" in text or "connection" in text or "network" in text:
+        return "connection"
+    if "protocol" in text:
+        return "protocol"
+    if "authentication" in text or "api key" in text or "unauthorized" in text:
+        return "client_error"
+    return "operational"
+
+
+def weaviate_exception_retryable(*, exc: Exception) -> bool:
+    return weaviate_exception_failure_kind(exc=exc) in {
+        "timeout",
+        "connection",
+        "protocol",
+        "rate_limited",
+        "server_error",
+    }
 
 
 @dataclass(slots=True, kw_only=True)
@@ -106,6 +166,12 @@ class WeaviateDestination:
             "elements_count": len(result.elements),
             "normalized_text": result.normalized_text,
         }
+        provenance = meta.provenance
+        if provenance is not None:
+            if provenance.delivery_origin is not None:
+                props["delivery_origin"] = provenance.delivery_origin
+            if provenance.execution_mode is not None:
+                props["execution_mode"] = provenance.execution_mode
 
         details: dict[str, Any] = {
             "attempts": 1,
@@ -127,28 +193,37 @@ class WeaviateDestination:
             details["max_batch_errors"] = self.max_batch_errors
             details["batch_status"] = "ok" if batch_errors == 0 and failed_count == 0 else "partial"
 
-            failure_kind = _failure_kind_for_batch_outcome(
-                batch_errors=batch_errors,
-                failed_objects=failed_count,
-                max_batch_errors=self.max_batch_errors,
-            )
-            retryable = failure_kind is not None
-            details["retryable"] = retryable
-            if failure_kind is not None:
+            if failed_count > 0:
+                retryable, failure_kind = classify_weaviate_failed_objects(
+                    failed_objects=failed_objects
+                )
+                details["retryable"] = retryable
                 details["failure_kind"] = failure_kind
-
-            if retryable:
+                backend_statuses = [
+                    status
+                    for item in failed_objects
+                    if (status := weaviate_failed_object_status(item)) is not None
+                ]
+                if backend_statuses:
+                    details["backend_statuses"] = backend_statuses
                 details["error_code"] = str(ErrorCode.DELIVERY_WEAVIATE_FAILED)
                 return DeliveryReceipt(destination=self.name, ok=False, details=details)
 
+            if batch_errors > self.max_batch_errors:
+                details["retryable"] = True
+                details["failure_kind"] = "operational"
+                details["error_code"] = str(ErrorCode.DELIVERY_WEAVIATE_FAILED)
+                return DeliveryReceipt(destination=self.name, ok=False, details=details)
+
+            details["retryable"] = False
             return DeliveryReceipt(destination=self.name, ok=True, details=details)
 
         except Exception as exc:
             details["exc_type"] = type(exc).__name__
             details["exc"] = str(exc)
-            details["retryable"] = True
+            details["retryable"] = weaviate_exception_retryable(exc=exc)
             details["batch_status"] = "error"
-            details["failure_kind"] = "batch_exception"
+            details["failure_kind"] = weaviate_exception_failure_kind(exc=exc)
             details["error_code"] = str(ErrorCode.DELIVERY_WEAVIATE_FAILED)
             logger.exception("weaviate_delivery_failed collection=%s", self.collection_name)
             return DeliveryReceipt(destination=self.name, ok=False, details=details)

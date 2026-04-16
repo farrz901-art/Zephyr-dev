@@ -42,17 +42,28 @@ class ProducerProtocol(Protocol):
 
 
 def _failure_kind_for_unflushed(*, unflushed: int) -> str:
-    return "flush_incomplete" if unflushed > 0 else "unknown"
+    return "timeout" if unflushed > 0 else "operational"
 
 
 def _failure_kind_for_exception(exc: Exception) -> str:
+    text = str(exc).lower()
     if isinstance(exc, TimeoutError):
         return "timeout"
-    return "producer_error"
+    if isinstance(exc, ValueError):
+        return "client_error"
+    if "invalid" in text or "embedded null" in text or "unknown topic" in text:
+        return "client_error"
+    if "authentication" in text or "authorization" in text:
+        return "client_error"
+    if "timeout" in text or "timed out" in text:
+        return "timeout"
+    if "broker" in text or "connect" in text or "transport" in text or "connection" in text:
+        return "connection"
+    return "operational"
 
 
 def _is_retryable_kafka_exception(exc: Exception) -> bool:
-    return True
+    return _failure_kind_for_exception(exc) in {"timeout", "connection"}
 
 
 def send_delivery_payload_v1_to_kafka(

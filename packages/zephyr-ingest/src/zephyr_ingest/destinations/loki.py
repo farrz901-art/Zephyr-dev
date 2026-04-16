@@ -125,7 +125,7 @@ def send_delivery_payload_v1_to_loki(
     headers = {"content-type": "application/json"}
     if tenant_id is not None:
         headers["X-Scope-OrgID"] = tenant_id
-    client = httpx.Client(timeout=timeout_s, transport=transport)
+    client = httpx.Client(timeout=timeout_s, transport=transport, trust_env=False)
     try:
         response = client.post(_push_url(url=url), headers=headers, json=push_body)
     except httpx.HTTPError as exc:

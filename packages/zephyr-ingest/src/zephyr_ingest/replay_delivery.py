@@ -36,7 +36,13 @@ from zephyr_ingest.destinations.mongodb import (
 from zephyr_ingest.destinations.opensearch import send_delivery_payload_v1_to_opensearch
 from zephyr_ingest.destinations.s3 import S3ObjectWriterProtocol, send_delivery_payload_v1_to_s3
 from zephyr_ingest.destinations.sqlite import send_delivery_payload_v1_to_sqlite
-from zephyr_ingest.destinations.weaviate import WeaviateCollectionProtocol
+from zephyr_ingest.destinations.weaviate import (
+    WeaviateCollectionProtocol,
+    classify_weaviate_failed_objects,
+    weaviate_exception_failure_kind,
+    weaviate_exception_retryable,
+    weaviate_failed_object_status,
+)
 from zephyr_ingest.destinations.webhook import WebhookDestination
 from zephyr_ingest.obs.events import log_event
 
@@ -369,6 +375,16 @@ class WeaviateReplaySink:
             props["pipeline_version"] = pipeline_version
         if isinstance(timestamp_utc, str):
             props["timestamp_utc"] = timestamp_utc
+        run_meta_obj = payload.get("run_meta", {})
+        provenance_obj = run_meta_obj.get("provenance")
+        if isinstance(provenance_obj, dict):
+            typed_provenance = cast(dict[object, object], provenance_obj)
+            delivery_origin = typed_provenance.get("delivery_origin")
+            execution_mode = typed_provenance.get("execution_mode")
+            if isinstance(delivery_origin, str):
+                props["delivery_origin"] = delivery_origin
+            if isinstance(execution_mode, str):
+                props["execution_mode"] = execution_mode
 
         details: dict[str, Any] = {
             "collection": self.collection_name,
@@ -387,16 +403,33 @@ class WeaviateReplaySink:
             details["batch_errors"] = batch_errors
             details["failed_objects"] = failed_count
 
-            retryable = (batch_errors > self.max_batch_errors) or (failed_count > 0)
-            details["retryable"] = retryable
-
-            if retryable:
+            if failed_count > 0:
+                retryable, failure_kind = classify_weaviate_failed_objects(
+                    failed_objects=failed_objects
+                )
+                details["retryable"] = retryable
+                details["failure_kind"] = failure_kind
+                backend_statuses = [
+                    status
+                    for item in failed_objects
+                    if (status := weaviate_failed_object_status(item)) is not None
+                ]
+                if backend_statuses:
+                    details["backend_statuses"] = backend_statuses
+                details["error_code"] = str(ErrorCode.DELIVERY_WEAVIATE_FAILED)
                 return DeliveryReceipt(destination="weaviate", ok=False, details=details)
+            if batch_errors > self.max_batch_errors:
+                details["retryable"] = True
+                details["failure_kind"] = "operational"
+                details["error_code"] = str(ErrorCode.DELIVERY_WEAVIATE_FAILED)
+                return DeliveryReceipt(destination="weaviate", ok=False, details=details)
+            details["retryable"] = False
             return DeliveryReceipt(destination="weaviate", ok=True, details=details)
         except Exception as exc:
             details["exc_type"] = type(exc).__name__
             details["exc"] = str(exc)
-            details["retryable"] = True
+            details["retryable"] = weaviate_exception_retryable(exc=exc)
+            details["failure_kind"] = weaviate_exception_failure_kind(exc=exc)
             details["error_code"] = str(ErrorCode.DELIVERY_WEAVIATE_FAILED)
             return DeliveryReceipt(destination="weaviate", ok=False, details=details)
 
