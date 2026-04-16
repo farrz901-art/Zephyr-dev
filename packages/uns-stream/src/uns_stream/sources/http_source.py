@@ -6,10 +6,10 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
-from urllib.error import HTTPError, URLError
 from urllib.parse import unquote, urlsplit
-from urllib.request import Request, urlopen
 from uuid import uuid4
+
+import httpx
 
 from uns_stream.backends.base import PartitionBackend
 from uns_stream.partition.auto import partition as auto_partition
@@ -193,35 +193,42 @@ def fetch_http_document_source(*, config: HttpDocumentSourceConfigV1) -> HttpDoc
     headers: dict[str, str] = {}
     if config.accept is not None:
         headers["Accept"] = config.accept
-    request = Request(config.url, headers=headers, method="GET")
 
     try:
-        with urlopen(request, timeout=config.timeout_s) as response:
-            content = response.read()
-            mime_type = _normalize_mime_type(_response_header(response, "Content-Type"))
-            filename = _infer_filename(
-                url=config.url,
-                content_disposition=_response_header(response, "Content-Disposition"),
-                mime_type=mime_type,
-            )
-    except HTTPError as err:
-        raise _source_error(
-            message=f"uns-stream HTTP source request failed with status {err.code}",
-            retryable=_is_retryable_http_status(err.code),
-            details={"status_code": err.code, "url": config.url},
-        ) from err
-    except URLError as err:
-        raise _source_error(
-            message="uns-stream HTTP source request failed",
-            retryable=True,
-            details={"url": config.url, "reason": str(err.reason)},
-        ) from err
-    except TimeoutError as err:
+        response = httpx.get(
+            config.url,
+            headers=headers,
+            timeout=config.timeout_s,
+            follow_redirects=True,
+            trust_env=False,
+        )
+    except httpx.TimeoutException as err:
         raise _source_error(
             message="uns-stream HTTP source request timed out",
             retryable=True,
             details={"url": config.url},
         ) from err
+    except httpx.TransportError as err:
+        raise _source_error(
+            message="uns-stream HTTP source request failed",
+            retryable=True,
+            details={"url": config.url, "reason": str(err)},
+        ) from err
+
+    if response.status_code >= 400:
+        raise _source_error(
+            message=f"uns-stream HTTP source request failed with status {response.status_code}",
+            retryable=_is_retryable_http_status(response.status_code),
+            details={"status_code": response.status_code, "url": config.url},
+        )
+
+    content = response.content
+    mime_type = _normalize_mime_type(_response_header(response, "Content-Type"))
+    filename = _infer_filename(
+        url=config.url,
+        content_disposition=_response_header(response, "Content-Disposition"),
+        mime_type=mime_type,
+    )
 
     return HttpDocumentSourceFetchV1(
         source_url=config.url,

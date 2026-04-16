@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import json
-from email.message import Message
 from pathlib import Path
-from urllib.error import HTTPError
 
+import httpx
 import pytest
 
 from uns_stream.sources import http_source
@@ -96,22 +95,25 @@ def test_process_file_fetches_remote_document_and_preserves_provenance(
         encoding="utf-8",
     )
 
-    class _FakeResponse:
-        headers = {"Content-Type": "text/plain; charset=utf-8"}
-
-        def read(self) -> bytes:
-            return b"remote hello"
-
-        def __enter__(self) -> _FakeResponse:
-            return self
-
-        def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
-            return None
-
-    def fake_urlopen(request: object, timeout: float = 10.0) -> object:
-        assert getattr(request, "full_url") == "https://example.test/docs/report.txt"
+    def fake_get(
+        url: str,
+        *,
+        headers: dict[str, str],
+        timeout: float,
+        follow_redirects: bool,
+        trust_env: bool,
+    ) -> httpx.Response:
+        assert url == "https://example.test/docs/report.txt"
         assert timeout == 10.0
-        return _FakeResponse()
+        assert headers == {"Accept": "text/plain"}
+        assert follow_redirects is True
+        assert trust_env is False
+        return httpx.Response(
+            200,
+            headers={"Content-Type": "text/plain; charset=utf-8"},
+            content=b"remote hello",
+            request=httpx.Request("GET", url),
+        )
 
     captured: dict[str, object] = {}
 
@@ -156,7 +158,7 @@ def test_process_file_fetches_remote_document_and_preserves_provenance(
             warnings=[],
         )
 
-    monkeypatch.setattr(http_source, "urlopen", fake_urlopen)
+    monkeypatch.setattr(http_source.httpx, "get", fake_get)
     monkeypatch.setattr(http_source, "auto_partition", fake_auto_partition)
 
     result = http_source.process_file(
@@ -191,17 +193,23 @@ def test_fetch_http_document_source_maps_http_error_retryability(
         timeout_s=5.0,
     )
 
-    def fake_urlopen(request: object, timeout: float = 10.0) -> object:
-        del timeout
-        raise HTTPError(
-            getattr(request, "full_url"),
+    def fake_get(
+        url: str,
+        *,
+        headers: dict[str, str],
+        timeout: float,
+        follow_redirects: bool,
+        trust_env: bool,
+    ) -> httpx.Response:
+        del headers, timeout, follow_redirects, trust_env
+        return httpx.Response(
             status_code,
-            "boom",
-            hdrs=Message(),
-            fp=None,
+            headers={},
+            content=b"boom",
+            request=httpx.Request("GET", url),
         )
 
-    monkeypatch.setattr(http_source, "urlopen", fake_urlopen)
+    monkeypatch.setattr(http_source.httpx, "get", fake_get)
 
     with pytest.raises(ZephyrError) as exc_info:
         http_source.fetch_http_document_source(config=config)

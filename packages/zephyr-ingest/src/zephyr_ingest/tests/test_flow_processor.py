@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import cast
 from urllib.request import Request
 
+import httpx
 import pytest
 
 from it_stream import (
@@ -385,22 +386,25 @@ def test_runner_routes_http_document_source_specs_through_uns_execution_chain(
         encoding="utf-8",
     )
 
-    class _FakeResponse:
-        headers = {"Content-Type": "text/plain; charset=utf-8"}
-
-        def read(self) -> bytes:
-            return b"remote hello"
-
-        def __enter__(self) -> _FakeResponse:
-            return self
-
-        def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
-            return None
-
-    def fake_urlopen(request: object, timeout: float = 10.0) -> object:
-        del timeout
-        assert getattr(request, "full_url") == "https://example.test/docs/report.txt"
-        return _FakeResponse()
+    def fake_http_get(
+        url: str,
+        *,
+        headers: dict[str, str],
+        timeout: float,
+        follow_redirects: bool,
+        trust_env: bool,
+    ) -> httpx.Response:
+        assert url == "https://example.test/docs/report.txt"
+        assert headers == {"Accept": "text/plain"}
+        assert timeout == 10.0
+        assert follow_redirects is True
+        assert trust_env is False
+        return httpx.Response(
+            200,
+            content=b"remote hello",
+            headers={"Content-Type": "text/plain; charset=utf-8"},
+            request=httpx.Request("GET", url),
+        )
 
     def fake_auto_partition(
         *,
@@ -442,7 +446,7 @@ def test_runner_routes_http_document_source_specs_through_uns_execution_chain(
             warnings=[],
         )
 
-    monkeypatch.setattr(uns_http_source, "urlopen", fake_urlopen)
+    monkeypatch.setattr(uns_http_source.httpx, "get", fake_http_get)
     monkeypatch.setattr(uns_http_source, "auto_partition", fake_auto_partition)
 
     doc = DocumentRef(
@@ -1154,22 +1158,25 @@ def test_runner_routes_second_round_uns_source_batch_through_shared_execution_ch
         encoding="utf-8",
     )
 
-    class _FakeHttpResponse:
-        headers = {"Content-Type": "text/plain; charset=utf-8"}
-
-        def read(self) -> bytes:
-            return b"http hello"
-
-        def __enter__(self) -> _FakeHttpResponse:
-            return self
-
-        def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
-            return None
-
-    def fake_http_urlopen(request: object, timeout: float = 10.0) -> object:
-        del timeout
-        assert getattr(request, "full_url") == "https://example.test/docs/http-report.txt"
-        return _FakeHttpResponse()
+    def fake_http_get(
+        url: str,
+        *,
+        headers: dict[str, str],
+        timeout: float,
+        follow_redirects: bool,
+        trust_env: bool,
+    ) -> httpx.Response:
+        assert url == "https://example.test/docs/http-report.txt"
+        assert headers == {"Accept": "text/plain"}
+        assert timeout == 10.0
+        assert follow_redirects is True
+        assert trust_env is False
+        return httpx.Response(
+            200,
+            content=b"http hello",
+            headers={"Content-Type": "text/plain; charset=utf-8"},
+            request=httpx.Request("GET", url),
+        )
 
     class _FakeS3Body:
         def read(self) -> bytes:
@@ -1256,7 +1263,7 @@ def test_runner_routes_second_round_uns_source_batch_through_shared_execution_ch
             warnings=[],
         )
 
-    monkeypatch.setattr(uns_http_source, "urlopen", fake_http_urlopen)
+    monkeypatch.setattr(uns_http_source.httpx, "get", fake_http_get)
     monkeypatch.setattr(uns_http_source, "auto_partition", fake_uns_auto_partition)
     monkeypatch.setattr(
         uns_s3_source,
@@ -1482,10 +1489,25 @@ def test_runner_routes_second_second_round_uns_source_batch_through_shared_execu
         def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
             return None
 
-    def fake_http_urlopen(request: object, timeout: float = 10.0) -> object:
-        del timeout
-        assert getattr(request, "full_url") == "https://example.test/docs/http-report.txt"
-        return _FakeHttpResponse()
+    def fake_http_get(
+        url: str,
+        *,
+        headers: dict[str, str],
+        timeout: float,
+        follow_redirects: bool,
+        trust_env: bool,
+    ) -> httpx.Response:
+        assert url == "https://example.test/docs/http-report.txt"
+        assert headers == {"Accept": "text/plain"}
+        assert timeout == 10.0
+        assert follow_redirects is True
+        assert trust_env is False
+        return httpx.Response(
+            200,
+            content=b"http hello",
+            headers={"Content-Type": "text/plain; charset=utf-8"},
+            request=httpx.Request("GET", url),
+        )
 
     def fake_drive_urlopen(request: object, timeout: float = 10.0) -> object:
         del timeout
@@ -1555,7 +1577,7 @@ def test_runner_routes_second_second_round_uns_source_batch_through_shared_execu
             warnings=[],
         )
 
-    monkeypatch.setattr(uns_http_source, "urlopen", fake_http_urlopen)
+    monkeypatch.setattr(uns_http_source.httpx, "get", fake_http_get)
     monkeypatch.setattr(uns_http_source, "auto_partition", fake_uns_auto_partition)
     monkeypatch.setattr(uns_google_drive_source, "urlopen", fake_drive_urlopen)
     monkeypatch.setattr(uns_google_drive_source, "auto_partition", fake_uns_auto_partition)
@@ -1820,22 +1842,25 @@ def test_uns_http_source_and_sqlite_destination_integrate_through_runner(
         encoding="utf-8",
     )
 
-    class _FakeResponse:
-        headers = {"Content-Type": "text/plain; charset=utf-8"}
-
-        def read(self) -> bytes:
-            return b"remote hello"
-
-        def __enter__(self) -> _FakeResponse:
-            return self
-
-        def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
-            return None
-
-    def fake_urlopen(request: object, timeout: float = 10.0) -> object:
-        del timeout
-        assert getattr(request, "full_url") == "https://example.test/docs/report.txt"
-        return _FakeResponse()
+    def fake_http_get(
+        url: str,
+        *,
+        headers: dict[str, str],
+        timeout: float,
+        follow_redirects: bool,
+        trust_env: bool,
+    ) -> httpx.Response:
+        assert url == "https://example.test/docs/report.txt"
+        assert headers == {"Accept": "text/plain"}
+        assert timeout == 10.0
+        assert follow_redirects is True
+        assert trust_env is False
+        return httpx.Response(
+            200,
+            content=b"remote hello",
+            headers={"Content-Type": "text/plain; charset=utf-8"},
+            request=httpx.Request("GET", url),
+        )
 
     def fake_auto_partition(
         *,
@@ -1877,7 +1902,7 @@ def test_uns_http_source_and_sqlite_destination_integrate_through_runner(
             warnings=[],
         )
 
-    monkeypatch.setattr(uns_http_source, "urlopen", fake_urlopen)
+    monkeypatch.setattr(uns_http_source.httpx, "get", fake_http_get)
     monkeypatch.setattr(uns_http_source, "auto_partition", fake_auto_partition)
 
     ctx = RunContext.new(
@@ -2312,12 +2337,25 @@ def test_shared_sqlite_delivery_keeps_expanded_source_world_architecture_locked(
                 "VersionId": "v1",
             }
 
-    def fake_uns_http_urlopen(request: object, timeout: float = 10.0) -> object:
-        del timeout
-        typed_request = request if isinstance(request, Request) else None
-        assert typed_request is not None
-        assert typed_request.full_url == "https://example.test/docs/http-report.txt"
-        return _FakeUnsHttpResponse()
+    def fake_uns_http_get(
+        url: str,
+        *,
+        headers: dict[str, str],
+        timeout: float,
+        follow_redirects: bool,
+        trust_env: bool,
+    ) -> httpx.Response:
+        assert url == "https://example.test/docs/http-report.txt"
+        assert headers == {"Accept": "text/plain"}
+        assert timeout == 10.0
+        assert follow_redirects is True
+        assert trust_env is False
+        return httpx.Response(
+            200,
+            content=_FakeUnsHttpResponse().read(),
+            headers={"Content-Type": "text/plain; charset=utf-8"},
+            request=httpx.Request("GET", url),
+        )
 
     def fake_drive_urlopen(request: object, timeout: float = 10.0) -> object:
         del timeout
@@ -2427,7 +2465,7 @@ def test_shared_sqlite_delivery_keeps_expanded_source_world_architecture_locked(
         "fetch_mongodb_incremental_source",
         fake_fetch_mongodb_incremental_source,
     )
-    monkeypatch.setattr(uns_http_source, "urlopen", fake_uns_http_urlopen)
+    monkeypatch.setattr(uns_http_source.httpx, "get", fake_uns_http_get)
     monkeypatch.setattr(uns_http_source, "auto_partition", fake_uns_auto_partition)
     monkeypatch.setattr(
         uns_s3_source,

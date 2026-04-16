@@ -195,7 +195,23 @@ def _build_s3_document_source_client(
         aws_session_token=config.session_token,
         region_name=config.region,
     )
-    client = session.client("s3", endpoint_url=config.endpoint_url, region_name=config.region)
+    client_kwargs: dict[str, object] = {
+        "endpoint_url": config.endpoint_url,
+        "region_name": config.region,
+    }
+    try:
+        botocore_config_module = importlib.import_module("botocore.config")
+    except ModuleNotFoundError:
+        config_cls = None
+    else:
+        config_cls = getattr(botocore_config_module, "Config", None)
+    if callable(config_cls):
+        client_kwargs["config"] = config_cls(
+            connect_timeout=5,
+            read_timeout=5,
+            proxies={},
+        )
+    client = session.client("s3", **client_kwargs)
     return cast(S3DocumentSourceClientProtocol, client)
 
 
@@ -222,11 +238,17 @@ def fetch_s3_document_source(
             ) from exc
 
     try:
-        response = resolved_client.get_object(
-            Bucket=config.bucket,
-            Key=config.key,
-            VersionId=config.version_id,
-        )
+        if config.version_id is None:
+            response = resolved_client.get_object(
+                Bucket=config.bucket,
+                Key=config.key,
+            )
+        else:
+            response = resolved_client.get_object(
+                Bucket=config.bucket,
+                Key=config.key,
+                VersionId=config.version_id,
+            )
     except Exception as exc:
         details: dict[str, object] = {
             "bucket": config.bucket,
