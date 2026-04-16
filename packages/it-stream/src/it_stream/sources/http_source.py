@@ -3,15 +3,32 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
+from email.message import Message
 from typing import cast
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
-from urllib.request import Request, urlopen
+from urllib.request import Request
+
+import httpx
 
 from zephyr_core import ErrorCode, ZephyrError
 
 HTTP_JSON_CURSOR_SOURCE_KIND = "http_json_cursor_v1"
 _MAX_HTTP_SOURCE_PAGES = 1000
+
+
+@dataclass(slots=True)
+class _HttpResponseAdapter:
+    content: bytes
+
+    def read(self) -> bytes:
+        return self.content
+
+    def __enter__(self) -> _HttpResponseAdapter:
+        return self
+
+    def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+        return None
 
 
 @dataclass(frozen=True, slots=True)
@@ -136,6 +153,29 @@ def _build_page_url(*, config: HttpJsonCursorSourceConfigV1, cursor: str | None)
 
 def _is_retryable_http_status(status_code: int) -> bool:
     return status_code == 429 or 500 <= status_code <= 599
+
+
+def urlopen(request: object, timeout: float = 10.0) -> _HttpResponseAdapter:
+    full_url = getattr(request, "full_url", None)
+    if not isinstance(full_url, str) or not full_url:
+        raise URLError("missing request URL")
+
+    try:
+        response = httpx.get(full_url, timeout=timeout, trust_env=False)
+    except httpx.TimeoutException as err:
+        raise TimeoutError("timed out") from err
+    except httpx.HTTPError as err:
+        raise URLError(str(err)) from err
+
+    if response.is_error:
+        raise HTTPError(
+            full_url,
+            response.status_code,
+            response.reason_phrase,
+            hdrs=Message(),
+            fp=None,
+        )
+    return _HttpResponseAdapter(content=response.content)
 
 
 def _read_page_payload(

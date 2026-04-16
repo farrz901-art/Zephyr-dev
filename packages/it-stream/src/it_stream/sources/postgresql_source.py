@@ -12,6 +12,14 @@ from zephyr_core import ErrorCode, ZephyrError
 
 POSTGRESQL_INCREMENTAL_SOURCE_KIND = "postgresql_incremental_v1"
 _MAX_POSTGRESQL_SOURCE_BATCHES = 1000
+_RETRYABLE_TRANSPORT_MESSAGE_FRAGMENTS = (
+    "connection timeout",
+    "connection refused",
+    "could not connect to server",
+    "server closed the connection unexpectedly",
+    "network is unreachable",
+    "timed out",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -262,6 +270,35 @@ def _is_retryable_sqlstate(sqlstate: str | None) -> bool:
     return sqlstate in {"40001", "40P01", "55P03"}
 
 
+def _iter_exception_chain(err: BaseException) -> list[BaseException]:
+    chain: list[BaseException] = []
+    seen_ids: set[int] = set()
+    current: BaseException | None = err
+    while current is not None and id(current) not in seen_ids:
+        chain.append(current)
+        seen_ids.add(id(current))
+        next_exc = current.__cause__
+        if next_exc is None and current.__context__ is not None:
+            next_exc = current.__context__
+        current = next_exc
+    return chain
+
+
+def _is_retryable_transport_error(err: BaseException) -> bool:
+    for candidate in _iter_exception_chain(err):
+        if isinstance(candidate, (OSError, TimeoutError)):
+            return True
+        candidate_name = type(candidate).__name__.lower()
+        candidate_message = str(candidate).lower()
+        if "connectiontimeout" in candidate_name:
+            return True
+        if any(
+            fragment in candidate_message for fragment in _RETRYABLE_TRANSPORT_MESSAGE_FRAGMENTS
+        ):
+            return True
+    return False
+
+
 def _connect_postgresql_source(
     *,
     config: PostgresqlIncrementalSourceConfigV1,
@@ -289,7 +326,7 @@ def _connect_postgresql_source(
         sqlstate = _sqlstate_from_error(err)
         raise _source_error(
             message="it-stream PostgreSQL source connection failed",
-            retryable=isinstance(err, (OSError, TimeoutError)) or _is_retryable_sqlstate(sqlstate),
+            retryable=_is_retryable_transport_error(err) or _is_retryable_sqlstate(sqlstate),
             details={
                 "connection_name": config.connection_name,
                 "schema": config.schema,
@@ -364,7 +401,7 @@ def _fetch_rows(
         sqlstate = _sqlstate_from_error(err)
         raise _source_error(
             message="it-stream PostgreSQL source query failed",
-            retryable=isinstance(err, (OSError, TimeoutError)) or _is_retryable_sqlstate(sqlstate),
+            retryable=_is_retryable_transport_error(err) or _is_retryable_sqlstate(sqlstate),
             details={
                 "connection_name": config.connection_name,
                 "schema": config.schema,

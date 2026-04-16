@@ -38,6 +38,34 @@ class FixtureHandler(BaseHTTPRequestHandler):
                 }
             self._write_json(HTTPStatus.OK, payload)
             return
+        if parsed.path == "/records/cursor-empty":
+            query = parse_qs(parsed.query)
+            cursor = query.get("cursor", ["start"])[0]
+            if cursor == "start":
+                payload = {"records": [], "next_cursor": "page-2"}
+            elif cursor == "page-2":
+                payload = {"records": [], "next_cursor": "page-3"}
+            else:
+                payload = {"records": [], "next_cursor": None}
+            self._write_json(HTTPStatus.OK, payload)
+            return
+        if parsed.path == "/records/malformed":
+            body = b"{not-json"
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if parsed.path.startswith("/status/"):
+            raw_code = parsed.path.rsplit("/", 1)[-1]
+            if raw_code.isdigit():
+                status = int(raw_code)
+                self._write_json(
+                    HTTPStatus(status),
+                    {"ok": False, "status": status, "path": parsed.path},
+                )
+                return
         self._write_json(HTTPStatus.NOT_FOUND, {"ok": False, "path": parsed.path})
 
     def log_message(self, format: str, *args: object) -> None:

@@ -14,6 +14,13 @@ from zephyr_core import ErrorCode, ZephyrError
 CLICKHOUSE_INCREMENTAL_SOURCE_KIND = "clickhouse_incremental_v1"
 _MAX_CLICKHOUSE_SOURCE_BATCHES = 1000
 _RETRYABLE_CLICKHOUSE_ERROR_CODES = {159, 160, 202, 209, 210}
+_RETRYABLE_TRANSPORT_MESSAGE_FRAGMENTS = (
+    "connection refused",
+    "failed to establish a new connection",
+    "max retries exceeded",
+    "timed out",
+    "connection timeout",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -291,11 +298,35 @@ def _clickhouse_error_code(err: BaseException) -> int | None:
     return None
 
 
+def _iter_exception_chain(err: BaseException) -> list[BaseException]:
+    chain: list[BaseException] = []
+    seen_ids: set[int] = set()
+    current: BaseException | None = err
+    while current is not None and id(current) not in seen_ids:
+        chain.append(current)
+        seen_ids.add(id(current))
+        next_exc = current.__cause__
+        if next_exc is None and current.__context__ is not None:
+            next_exc = current.__context__
+        current = next_exc
+    return chain
+
+
+def _is_retryable_transport_error(err: BaseException) -> bool:
+    for candidate in _iter_exception_chain(err):
+        if isinstance(candidate, (OSError, TimeoutError)):
+            return True
+        candidate_message = str(candidate).lower()
+        if any(
+            fragment in candidate_message for fragment in _RETRYABLE_TRANSPORT_MESSAGE_FRAGMENTS
+        ):
+            return True
+    return False
+
+
 def _is_retryable_clickhouse_error(err: BaseException) -> bool:
     error_code = _clickhouse_error_code(err)
-    return (
-        isinstance(err, (OSError, TimeoutError)) or error_code in _RETRYABLE_CLICKHOUSE_ERROR_CODES
-    )
+    return _is_retryable_transport_error(err) or error_code in _RETRYABLE_CLICKHOUSE_ERROR_CODES
 
 
 def _connect_clickhouse_source(
