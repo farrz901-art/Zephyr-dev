@@ -1,0 +1,491 @@
+{
+  "schema_version": 1,
+  "phase": "P4.5 closeout audit",
+  "repository_phase_baseline": "8863aeb9acf6f40b09fea9c8d6157e95c8edf7bc",
+  "docs_alignment_truth_state": "414be2baa97f1a84964d209da4fab61dbf95f21f",
+  "based_on_truth_matrix": "validation/p45_truth_matrix.json",
+  "truth_matrix_role": "support-surface coverage artifact; placeholder tier statuses remain there by design, so closeout judgments live in this exit matrix",
+  "exit_judgment": "P4.5 exit approved",
+  "p5_may_begin": true,
+  "destinations": [
+    {
+      "name": "filesystem",
+      "lineage": "baseline",
+      "authenticity_level": "local-real/runtime-hardened",
+      "evidence_types": ["local-real", "recovery-drill", "orchestration"],
+      "evidence_refs": [
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p45_destination_wave1_local_real.py",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p45_m7_cross_cutting_drills.py"
+      ],
+      "supported_subset": "one shared delivery payload per local artifact write, explicit output-root subset, shared replay compatibility",
+      "recovery_replay_idempotency": "path failure normalization, crash-adjacent overwrite recovery, replay success, duplicate replay stability, batch/worker consistency",
+      "shared_semantics_proven": "shared receipt summary, retryability/failure kind/error code, batch_report alignment, delivery provenance",
+      "residual_risks": [
+        "Bounded to explicit output-root semantics; not a general file sync or transactional multi-writer sink."
+      ],
+      "blocking": false
+    },
+    {
+      "name": "webhook",
+      "lineage": "baseline",
+      "authenticity_level": "service-live against runtime-backed HTTP fixture",
+      "evidence_types": ["service-live", "recovery-drill", "orchestration"],
+      "evidence_refs": [
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p45_destination_wave1_service_live.py",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p45_destination_wave1_recovery_drill.py",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p45_m7_cross_cutting_drills.py"
+      ],
+      "supported_subset": "one shared payload per HTTP attempt, explicit endpoint/header subset, bounded response normalization, shared replay sink path",
+      "recovery_replay_idempotency": "success, retryable 503, non-retryable 400, replay success, duplicate replay stability, batch/worker consistency",
+      "shared_semantics_proven": "receipt summary, batch_report, by-destination totals, replay provenance, DLQ/replay alignment",
+      "residual_risks": [
+        "Current retained subset does not define a provider-owned auth workflow; authenticity is proven on the bounded endpoint/header subset instead."
+      ],
+      "blocking": false
+    },
+    {
+      "name": "sqlite",
+      "lineage": "baseline",
+      "authenticity_level": "local-real/runtime-hardened",
+      "evidence_types": ["local-real", "recovery-drill", "orchestration"],
+      "evidence_refs": [
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p45_destination_wave1_local_real.py",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p45_m7_cross_cutting_drills.py"
+      ],
+      "supported_subset": "one shared payload per bounded row-style write, explicit database/table subset, shared replay sink path",
+      "recovery_replay_idempotency": "success, lock-sensitive failure, replay success, duplicate replay stability, batch/worker consistency",
+      "shared_semantics_proven": "shared receipt classification, replay provenance, shared payload ownership through sqlite replay sink",
+      "residual_risks": [
+        "Bounded to explicit table/write subset; not a generalized SQL transaction coordinator."
+      ],
+      "blocking": false
+    },
+    {
+      "name": "kafka",
+      "lineage": "baseline",
+      "authenticity_level": "service-live",
+      "evidence_types": ["service-live", "recovery-drill"],
+      "evidence_refs": [
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p45_destination_wave2_service_live.py",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p45_destination_wave2_recovery_drill.py"
+      ],
+      "supported_subset": "one shared payload per bounded message write, explicit topic/key subset, shared replay sink path",
+      "recovery_replay_idempotency": "success, transport/broker failure classification, replay success, truthful duplicate replay append behavior, batch/worker consistency",
+      "shared_semantics_proven": "shared receipt vocabulary, retryability and error-code normalization, replay provenance stability",
+      "residual_risks": [
+        "Current Redpanda runtime is plaintext, so auth failure is not truthfully testable there.",
+        "Kafka duplicate behavior is append-style within the retained subset; no exact-once claim is made."
+      ],
+      "blocking": false
+    },
+    {
+      "name": "weaviate",
+      "lineage": "baseline",
+      "authenticity_level": "service-live",
+      "evidence_types": ["service-live", "recovery-drill"],
+      "evidence_refs": [
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p45_destination_wave2_service_live.py",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p45_destination_wave2_recovery_drill.py"
+      ],
+      "supported_subset": "one shared payload per bounded object write, explicit collection/object-id subset, shared replay sink path",
+      "recovery_replay_idempotency": "success, auth/config failure, retryable transport failure, replay success, duplicate replay truthfully constrained by backend object identity",
+      "shared_semantics_proven": "shared failure mapping, provenance continuity, batch/worker consistency",
+      "residual_risks": [
+        "Duplicate behavior is provider constraint/id-based, not a generic backend exact-once guarantee."
+      ],
+      "blocking": false
+    },
+    {
+      "name": "s3",
+      "lineage": "second-round",
+      "authenticity_level": "service-live",
+      "evidence_types": ["service-live", "recovery-drill"],
+      "evidence_refs": [
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p45_destination_wave1_service_live.py",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p45_destination_wave1_recovery_drill.py"
+      ],
+      "supported_subset": "one shared payload per object write, explicit bucket plus prefix subset, identity-key-based object naming, shared replay sink path",
+      "recovery_replay_idempotency": "success, missing-bucket/config failure, auth failure, retryable endpoint failure, replay success, duplicate replay stability",
+      "shared_semantics_proven": "shared receipt vocabulary, replay provenance, batch/worker consistency",
+      "residual_risks": [
+        "Bounded to one-object-per-payload writes; no bulk manifest or object-collection workflow claim."
+      ],
+      "blocking": false
+    },
+    {
+      "name": "opensearch",
+      "lineage": "second-round",
+      "authenticity_level": "service-live over HTTPS/basic-auth/self-signed local runtime",
+      "evidence_types": ["service-live", "recovery-drill"],
+      "evidence_refs": [
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p45_destination_wave1_service_live.py",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p45_destination_wave1_recovery_drill.py"
+      ],
+      "supported_subset": "one shared payload per document write, explicit index plus document-id subset, shared replay sink path",
+      "recovery_replay_idempotency": "success, auth/config failure, retryable connection failure, replay success, duplicate replay stability",
+      "shared_semantics_proven": "trust_env=False HTTP probing, shared receipt classification, replay provenance continuity",
+      "residual_risks": [
+        "Bounded to explicit index/document-id writes; no cluster-admin, bulk job, or async workflow semantics."
+      ],
+      "blocking": false
+    },
+    {
+      "name": "clickhouse",
+      "lineage": "second-round",
+      "authenticity_level": "service-live",
+      "evidence_types": ["service-live", "recovery-drill"],
+      "evidence_refs": [
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p45_destination_wave1_service_live.py",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p45_destination_wave1_recovery_drill.py"
+      ],
+      "supported_subset": "one shared payload per row-style write, explicit table/write-mode subset, shared replay sink path",
+      "recovery_replay_idempotency": "success, auth failure, missing-table non-retryable failure, retryable connection failure, replay success, duplicate replay truthfully deduped by retained idempotent subset",
+      "shared_semantics_proven": "shared failure mapping including real missing-table classification, replay provenance stability, batch/worker consistency",
+      "residual_risks": [
+        "Bounded to explicit row-style write subset; no async bulk export/import or transaction workflow claim."
+      ],
+      "blocking": false
+    },
+    {
+      "name": "mongodb",
+      "lineage": "second-round",
+      "authenticity_level": "service-live",
+      "evidence_types": ["service-live", "recovery-drill"],
+      "evidence_refs": [
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p45_destination_wave2_service_live.py",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p45_destination_wave2_recovery_drill.py"
+      ],
+      "supported_subset": "one shared payload per document replace/upsert, explicit database plus collection subset, identity-key-based document selection, shared replay sink path",
+      "recovery_replay_idempotency": "success, auth failure, retryable connection failure, replay success, duplicate replay/upsert stability",
+      "shared_semantics_proven": "shared receipt vocabulary, replay provenance, batch/worker consistency",
+      "residual_risks": [
+        "Bounded to replace/upsert subset; no broader multi-document transaction or oplog-owned recovery semantics."
+      ],
+      "blocking": false
+    },
+    {
+      "name": "loki",
+      "lineage": "second-round",
+      "authenticity_level": "service-live",
+      "evidence_types": ["service-live", "recovery-drill"],
+      "evidence_refs": [
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p45_destination_wave2_service_live.py",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p45_destination_wave2_recovery_drill.py"
+      ],
+      "supported_subset": "one shared payload per bounded log push, explicit stream/tenant label subset, shared replay sink path",
+      "recovery_replay_idempotency": "success, tenant/auth failure, retryable transport failure, replay success, duplicate replay audited truthfully without exact-once claim",
+      "shared_semantics_proven": "shared receipt vocabulary, retryability calibration, replay provenance continuity",
+      "residual_risks": [
+        "Loki remains append-style within the retained subset; duplicate semantics are audited truthfully, not normalized into a false dedupe guarantee."
+      ],
+      "blocking": false
+    }
+  ],
+  "sources": [
+    {
+      "name": "http_json_cursor_v1",
+      "owner": "it-stream",
+      "lineage": "baseline",
+      "authenticity_level": "local-real/runtime-backed HTTP cursor path",
+      "evidence_types": ["local-real", "recovery-drill"],
+      "evidence_refs": [
+        "packages/it-stream/src/it_stream/tests/test_p45_source_wave1_service_live.py",
+        "packages/it-stream/src/it_stream/tests/test_p45_source_wave1_recovery_drill.py"
+      ],
+      "supported_subset": "explicit URL plus query subset, one cursor parameter, JSON-object response subset, optional next-cursor continuation, state-only resume within cursor_v1",
+      "recovery_or_partition_evidence": "real cursor progression, checkpoint creation, state-only resume continuation, task identity stability, resumed provenance continuity",
+      "failure_coverage": "success, retryable transport failure, non-retryable malformed-response/config failure; auth is not part of the current bounded fixture path",
+      "identity_provenance_secrets": "source identity and resumed provenance proven; no secret-bearing fields are promoted into task identity",
+      "residual_risks": [
+        "Record-level continuation remains outside the supported subset.",
+        "The bounded fixture path does not provide a separate real auth surface."
+      ],
+      "blocking": false
+    },
+    {
+      "name": "postgresql_incremental_v1",
+      "owner": "it-stream",
+      "lineage": "second-round",
+      "authenticity_level": "service-live",
+      "evidence_types": ["service-live", "recovery-drill"],
+      "evidence_refs": [
+        "packages/it-stream/src/it_stream/tests/test_p45_source_wave1_service_live.py",
+        "packages/it-stream/src/it_stream/tests/test_p45_source_wave1_recovery_drill.py",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p45_m7_cross_cutting_drills.py"
+      ],
+      "supported_subset": "ordered incremental table reads over one ascending cursor column, explicit selected columns, optional starting cursor, bounded batch size, cursor_v1 resume",
+      "recovery_or_partition_evidence": "real cursor progression, checkpoint creation, checkpoint lineage, resume tail continuation, shared ingest visibility for resumed provenance",
+      "failure_coverage": "success, auth/config failure, retryable connection failure, non-retryable missing-table/query failure",
+      "identity_provenance_secrets": "task identity stability, checkpoint identity distinctness, resumed provenance consistency proven; credentials do not affect identity",
+      "residual_risks": [
+        "Bounded to one ascending cursor-column subset; no CDC, transaction-session resume, or broader relational extraction semantics."
+      ],
+      "blocking": false
+    },
+    {
+      "name": "clickhouse_incremental_v1",
+      "owner": "it-stream",
+      "lineage": "second-round",
+      "authenticity_level": "service-live",
+      "evidence_types": ["service-live", "recovery-drill"],
+      "evidence_refs": [
+        "packages/it-stream/src/it_stream/tests/test_p45_source_wave1_service_live.py",
+        "packages/it-stream/src/it_stream/tests/test_p45_source_wave1_recovery_drill.py"
+      ],
+      "supported_subset": "ordered table/query reads over one ascending cursor column, explicit selected columns, bounded batch size, cursor_v1 resume",
+      "recovery_or_partition_evidence": "real cursor progression, checkpoint creation, lineage and resume-tail continuity",
+      "failure_coverage": "success, auth/config failure, retryable connection failure, non-retryable missing-table/query failure",
+      "identity_provenance_secrets": "task identity stability, checkpoint identity distinctness, resumed provenance continuity proven",
+      "residual_risks": [
+        "Bounded to ordered warehouse query subset; no async export/job workflow semantics."
+      ],
+      "blocking": false
+    },
+    {
+      "name": "kafka_partition_offset_v1",
+      "owner": "it-stream",
+      "lineage": "second-round",
+      "authenticity_level": "service-live",
+      "evidence_types": ["service-live", "recovery-drill"],
+      "evidence_refs": [
+        "packages/it-stream/src/it_stream/tests/test_p45_source_wave2_service_live.py",
+        "packages/it-stream/src/it_stream/tests/test_p45_source_wave2_recovery_drill.py"
+      ],
+      "supported_subset": "explicit topic plus one partition, ascending offset progression, optional starting offset, bounded batch size, JSON-object payload subset, cursor_v1 resume",
+      "recovery_or_partition_evidence": "real offset progression, checkpoint creation, resume from partition-offset state, lineage and resumed provenance continuity",
+      "failure_coverage": "success, retryable broker-unreachable failure, non-retryable JSON decode/config failure; auth is not truthfully testable on the current plaintext runtime",
+      "identity_provenance_secrets": "source identity stability and checkpoint identity distinctness proven; transient broker sessions do not affect identity",
+      "residual_risks": [
+        "Bounded to one partition and explicit offset slice; no consumer-group, rebalance, or multi-partition semantics.",
+        "Plaintext runtime means auth failure is not a truthfully testable current surface."
+      ],
+      "blocking": false
+    },
+    {
+      "name": "mongodb_incremental_v1",
+      "owner": "it-stream",
+      "lineage": "second-round",
+      "authenticity_level": "service-live",
+      "evidence_types": ["service-live", "recovery-drill"],
+      "evidence_refs": [
+        "packages/it-stream/src/it_stream/tests/test_p45_source_wave2_service_live.py",
+        "packages/it-stream/src/it_stream/tests/test_p45_source_wave2_recovery_drill.py"
+      ],
+      "supported_subset": "ordered collection reads over one ascending cursor field, explicit projected fields, optional starting cursor, bounded batch size, cursor_v1 resume",
+      "recovery_or_partition_evidence": "real cursor progression, checkpoint creation, lineage and resume-tail continuity",
+      "failure_coverage": "success, auth/config failure, retryable connection failure, non-retryable document-shape/missing-collection failure",
+      "identity_provenance_secrets": "source identity, checkpoint identity, resumed provenance, and ownership boundaries proven",
+      "residual_risks": [
+        "Bounded to ordered collection-read subset; no oplog, change-stream, or token-owned recovery semantics."
+      ],
+      "blocking": false
+    },
+    {
+      "name": "http_document_v1",
+      "owner": "uns-stream",
+      "lineage": "baseline",
+      "authenticity_level": "service-live against runtime-backed HTTP fixture plus real partition path",
+      "evidence_types": ["service-live", "orchestration"],
+      "evidence_refs": [
+        "packages/uns-stream/src/uns_stream/tests/test_p45_source_wave3_service_live.py",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p45_m7_cross_cutting_drills.py"
+      ],
+      "supported_subset": "explicit document URL, bounded request-header subset, one fetched document per task, inferred filename/mime subset, direct partition handoff",
+      "recovery_or_partition_evidence": "real fetched artifact enters partition path; M7 proves reacquisition and repartition facts remain inspectable through shared ingest surfaces",
+      "failure_coverage": "success, retryable transport/timeout failure, non-retryable 404 or unsupported response; no separate real auth model in the bounded fixture path",
+      "identity_provenance_secrets": "source identity stability, provenance correctness, and secret non-leakage in metadata proven",
+      "residual_risks": [
+        "Current bounded fixture path does not provide a separate auth surface.",
+        "Support remains one-document-per-task; no discovery or long-lived sync semantics."
+      ],
+      "blocking": false
+    },
+    {
+      "name": "s3_document_v1",
+      "owner": "uns-stream",
+      "lineage": "second-round",
+      "authenticity_level": "service-live plus real partition path",
+      "evidence_types": ["service-live", "orchestration"],
+      "evidence_refs": [
+        "packages/uns-stream/src/uns_stream/tests/test_p45_source_wave3_service_live.py"
+      ],
+      "supported_subset": "explicit bucket plus key selection, optional version id, one fetched object per task, direct partition handoff",
+      "recovery_or_partition_evidence": "real fetched object enters partition path and yields Zephyr-owned normalized outputs",
+      "failure_coverage": "success, auth/config failure, retryable endpoint/storage failure, non-retryable missing-object failure",
+      "identity_provenance_secrets": "source identity stability, provenance correctness, and secret non-leakage proven",
+      "residual_risks": [
+        "Bounded to one explicit object fetch; no prefix listing or multi-object discovery semantics."
+      ],
+      "blocking": false
+    },
+    {
+      "name": "git_document_v1",
+      "owner": "uns-stream",
+      "lineage": "second-round",
+      "authenticity_level": "local-real plus real partition path",
+      "evidence_types": ["local-real", "orchestration"],
+      "evidence_refs": [
+        "packages/uns-stream/src/uns_stream/tests/test_p45_source_wave3_local_real.py"
+      ],
+      "supported_subset": "explicit repo-root plus commit plus relative-path selection, bounded blob fetch, stable resolved commit/blob provenance subset, one fetched file per task",
+      "recovery_or_partition_evidence": "real fetched blob enters partition path and preserves Zephyr-owned artifact ownership",
+      "failure_coverage": "success, non-retryable missing-path/missing-commit/config failure; no truthful auth surface in the bounded local repo-root model",
+      "identity_provenance_secrets": "source identity stability and provenance correctness proven; secret non-leakage maintained",
+      "residual_risks": [
+        "Current bounded local model does not expose a stable retryable remote-fetch failure case.",
+        "Current bounded local model does not expose a truthful auth surface."
+      ],
+      "blocking": false
+    },
+    {
+      "name": "google_drive_document_v1",
+      "owner": "uns-stream",
+      "lineage": "second-round",
+      "authenticity_level": "saas-live plus real partition path",
+      "evidence_types": ["saas-live", "orchestration"],
+      "evidence_refs": [
+        "packages/uns-stream/src/uns_stream/tests/test_p45_source_wave4_saas_live.py",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p45_validation_helpers.py"
+      ],
+      "supported_subset": "explicit file selection, bounded export-or-download acquisition subset, optional drive locator, bounded export mime subset, one fetched file per task",
+      "recovery_or_partition_evidence": "real SaaS fetch enters the real partition path and preserves Zephyr-owned artifact ownership",
+      "failure_coverage": "success, auth failure, non-retryable missing-file/config failure; the live harness differentiates transient network retries from true auth/config failures without weakening trust_env=False",
+      "identity_provenance_secrets": "source identity stability, provenance correctness, and secret non-leakage proven; legacy runtime-home alias env names are mapped without exposing secret values",
+      "residual_risks": [
+        "Dedicated provider-controlled retryable failure is not isolated as a stable separate test surface; transient network interference is bounded in the live harness instead.",
+        "Support remains one-file-per-task; no folder traversal or sync semantics."
+      ],
+      "blocking": false
+    },
+    {
+      "name": "confluence_document_v1",
+      "owner": "uns-stream",
+      "lineage": "second-round",
+      "authenticity_level": "saas-live plus real partition path",
+      "evidence_types": ["saas-live", "orchestration"],
+      "evidence_refs": [
+        "packages/uns-stream/src/uns_stream/tests/test_p45_source_wave4_saas_live.py",
+        "packages/uns-stream/src/uns_stream/tests/test_uns_confluence_source.py"
+      ],
+      "supported_subset": "explicit site plus page selection, optional requested page-version subset, bounded page-body fetch, one fetched page per task",
+      "recovery_or_partition_evidence": "real fetched page body enters partition path and preserves Zephyr-owned artifact ownership",
+      "failure_coverage": "success, auth failure, retryable transport failure, non-retryable missing-version/config failure",
+      "identity_provenance_secrets": "source identity stability, provenance correctness, and secret non-leakage proven; email is auth-only and excluded from identity/provenance",
+      "residual_risks": [
+        "Support remains bounded to page-body fetch; no attachment crawling or page-tree recursion semantics."
+      ],
+      "blocking": false
+    }
+  ],
+  "preserved_input_paths": [
+    {
+      "name": "airbyte-message-json",
+      "owner": "it-stream",
+      "authenticity_level": "preserved protocol-path evidence over local-real corpus and recovery-drill",
+      "evidence_types": ["local-real", "recovery-drill", "orchestration"],
+      "evidence_refs": [
+        "packages/it-stream/src/it_stream/tests/test_p45_source_wave2_local_real.py",
+        "packages/it-stream/src/it_stream/tests/test_p45_source_wave2_recovery_drill.py",
+        "packages/it-stream/src/it_stream/tests/test_service.py"
+      ],
+      "supported_subset": "preserved it-stream message-json input path over retained corpus, malformed/unsupported protocol-path handling, cursor_v1-compatible checkpoint/resume where present",
+      "protocol_path_evidence": "representative corpus success, malformed input failure, unsupported protocol failure, checkpoint creation, resumed cursor provenance, artifact ownership and task identity stability",
+      "residual_risks": [
+        "This remains a preserved input path, not a remote connector or broader Airbyte platform support claim.",
+        "Coverage is bounded to the retained corpus/protocol subset already proven in repo."
+      ],
+      "blocking": false
+    }
+  ],
+  "cross_cutting": [
+    {
+      "name": "auth_secrets_env_hardening",
+      "evidence_refs": [
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p45_validation_helpers.py"
+      ],
+      "outcome": "runtime-home resolution, control-plane/runtime-plane separation, env precedence, redaction, SaaS env detection, and legacy Google Drive alias mapping are explicitly covered",
+      "residual_risks": [
+        "Secrets remain external runtime-home concerns by design; closeout artifacts reference only variable names/categories."
+      ],
+      "blocking": false
+    },
+    {
+      "name": "service_live_and_local_real_runtime_smoke",
+      "evidence_refs": [
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p45_service_live_smoke.py",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p45_local_real_smoke.py"
+      ],
+      "outcome": "shared substrate healthchecks remain green through runtime-home resolution with trust_env=False on HTTP probe paths where applicable",
+      "residual_risks": [],
+      "blocking": false
+    },
+    {
+      "name": "replay_dlq_recovery_redrive_calibration",
+      "evidence_refs": [
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p45_destination_wave1_recovery_drill.py",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p45_destination_wave2_recovery_drill.py",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p45_m7_cross_cutting_drills.py"
+      ],
+      "outcome": "retryable vs non-retryable classification drives the expected replay/DLQ ownership path, replay provenance remains explicit, and representative replay success/failure stay inspectable",
+      "residual_risks": [],
+      "blocking": false
+    },
+    {
+      "name": "runtime_queue_lock_operator_drills",
+      "evidence_refs": [
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p45_m7_cross_cutting_drills.py"
+      ],
+      "outcome": "queue, lock, runtime, inspect, and requeue-derived operator surfaces are pressured through the real zephyr-ingest ownership model rather than fake orchestration",
+      "residual_risks": [
+        "Current queue/lock/runtime shape remains single-runtime/local-backend oriented, which is explicit and inherited into P5 rather than hidden."
+      ],
+      "blocking": false
+    },
+    {
+      "name": "batch_report_governance_summary_calibration",
+      "evidence_refs": [
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_fanout.py",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p45_m7_cross_cutting_drills.py"
+      ],
+      "outcome": "shared summary fields remain truthful after representative failure and replay activity: delivery outcome, retryability, failure kind, error code, attempt count, payload count, by-destination totals, and replay-relevant provenance",
+      "residual_risks": [],
+      "blocking": false
+    },
+    {
+      "name": "shared_provenance_and_operator_inspectability",
+      "evidence_refs": [
+        "packages/it-stream/src/it_stream/tests/test_p45_source_wave1_recovery_drill.py",
+        "packages/it-stream/src/it_stream/tests/test_p45_source_wave2_recovery_drill.py",
+        "packages/uns-stream/src/uns_stream/tests/test_p45_source_wave3_service_live.py",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p45_m7_cross_cutting_drills.py"
+      ],
+      "outcome": "shared operator-facing surfaces can distinguish intake vs resume vs replay, while it checkpoint semantics remain local and uns reacquisition/repartition facts remain local but inspectable",
+      "residual_risks": [],
+      "blocking": false
+    },
+    {
+      "name": "control_plane_runtime_plane_separation",
+      "evidence_refs": [
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p45_validation_helpers.py"
+      ],
+      "outcome": "repo-owned code/tests/helpers remain control-plane assets and real env/compose/secrets remain in the external runtime-home",
+      "residual_risks": [],
+      "blocking": false
+    }
+  ],
+  "parity": {
+    "destination_parity": "approved",
+    "source_parity": "approved",
+    "dual_standard_behavior_remaining": false,
+    "notes": [
+      "Baseline and second-round destinations reached the same authenticity bar; evidence form differs only by truthful backend topology (service-live versus local-real/runtime-hardened).",
+      "Baseline and later-added sources reached the same authenticity bar; evidence form differs only by truthful source topology (service-live, local-real, saas-live, or preserved protocol-path).",
+      "No retained surface is being excused from replay/recovery/provenance or identity discipline because of historical lineage."
+    ]
+  },
+  "non_blocking_residual_risks": [
+    "Several retained subsets are intentionally bounded and do not claim broader source-state, sync, consumer-group, CDC, attachment-crawl, tree-traversal, transaction, or async bulk-job semantics.",
+    "Some auth or dedicated retryable cases remain not truthfully testable where the retained runtime topology does not provide them, but those absences match the explicitly supported subset and do not create dual standards.",
+    "SaaS live validation depends on external network reachability and valid runtime-home credentials; the closeout records only the bounded surfaces actually proven without leaking any secret values."
+  ]
+}
