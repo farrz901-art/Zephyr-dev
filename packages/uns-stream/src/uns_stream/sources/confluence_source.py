@@ -1,16 +1,20 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import re
 import shutil
 from dataclasses import dataclass
+from email.message import Message
 from pathlib import Path
 from typing import Protocol, cast
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
-from urllib.request import Request, urlopen
+from urllib.request import Request
 from uuid import uuid4
+
+import httpx
 
 from uns_stream.backends.base import PartitionBackend
 from uns_stream.partition.auto import partition as auto_partition
@@ -36,6 +40,7 @@ class ConfluenceDocumentSourceConfigV1:
     space_key: str | None
     page_version: int | None
     timeout_s: float
+    email: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,6 +59,21 @@ class ConfluenceDocumentSourceFetchV1:
 
 class ConfluenceResponseProtocol(Protocol):
     def read(self) -> bytes: ...
+
+
+class _HttpxUrlopenResponse:
+    def __init__(self, *, content: bytes, headers: Message) -> None:
+        self._content = content
+        self.headers = headers
+
+    def read(self) -> bytes:
+        return self._content
+
+    def __enter__(self) -> _HttpxUrlopenResponse:
+        return self
+
+    def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+        return None
 
 
 def is_confluence_document_source_spec(raw: dict[str, object]) -> bool:
@@ -128,6 +148,7 @@ def load_confluence_document_source_config(
         site_url=_normalize_site_url(_required_str("site_url")),
         page_id=_required_str("page_id"),
         access_token=_required_str("access_token"),
+        email=_optional_str("email"),
         space_key=_optional_str("space_key"),
         page_version=page_version,
         timeout_s=timeout_s,
@@ -174,6 +195,42 @@ def _source_error(
 
 def _is_retryable_http_status(status_code: int) -> bool:
     return status_code == 429 or 500 <= status_code <= 599
+
+
+def _message_from_httpx_headers(headers: httpx.Headers) -> Message:
+    message = Message()
+    for name, value in headers.multi_items():
+        message[name] = value
+    return message
+
+
+def urlopen(request: Request, timeout: float = _DEFAULT_TIMEOUT_S) -> _HttpxUrlopenResponse:
+    try:
+        with httpx.Client(
+            follow_redirects=True,
+            timeout=timeout,
+            trust_env=False,
+        ) as client:
+            response = client.request(
+                request.get_method(),
+                request.full_url,
+                headers=dict(request.header_items()),
+            )
+    except httpx.TimeoutException as err:
+        raise TimeoutError("request timed out") from err
+    except httpx.TransportError as err:
+        raise URLError(str(err)) from err
+
+    headers = _message_from_httpx_headers(response.headers)
+    if response.status_code >= 400:
+        raise HTTPError(
+            url=request.full_url,
+            code=response.status_code,
+            msg=response.reason_phrase or "HTTP error",
+            hdrs=headers,
+            fp=None,
+        )
+    return _HttpxUrlopenResponse(content=response.content, headers=headers)
 
 
 def _api_root(site_url: str) -> str:
@@ -234,10 +291,17 @@ def _build_confluence_request(*, config: ConfluenceDocumentSourceConfigV1) -> Re
     url = (
         f"{_api_root(config.site_url)}/rest/api/content/{page_id}?expand=space,version,body.storage"
     )
+    if config.email is None:
+        authorization = f"Bearer {config.access_token}"
+    else:
+        encoded = base64.b64encode(f"{config.email}:{config.access_token}".encode("utf-8")).decode(
+            "ascii"
+        )
+        authorization = f"Basic {encoded}"
     return Request(
         url,
         headers={
-            "Authorization": f"Bearer {config.access_token}",
+            "Authorization": authorization,
             "Accept": "application/json",
         },
         method="GET",

@@ -91,9 +91,19 @@ DEFAULT_P45_ENV: Final[dict[str, str]] = {
     "ZEPHYR_P45_GOOGLE_DRIVE_FILE_ID": "",
     "ZEPHYR_P45_GOOGLE_DRIVE_DRIVE_ID": "",
     "ZEPHYR_P45_GOOGLE_DRIVE_ACCESS_TOKEN": "",
+    "ZEPHYR_P45_GOOGLE_DRIVE_EXPORT_MIME_TYPE": "",
     "ZEPHYR_P45_CONFLUENCE_SITE_URL": "",
     "ZEPHYR_P45_CONFLUENCE_PAGE_ID": "",
     "ZEPHYR_P45_CONFLUENCE_ACCESS_TOKEN": "",
+}
+P45_ENV_ALIASES: Final[dict[str, tuple[str, ...]]] = {
+    "ZEPHYR_P45_GOOGLE_DRIVE_FILE_ID": (
+        "ZEPHYR_P45_GDRIVE_FILE_ID_EXPORT",
+        "ZEPHYR_P45_GDRIVE_FILE_ID_DOC",
+        "ZEPHYR_P45_GDRIVE_FILE_ID_BINARY",
+    ),
+    "ZEPHYR_P45_GOOGLE_DRIVE_ACCESS_TOKEN": ("ZEPHYR_P45_GDRIVE_ACCESS_TOKEN",),
+    "ZEPHYR_P45_GOOGLE_DRIVE_EXPORT_MIME_TYPE": ("ZEPHYR_P45_GDRIVE_EXPORT_MIME_TYPE",),
 }
 SAAS_REQUIRED_ENV: Final[dict[str, tuple[str, ...]]] = {
     "google-drive": (
@@ -597,6 +607,17 @@ def load_p45_env(
             continue
         merged[name] = normalized
         sources[name] = "env"
+    for canonical_name, alias_names in P45_ENV_ALIASES.items():
+        if _normalize_env_value(merged.get(canonical_name)) is not None:
+            continue
+        for alias_name in alias_names:
+            alias_value = _normalize_env_value(merged.get(alias_name))
+            if alias_value is None:
+                continue
+            merged[canonical_name] = alias_value
+            alias_source = sources.get(alias_name, "alias")
+            sources[canonical_name] = f"{alias_source}|alias:{alias_name}"
+            break
     return LoadedP45Env(values=merged, sources=sources, runtime_paths=runtime_paths)
 
 

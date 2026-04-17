@@ -4,12 +4,15 @@ import hashlib
 import json
 import shutil
 from dataclasses import dataclass
+from email.message import Message
 from pathlib import Path
 from typing import Literal, cast
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
-from urllib.request import Request, urlopen
+from urllib.request import Request
 from uuid import uuid4
+
+import httpx
 
 from uns_stream.backends.base import PartitionBackend
 from uns_stream.partition.auto import partition as auto_partition
@@ -40,6 +43,21 @@ _CONTENT_TYPE_EXTENSION_MAP: dict[str, str] = {
 }
 
 GoogleDriveAcquisitionMode = Literal["download", "export"]
+
+
+class _HttpxUrlopenResponse:
+    def __init__(self, *, content: bytes, headers: Message) -> None:
+        self._content = content
+        self.headers = headers
+
+    def read(self) -> bytes:
+        return self._content
+
+    def __enter__(self) -> _HttpxUrlopenResponse:
+        return self
+
+    def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+        return None
 
 
 @dataclass(frozen=True, slots=True)
@@ -221,6 +239,42 @@ def _filename_from_content_disposition(value: str | None) -> str | None:
             if name:
                 return name
     return None
+
+
+def _message_from_httpx_headers(headers: httpx.Headers) -> Message:
+    message = Message()
+    for name, value in headers.multi_items():
+        message[name] = value
+    return message
+
+
+def urlopen(request: Request, timeout: float = _DEFAULT_TIMEOUT_S) -> _HttpxUrlopenResponse:
+    try:
+        with httpx.Client(
+            follow_redirects=True,
+            timeout=timeout,
+            trust_env=False,
+        ) as client:
+            response = client.request(
+                request.get_method(),
+                request.full_url,
+                headers=dict(request.header_items()),
+            )
+    except httpx.TimeoutException as err:
+        raise TimeoutError("request timed out") from err
+    except httpx.TransportError as err:
+        raise URLError(str(err)) from err
+
+    headers = _message_from_httpx_headers(response.headers)
+    if response.status_code >= 400:
+        raise HTTPError(
+            url=request.full_url,
+            code=response.status_code,
+            msg=response.reason_phrase or "HTTP error",
+            hdrs=headers,
+            fp=None,
+        )
+    return _HttpxUrlopenResponse(content=response.content, headers=headers)
 
 
 def _infer_filename(

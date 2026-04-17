@@ -206,6 +206,58 @@ def test_process_file_fetches_confluence_document_and_preserves_provenance(
     assert result.elements[0].metadata["fetched_mime_type"] == "text/html"
 
 
+def test_fetch_confluence_document_source_uses_basic_auth_when_email_is_present(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = confluence_source.ConfluenceDocumentSourceConfigV1(
+        site_url="https://example.atlassian.net",
+        page_id="12345",
+        access_token="token-a",
+        space_key="ENG",
+        page_version=7,
+        timeout_s=10.0,
+        email="reader@example.test",
+    )
+
+    class _FakeResponse:
+        def read(self) -> bytes:
+            return json.dumps(
+                {
+                    "title": "Product Spec",
+                    "space": {"key": "ENG"},
+                    "version": {"number": 7},
+                    "body": {"storage": {"value": "<p>hello confluence</p>"}},
+                },
+                ensure_ascii=False,
+            ).encode("utf-8")
+
+        def __enter__(self) -> _FakeResponse:
+            return self
+
+        def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+            return None
+
+    def fake_urlopen(request: object, timeout: float = 10.0) -> object:
+        assert timeout == 10.0
+        typed_request = request if isinstance(request, Request) else None
+        assert typed_request is not None
+        assert typed_request.headers["Authorization"].startswith("Basic ")
+        assert typed_request.headers["Accept"] == "application/json"
+        return _FakeResponse()
+
+    monkeypatch.setattr(confluence_source, "urlopen", fake_urlopen)
+
+    fetched = confluence_source.fetch_confluence_document_source(config=config)
+
+    assert fetched.site_url == "https://example.atlassian.net"
+    assert fetched.page_id == "12345"
+    assert fetched.space_key == "ENG"
+    assert fetched.requested_page_version == 7
+    assert fetched.resolved_page_version == 7
+    assert fetched.filename == "product-spec.html"
+    assert fetched.mime_type == "text/html"
+
+
 @pytest.mark.parametrize(("status_code", "retryable"), [(404, False), (503, True)])
 def test_fetch_confluence_document_source_maps_error_retryability(
     monkeypatch: pytest.MonkeyPatch,

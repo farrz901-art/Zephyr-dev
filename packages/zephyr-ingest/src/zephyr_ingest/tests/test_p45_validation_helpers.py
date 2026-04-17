@@ -245,6 +245,36 @@ def test_missing_saas_env_reports_required_google_drive_and_confluence_inputs() 
 
 
 @pytest.mark.auth_contract
+def test_load_p45_env_maps_legacy_google_drive_aliases_to_canonical_names() -> None:
+    with _sandbox("gdrive_aliases") as sandbox:
+        repo_root = sandbox / "repo"
+        runtime_home = sandbox / "runtime-home"
+        repo_root.mkdir()
+        runtime_home.mkdir()
+        _write_text(
+            runtime_home / "env" / ".env.p45.local",
+            "\n".join(
+                (
+                    "ZEPHYR_P45_GDRIVE_FILE_ID_EXPORT=file-export-123",
+                    "ZEPHYR_P45_GDRIVE_ACCESS_TOKEN=token-abc",
+                    "ZEPHYR_P45_GDRIVE_EXPORT_MIME_TYPE=application/pdf",
+                )
+            )
+            + "\n",
+        )
+
+        env = load_p45_env(
+            repo_root_path=repo_root,
+            environ={P45_HOME_ENV_NAME: str(runtime_home)},
+        )
+
+        assert env.require("ZEPHYR_P45_GOOGLE_DRIVE_FILE_ID") == "file-export-123"
+        assert env.require("ZEPHYR_P45_GOOGLE_DRIVE_ACCESS_TOKEN") == "token-abc"
+        assert env.require("ZEPHYR_P45_GOOGLE_DRIVE_EXPORT_MIME_TYPE") == "application/pdf"
+        assert missing_saas_env("google-drive", env) == ()
+
+
+@pytest.mark.auth_contract
 def test_healthcheck_print_compose_path_uses_runtime_home(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
