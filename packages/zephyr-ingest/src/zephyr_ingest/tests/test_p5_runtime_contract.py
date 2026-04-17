@@ -211,7 +211,8 @@ def test_p5_runtime_preflight_cli_prints_contract_path_and_runtime_home(
         exit_code = p5_preflight_main(["--print-contract-path"])
         contract_output = capsys.readouterr()
         assert exit_code == 0
-        assert contract_output.out.strip().endswith("validation\\p5_runtime_contract.json")
+        printed_path = Path(contract_output.out.strip())
+        assert printed_path.parts[-2:] == ("validation", "p5_runtime_contract.json")
 
         exit_code = p5_preflight_main(["--print-runtime-home"])
         runtime_output = capsys.readouterr()
