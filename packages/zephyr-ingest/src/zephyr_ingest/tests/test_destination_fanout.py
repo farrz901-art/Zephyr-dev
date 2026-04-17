@@ -26,6 +26,23 @@ class BadDest:
         return DeliveryReceipt(destination=self.name, ok=False)
 
 
+class RetryableBadDest:
+    name = "webhook"
+
+    def __call__(
+        self, *, out_root: Path, sha256: str, meta: RunMetaV1, result: PartitionResult | None = None
+    ) -> DeliveryReceipt:
+        return DeliveryReceipt(
+            destination=self.name,
+            ok=False,
+            details={
+                "retryable": True,
+                "failure_kind": "server_error",
+                "error_code": "ZE-DELIVERY-HTTP-FAILED",
+            },
+        )
+
+
 def test_fanout_all_ok(tmp_path: Path) -> None:
     meta = RunMetaV1(
         run_id="r",
@@ -48,3 +65,25 @@ def test_fanout_any_fail(tmp_path: Path) -> None:
     fan = FanoutDestination(destinations=(OkDest(), BadDest()))
     r = fan(out_root=tmp_path, sha256="x", meta=meta, result=None)
     assert r.ok is False
+
+
+def test_fanout_surfaces_shared_failure_summary_when_failed_children_agree(tmp_path: Path) -> None:
+    meta = RunMetaV1(
+        run_id="r",
+        pipeline_version="p1",
+        timestamp_utc="2026-03-21T00:00:00Z",
+        schema_version=RUN_META_SCHEMA_VERSION,
+    )
+    fan = FanoutDestination(destinations=(OkDest(), RetryableBadDest()))
+
+    receipt = fan(out_root=tmp_path, sha256="x", meta=meta, result=None)
+
+    assert receipt.ok is False
+    assert receipt.shared_summary == {
+        "delivery_outcome": "failed",
+        "failure_retryability": "retryable",
+        "failure_kind": "server_error",
+        "error_code": "ZE-DELIVERY-HTTP-FAILED",
+        "attempt_count": 1,
+        "payload_count": 1,
+    }
