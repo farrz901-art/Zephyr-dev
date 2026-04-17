@@ -127,6 +127,14 @@ SECRET_NAME_FRAGMENTS: Final[tuple[str, ...]] = (
     "_DSN",
     "_URI",
 )
+EXPLICIT_SECRET_CARRIER_ENV_NAMES: Final[frozenset[str]] = frozenset(
+    {
+        "ZEPHYR_P45_OPENSEARCH_URL",
+        "ZEPHYR_P45_CLICKHOUSE_URL",
+        "ZEPHYR_P45_LOKI_URL",
+        "ZEPHYR_P45_MONGODB_URI",
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -623,7 +631,9 @@ def load_p45_env(
 
 def is_secret_env_name(name: str) -> bool:
     upper_name = name.upper()
-    return any(fragment in upper_name for fragment in SECRET_NAME_FRAGMENTS)
+    return upper_name in EXPLICIT_SECRET_CARRIER_ENV_NAMES or any(
+        fragment in upper_name for fragment in SECRET_NAME_FRAGMENTS
+    )
 
 
 def redact_value(value: str) -> str:

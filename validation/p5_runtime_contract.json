@@ -1,0 +1,263 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M1 production runtime contract",
+  "runtime_home_env_var": "ZEPHYR_P45_HOME",
+  "current_verified_runtime_home": "E:\\zephyr_env\\.config\\zephyr\\p45",
+  "current_verified_env_dir": "E:\\zephyr_env\\.config\\zephyr\\p45\\env",
+  "current_verified_compose_path": "E:\\zephyr_env\\.config\\zephyr\\p45\\docker-compose.yml",
+  "control_plane": {
+    "owner": "repo",
+    "repo_template_files": [
+      ".env.example",
+      ".env.p45.example",
+      "docker-compose.p45-validation.yml"
+    ],
+    "notes": [
+      "Code, tests, helpers, validation tooling, templates, and audit artifacts remain repo-owned.",
+      "Repo compose/env examples are templates/examples only; they are not canonical live runtime files."
+    ]
+  },
+  "runtime_plane": {
+    "owner": "external-runtime-home",
+    "required_dirs": ["bin", "data", "env", "logs"],
+    "canonical_files": [
+      "docker-compose.yml",
+      "env/.env.p45.local",
+      "env/p45.local.env",
+      "env/p45.gdrive.env",
+      "env/p45.confluence.env"
+    ],
+    "notes": [
+      "Current verified runtime layout is Windows absolute-path coupled and external to the repo.",
+      "Real env, compose, logs, data, and runtime-adjacent files remain outside the repo."
+    ]
+  },
+  "env_groups": [
+    {
+      "name": "runtime_identity",
+      "kind": "runtime-settings",
+      "startup_required": true,
+      "validation_required_for": ["preflight"],
+      "required_names": ["ZEPHYR_P45_ENV", "ZEPHYR_P45_STACK_NAME"],
+      "secret_names": [],
+      "secret_carrier_names": []
+    },
+    {
+      "name": "postgresql_local_substrate",
+      "kind": "local-substrate-auth",
+      "startup_required": true,
+      "validation_required_for": ["service-live"],
+      "required_names": [
+        "ZEPHYR_P45_POSTGRES_HOST",
+        "ZEPHYR_P45_POSTGRES_PORT",
+        "ZEPHYR_P45_POSTGRES_DB",
+        "ZEPHYR_P45_POSTGRES_USER",
+        "ZEPHYR_P45_POSTGRES_PASSWORD"
+      ],
+      "secret_names": ["ZEPHYR_P45_POSTGRES_PASSWORD"],
+      "secret_carrier_names": []
+    },
+    {
+      "name": "kafka_redpanda_local_substrate",
+      "kind": "local-substrate-auth",
+      "startup_required": true,
+      "validation_required_for": ["service-live"],
+      "required_names": [
+        "ZEPHYR_P45_KAFKA_HOST",
+        "ZEPHYR_P45_KAFKA_PORT",
+        "ZEPHYR_P45_REDPANDA_ADMIN_HOST",
+        "ZEPHYR_P45_REDPANDA_ADMIN_PORT",
+        "ZEPHYR_P45_KAFKA_BROKERS",
+        "ZEPHYR_P45_KAFKA_TOPIC"
+      ],
+      "secret_names": [],
+      "secret_carrier_names": []
+    },
+    {
+      "name": "s3_minio_local_substrate",
+      "kind": "local-substrate-auth",
+      "startup_required": true,
+      "validation_required_for": ["service-live"],
+      "required_names": [
+        "ZEPHYR_P45_S3_HOST",
+        "ZEPHYR_P45_S3_PORT",
+        "ZEPHYR_P45_S3_ENDPOINT",
+        "ZEPHYR_P45_S3_REGION",
+        "ZEPHYR_P45_S3_ACCESS_KEY",
+        "ZEPHYR_P45_S3_SECRET_KEY",
+        "ZEPHYR_P45_S3_BUCKET"
+      ],
+      "secret_names": ["ZEPHYR_P45_S3_ACCESS_KEY", "ZEPHYR_P45_S3_SECRET_KEY"],
+      "secret_carrier_names": []
+    },
+    {
+      "name": "opensearch_local_substrate",
+      "kind": "local-substrate-auth",
+      "startup_required": true,
+      "validation_required_for": ["service-live"],
+      "required_names": [
+        "ZEPHYR_P45_OPENSEARCH_PORT",
+        "ZEPHYR_P45_OPENSEARCH_URL",
+        "ZEPHYR_P45_OPENSEARCH_INDEX",
+        "ZEPHYR_P45_OPENSEARCH_USERNAME",
+        "ZEPHYR_P45_OPENSEARCH_PASSWORD",
+        "ZEPHYR_P45_OPENSEARCH_SKIP_TLS_VERIFY"
+      ],
+      "secret_names": ["ZEPHYR_P45_OPENSEARCH_PASSWORD"],
+      "secret_carrier_names": ["ZEPHYR_P45_OPENSEARCH_URL"]
+    },
+    {
+      "name": "clickhouse_local_substrate",
+      "kind": "local-substrate-auth",
+      "startup_required": true,
+      "validation_required_for": ["service-live"],
+      "required_names": [
+        "ZEPHYR_P45_CLICKHOUSE_PORT",
+        "ZEPHYR_P45_CLICKHOUSE_URL",
+        "ZEPHYR_P45_CLICKHOUSE_DATABASE",
+        "ZEPHYR_P45_CLICKHOUSE_TABLE",
+        "ZEPHYR_P45_CLICKHOUSE_USERNAME",
+        "ZEPHYR_P45_CLICKHOUSE_PASSWORD"
+      ],
+      "secret_names": ["ZEPHYR_P45_CLICKHOUSE_PASSWORD"],
+      "secret_carrier_names": ["ZEPHYR_P45_CLICKHOUSE_URL"]
+    },
+    {
+      "name": "mongodb_local_substrate",
+      "kind": "local-substrate-auth",
+      "startup_required": true,
+      "validation_required_for": ["service-live"],
+      "required_names": [
+        "ZEPHYR_P45_MONGODB_PORT",
+        "ZEPHYR_P45_MONGODB_URI",
+        "ZEPHYR_P45_MONGODB_DATABASE",
+        "ZEPHYR_P45_MONGODB_COLLECTION"
+      ],
+      "secret_names": ["ZEPHYR_P45_MONGODB_PASSWORD"],
+      "secret_carrier_names": ["ZEPHYR_P45_MONGODB_URI"]
+    },
+    {
+      "name": "loki_local_substrate",
+      "kind": "local-substrate-auth",
+      "startup_required": true,
+      "validation_required_for": ["service-live"],
+      "required_names": [
+        "ZEPHYR_P45_LOKI_PORT",
+        "ZEPHYR_P45_LOKI_URL",
+        "ZEPHYR_P45_LOKI_STREAM"
+      ],
+      "secret_names": ["ZEPHYR_P45_LOKI_TENANT_ID"],
+      "secret_carrier_names": ["ZEPHYR_P45_LOKI_URL"]
+    },
+    {
+      "name": "weaviate_local_substrate",
+      "kind": "local-substrate-auth",
+      "startup_required": true,
+      "validation_required_for": ["service-live"],
+      "required_names": [
+        "ZEPHYR_P45_WEAVIATE_PORT",
+        "ZEPHYR_P45_WEAVIATE_GRPC_PORT",
+        "ZEPHYR_P45_WEAVIATE_HTTP_HOST",
+        "ZEPHYR_P45_WEAVIATE_HTTP_PORT",
+        "ZEPHYR_P45_WEAVIATE_GRPC_HOST",
+        "ZEPHYR_P45_WEAVIATE_GRPC_PORT",
+        "ZEPHYR_P45_WEAVIATE_COLLECTION",
+        "ZEPHYR_P45_WEAVIATE_API_KEY"
+      ],
+      "secret_names": ["ZEPHYR_P45_WEAVIATE_API_KEY"],
+      "secret_carrier_names": []
+    },
+    {
+      "name": "http_fixture_local_surface",
+      "kind": "local-runtime-surface",
+      "startup_required": true,
+      "validation_required_for": ["local-real"],
+      "required_names": [
+        "ZEPHYR_P45_HTTP_FIXTURE_HOST",
+        "ZEPHYR_P45_HTTP_FIXTURE_PORT",
+        "ZEPHYR_P45_HTTP_FIXTURE_BASE"
+      ],
+      "secret_names": [],
+      "secret_carrier_names": []
+    },
+    {
+      "name": "webhook_echo_local_surface",
+      "kind": "local-runtime-surface",
+      "startup_required": true,
+      "validation_required_for": ["local-real"],
+      "required_names": [
+        "ZEPHYR_P45_WEBHOOK_ECHO_HOST",
+        "ZEPHYR_P45_WEBHOOK_ECHO_PORT",
+        "ZEPHYR_P45_WEBHOOK_ECHO_URL"
+      ],
+      "secret_names": [],
+      "secret_carrier_names": []
+    },
+    {
+      "name": "google_drive_saas_auth",
+      "kind": "saas-auth",
+      "startup_required": false,
+      "validation_required_for": ["saas-live"],
+      "required_names": [
+        "ZEPHYR_P45_GOOGLE_DRIVE_FILE_ID",
+        "ZEPHYR_P45_GOOGLE_DRIVE_ACCESS_TOKEN"
+      ],
+      "secret_names": ["ZEPHYR_P45_GOOGLE_DRIVE_ACCESS_TOKEN"],
+      "secret_carrier_names": []
+    },
+    {
+      "name": "confluence_saas_auth",
+      "kind": "saas-auth",
+      "startup_required": false,
+      "validation_required_for": ["saas-live"],
+      "required_names": [
+        "ZEPHYR_P45_CONFLUENCE_SITE_URL",
+        "ZEPHYR_P45_CONFLUENCE_PAGE_ID",
+        "ZEPHYR_P45_CONFLUENCE_ACCESS_TOKEN"
+      ],
+      "secret_names": ["ZEPHYR_P45_CONFLUENCE_ACCESS_TOKEN"],
+      "secret_carrier_names": []
+    }
+  ],
+  "redaction_contract": {
+    "explicit_secret_carrier_env_names": [
+      "ZEPHYR_P45_CLICKHOUSE_URL",
+      "ZEPHYR_P45_LOKI_URL",
+      "ZEPHYR_P45_MONGODB_URI",
+      "ZEPHYR_P45_OPENSEARCH_URL"
+    ],
+    "rule": "Secret values and explicit secret-carrier variables must be fully redacted in summaries, reports, and preflight output."
+  },
+  "startup_preflight_contract": {
+    "startup_required_groups": [
+      "runtime_identity",
+      "postgresql_local_substrate",
+      "kafka_redpanda_local_substrate",
+      "s3_minio_local_substrate",
+      "opensearch_local_substrate",
+      "clickhouse_local_substrate",
+      "mongodb_local_substrate",
+      "loki_local_substrate",
+      "weaviate_local_substrate",
+      "http_fixture_local_surface",
+      "webhook_echo_local_surface"
+    ],
+    "validation_required_groups": [
+      "google_drive_saas_auth",
+      "confluence_saas_auth"
+    ],
+    "repo_side_healthcheck_tool": "tools/p45_substrate_healthcheck.py"
+  },
+  "network_contract": {
+    "trust_env_false_required": true,
+    "proxy_env_expected_absent_in_checked_terminal": true,
+    "opensearch_local_https_skip_tls_verify": true,
+    "google_drive_depends_on_tun_or_vpn_or_network_condition": true
+  },
+  "deferred_realities": [
+    "No cloud/Kubernetes/Helm packaging layer is claimed here.",
+    "No deployment matrix beyond the current external runtime-home contract is claimed here.",
+    "Windows absolute-path coupling is current reality, not a permanent cross-platform architecture promise.",
+    "This milestone does not redesign queue/lock/runtime ownership or invent a broader deployment platform."
+  ]
+}
