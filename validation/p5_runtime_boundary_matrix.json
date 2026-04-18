@@ -1,0 +1,230 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M2 runtime/queue/lock/concurrency boundary",
+  "execution_chain": "TaskV1 -> FlowProcessor -> Delivery",
+  "ownership": {
+    "orchestrator": "zephyr-ingest",
+    "queue_lock_runtime": "ingest-owned",
+    "control_plane": "repo",
+    "runtime_plane": "external-runtime-home"
+  },
+  "queue_backend_boundary": {
+    "supported_current": [
+      "spool",
+      "sqlite"
+    ],
+    "relied_on_for_boundary_drills": [
+      "sqlite"
+    ],
+    "notes": [
+      "Spool remains a supported local queue backend for bounded local execution.",
+      "SQLite is the current primary boundary surface for shared pending-work inspection, poison visibility, and contention-adjacent drills.",
+      "No distributed broker-backed queue guarantee is claimed here."
+    ]
+  },
+  "lock_backend_boundary": {
+    "supported_current": [
+      "file",
+      "sqlite"
+    ],
+    "relied_on_for_boundary_drills": [
+      "file",
+      "sqlite"
+    ],
+    "notes": [
+      "Current lock behavior is bounded to local file and sqlite lock providers.",
+      "Stale lock recovery is modeled locally; this milestone does not claim a distributed lease or fencing model."
+    ]
+  },
+  "operator_surfaces": [
+    "queue.sqlite3",
+    "run_meta.json",
+    "delivery_receipt.json",
+    "batch_report.json",
+    "checkpoint.json",
+    "records.jsonl",
+    "replay.db",
+    "_dlq/delivery_done/*.json",
+    "bounded Prometheus text",
+    "inspect_local_sqlite_queue",
+    "requeue_local_task",
+    "replay_delivery_dlq"
+  ],
+  "requires_recovery_drill_auth_tier": true,
+  "recovery_drill_auth_tier": "recovery-drill",
+  "scenarios": [
+    {
+      "name": "single_worker_baseline",
+      "status": "supported",
+      "target_behavior": "A single local worker drains pending work through the ingest-owned TaskV1 -> FlowProcessor -> Delivery chain and leaves Zephyr-owned queue/report artifacts.",
+      "inspectability_surfaces": [
+        "queue.sqlite3 or spool buckets",
+        "run_meta.json",
+        "delivery_receipt.json",
+        "batch_report.json",
+        "bounded Prometheus text"
+      ],
+      "governance_facts": [
+        "run_origin stays intake unless an explicit recovery action changes it",
+        "delivery_origin stays primary for first-pass delivery",
+        "queue task state is inspectable as pending/inflight/done/failed/poison"
+      ],
+      "evidence": [
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_worker_runtime.py::test_run_worker_executes_sqlite_queue_backend_when_selected",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_worker_runtime.py::test_runtime_supports_supported_queue_and_lock_backend_pairs"
+      ]
+    },
+    {
+      "name": "two_worker_contention_shared_pending_surface",
+      "status": "bounded",
+      "target_behavior": "Two local workers may contend against the same sqlite-backed pending-work surface; duplicate task identity contention is recovered by requeueing the contended claim back to pending instead of double-executing it.",
+      "inspectability_surfaces": [
+        "queue.sqlite3",
+        "inspect_local_sqlite_queue",
+        "bounded Prometheus text"
+      ],
+      "governance_facts": [
+        "lock contention is surfaced through queue requeue/orphan counters",
+        "the contended task remains pending and inspectable",
+        "the boundary is local single-host shared storage, not distributed lease choreography"
+      ],
+      "evidence": [
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_m2_runtime_boundary_drills.py::test_p5_m2_two_worker_contention_is_bounded_and_inspectable"
+      ]
+    },
+    {
+      "name": "stale_lock_recovery",
+      "status": "supported",
+      "target_behavior": "Stale file or sqlite locks may be broken by the current local lock providers, allowing the next worker pass to continue processing the task.",
+      "inspectability_surfaces": [
+        "queue.sqlite3",
+        "bounded Prometheus text",
+        "run_meta.json"
+      ],
+      "governance_facts": [
+        "stale recovery is counted in lock metrics",
+        "the task remains on the primary ingest execution path",
+        "no distributed lease model is claimed"
+      ],
+      "evidence": [
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_worker_runtime.py::test_runtime_supports_stale_lock_recovery_for_supported_lock_backends",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p45_m7_cross_cutting_drills.py::test_p45_m7_worker_queue_lock_and_operator_surfaces_remain_inspectable"
+      ]
+    },
+    {
+      "name": "poison_after_attempts_exhausted",
+      "status": "supported",
+      "target_behavior": "Tasks that exhaust the configured attempt budget move to poison and remain operator-visible rather than disappearing into implicit retries.",
+      "inspectability_surfaces": [
+        "queue.sqlite3",
+        "inspect_local_sqlite_queue"
+      ],
+      "governance_facts": [
+        "governance_problem is explicit as poison_attempts_exhausted",
+        "failure_count remains visible on the poisoned task"
+      ],
+      "evidence": [
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p45_m7_cross_cutting_drills.py::test_p45_m7_worker_queue_lock_and_operator_surfaces_remain_inspectable"
+      ]
+    },
+    {
+      "name": "requeue_from_poison",
+      "status": "supported",
+      "target_behavior": "Operator-driven requeue moves a poisoned task back to pending through the ingest-owned governance surface.",
+      "inspectability_surfaces": [
+        "queue.sqlite3",
+        "inspect_local_sqlite_queue",
+        "requeue_local_task result"
+      ],
+      "governance_facts": [
+        "run_origin is explicit as requeue when the recovery result is converted to provenance",
+        "current sqlite queue audit support is result_only rather than persisted history",
+        "redrive semantics remain not_modeled"
+      ],
+      "evidence": [
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p45_m7_cross_cutting_drills.py::test_p45_m7_worker_queue_lock_and_operator_surfaces_remain_inspectable"
+      ]
+    },
+    {
+      "name": "replay_after_failed_delivery",
+      "status": "supported",
+      "target_behavior": "Failed delivery artifacts are replayed through the existing replay/DLQ path and can be moved to delivery_done after successful replay.",
+      "inspectability_surfaces": [
+        "replay.db",
+        "_dlq/delivery/*.json",
+        "_dlq/delivery_done/*.json",
+        "run_meta.json"
+      ],
+      "governance_facts": [
+        "delivery_origin changes from primary to replay while run_origin remains explicit",
+        "replay statistics remain Zephyr-owned and artifact-backed"
+      ],
+      "evidence": [
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p45_m7_cross_cutting_drills.py::test_p45_m7_it_resume_replay_preserves_resume_facts_through_shared_delivery_surface",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_m2_runtime_boundary_drills.py::test_p5_m2_replay_after_failed_delivery_keeps_operator_artifacts_aligned"
+      ]
+    },
+    {
+      "name": "runtime_drain_stop_inflight_behavior",
+      "status": "bounded",
+      "target_behavior": "A worker can be asked to drain and stop after finishing the current in-flight work item, leaving later tasks pending and inspectable.",
+      "inspectability_surfaces": [
+        "queue.sqlite3",
+        "inspect_local_sqlite_queue",
+        "bounded Prometheus text"
+      ],
+      "governance_facts": [
+        "drain affects new work intake, not the currently executing item",
+        "pending work remains visible for later processing",
+        "this is a bounded local shutdown behavior, not a fleet-wide coordinated drain"
+      ],
+      "evidence": [
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_worker_runtime.py::test_worker_runtime_draining_stops_new_work_and_emits_events",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_m2_runtime_boundary_drills.py::test_p5_m2_runtime_drain_leaves_pending_work_inspectable"
+      ]
+    },
+    {
+      "name": "operator_inspectability_before_after_recovery",
+      "status": "supported",
+      "target_behavior": "Before and after queue recovery or replay actions, the current operator-facing surfaces can still answer what ran, what failed, whether it was retryable, and whether it was replayed, resumed, or requeued.",
+      "inspectability_surfaces": [
+        "inspect_local_sqlite_queue",
+        "run_meta.json",
+        "delivery_receipt.json",
+        "batch_report.json",
+        "replay.db",
+        "_dlq/delivery_done/*.json",
+        "bounded Prometheus text"
+      ],
+      "governance_facts": [
+        "resume remains distinct from replay and requeue",
+        "shared provenance remains Zephyr-owned and explicit",
+        "current operator evidence is artifact-backed, not an external observability platform"
+      ],
+      "evidence": [
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p45_m7_cross_cutting_drills.py::test_p45_m7_uns_reacquisition_delivery_replay_and_batch_report_stay_aligned",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p45_m7_cross_cutting_drills.py::test_p45_m7_it_resume_replay_preserves_resume_facts_through_shared_delivery_surface",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_m2_runtime_boundary_drills.py::test_p5_m2_two_worker_contention_is_bounded_and_inspectable",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_m2_runtime_boundary_drills.py::test_p5_m2_replay_after_failed_delivery_keeps_operator_artifacts_aligned"
+      ]
+    }
+  ],
+  "supported_current_runtime_facts": [
+    "Single-worker local execution is supported through ingest-owned queue/lock/runtime surfaces.",
+    "Local sqlite queue plus file/sqlite lock providers are the current explicit governance boundary for contention, stale lock, poison, requeue, and replay drills.",
+    "Operator-visible facts are primarily artifact-backed and repo-side rather than served through an external observability platform.",
+    "Replay, requeue, resume, and intake remain distinct provenance histories inside the current shared execution model."
+  ],
+  "bounded_or_deferred_facts": [
+    "Multi-worker behavior is proven only for a bounded same-host/shared-storage model; it is not a claim of a finished distributed runtime.",
+    "Runtime drain/stop is a bounded local shutdown behavior around in-flight work; it is not a cluster-wide coordinated drain protocol.",
+    "Redrive semantics remain not_modeled beyond explicit requeue and replay actions.",
+    "This milestone does not add autoscaling, scheduling, broker-backed orchestration, or cloud/Kubernetes packaging."
+  ],
+  "known_environment_noise": [
+    "Windows .tmp access-denied noise has been observed during pytest temp-root usage; it is treated as environment noise unless it changes runtime/governance correctness."
+  ],
+  "external_network_out_of_scope": [
+    "Google Drive and TUN or VPN reachability are external-network-dependent and are not part of the core queue/lock/runtime boundary claim."
+  ]
+}
