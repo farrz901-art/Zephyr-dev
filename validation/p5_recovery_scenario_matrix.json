@@ -1,0 +1,254 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M3 recovery/operator/runbook productionization",
+  "truth_surface": "repo-side artifact-backed operator evidence",
+  "decisive_history_fields": [
+    "run_origin",
+    "delivery_origin"
+  ],
+  "scenario_order_for_cold_operator": [
+    "Inspect queue state and delivery DLQ presence first.",
+    "Read run_meta provenance next, especially run_origin and delivery_origin.",
+    "Use delivery receipt and batch report for retryability/failure classification.",
+    "Choose replay for delivery DLQ and requeue for queue poison/inflight recovery.",
+    "Verify post-action facts before closing the recovery action."
+  ],
+  "scenarios": [
+    {
+      "name": "delivery_failure_to_replay",
+      "status": "supported",
+      "trigger_or_symptom": "A delivery receipt or batch report records a failed delivery, and `_dlq/delivery/*.json` contains replayable delivery payload facts.",
+      "primary_inspect_surfaces": [
+        "_dlq/delivery/*.json",
+        "delivery_receipt.json",
+        "batch_report.json",
+        "run_meta.json"
+      ],
+      "secondary_inspect_surfaces": [
+        "replay.db",
+        "replay_delivery_dlq result or CLI output"
+      ],
+      "decisive_fields": [
+        "delivery_receipt.details.retryable",
+        "delivery_receipt.summary.failure_retryability",
+        "delivery_receipt.summary.failure_kind",
+        "delivery_receipt.summary.error_code",
+        "run_meta.provenance.run_origin",
+        "run_meta.provenance.delivery_origin"
+      ],
+      "operator_decision": "Replay only when the failed delivery artifact is present and the failure is retryable or operator-approved for redelivery.",
+      "operator_action": "Run the replay path through `replay_delivery_dlq` or the CLI wrapper.",
+      "post_action_expected_facts": [
+        "replay stats show attempted and succeeded counts",
+        "_dlq/delivery_done/*.json contains the replayed record when move_done is enabled",
+        "replayed payload has delivery_origin=replay"
+      ]
+    },
+    {
+      "name": "poison_to_inspect_to_requeue",
+      "status": "supported",
+      "trigger_or_symptom": "Queue inspection shows poison tasks, usually with governance_problem=poison_attempts_exhausted.",
+      "primary_inspect_surfaces": [
+        "queue.sqlite3",
+        "inspect_local_sqlite_queue"
+      ],
+      "secondary_inspect_surfaces": [
+        "requeue_local_task result",
+        "bounded Prometheus text"
+      ],
+      "decisive_fields": [
+        "task.state",
+        "task.poison_kind",
+        "task.governance_problem",
+        "task.failure_count",
+        "task.orphan_count",
+        "task.recovery_audit_support"
+      ],
+      "operator_decision": "Requeue only after confirming the task is a supported poison/inflight recovery case and the underlying issue has been corrected or deliberately retried.",
+      "operator_action": "Run `requeue_local_task` for the task id and source bucket; then inspect pending.",
+      "post_action_expected_facts": [
+        "queue pending count increases for the task",
+        "QueueRecoveryResultV1 reports governance_result=moved_to_pending",
+        "converted provenance has run_origin=requeue and delivery_origin=primary"
+      ]
+    },
+    {
+      "name": "stale_lock_recovery_continuation",
+      "status": "supported",
+      "trigger_or_symptom": "A local file/sqlite lock is stale and blocks the next worker pass for a task.",
+      "primary_inspect_surfaces": [
+        "queue.sqlite3",
+        "bounded Prometheus text"
+      ],
+      "secondary_inspect_surfaces": [
+        "run_meta.json",
+        "worker runtime log/event output"
+      ],
+      "decisive_fields": [
+        "zephyr_ingest_lock_stale_recoveries_total",
+        "queue bucket counts",
+        "run_meta.provenance.run_origin",
+        "run_meta.provenance.delivery_origin"
+      ],
+      "operator_decision": "Allow current local lock provider stale recovery only inside the bounded same-host/shared-storage model.",
+      "operator_action": "Run the worker/recovery drill or worker pass with stale lock recovery enabled.",
+      "post_action_expected_facts": [
+        "stale recovery metric increments",
+        "task remains on the primary intake path unless another explicit action occurs",
+        "no distributed lease/fencing claim is introduced"
+      ]
+    },
+    {
+      "name": "it_resume_continuation",
+      "status": "supported",
+      "trigger_or_symptom": "An `it-stream` cursor-family flow resumes from an explicit checkpoint selection.",
+      "primary_inspect_surfaces": [
+        "checkpoint.json",
+        "run_meta.json",
+        "records.jsonl"
+      ],
+      "secondary_inspect_surfaces": [
+        "replay.db",
+        "delivery_receipt.json"
+      ],
+      "decisive_fields": [
+        "run_meta.provenance.run_origin",
+        "run_meta.provenance.checkpoint_identity_key",
+        "checkpoint.parent_checkpoint_identity_key",
+        "records.jsonl row count"
+      ],
+      "operator_decision": "Treat resume as source-side continuation, not delivery replay or queue requeue.",
+      "operator_action": "Use the current checkpoint/resume path for the explicit checkpoint id.",
+      "post_action_expected_facts": [
+        "run_origin=resume",
+        "delivery_origin remains primary until delivery replay occurs",
+        "checkpoint lineage points only to the immediate prior checkpoint"
+      ]
+    },
+    {
+      "name": "uns_reacquisition_replay_continuation",
+      "status": "supported",
+      "trigger_or_symptom": "`uns-stream` reacquires one bounded document and later replays failed delivery from Zephyr-owned artifacts.",
+      "primary_inspect_surfaces": [
+        "run_meta.json",
+        "delivery_receipt.json",
+        "batch_report.json",
+        "_dlq/delivery_done/*.json"
+      ],
+      "secondary_inspect_surfaces": [
+        "replay_delivery_dlq result",
+        "replay.db when sqlite is used"
+      ],
+      "decisive_fields": [
+        "run_meta.provenance.run_origin",
+        "run_meta.provenance.delivery_origin",
+        "element metadata source facts",
+        "delivery summary retryability/failure kind/error code"
+      ],
+      "operator_decision": "Treat reacquisition/repartition as `uns` source-local work; treat delivery replay as shared delivery recovery.",
+      "operator_action": "Inspect document provenance first, then delivery receipt/report, then replay DLQ.",
+      "post_action_expected_facts": [
+        "source facts remain document-specific and not collapsed into generic recovery",
+        "delivery replay sets delivery_origin=replay",
+        "batch report totals remain aligned with receipt outcome"
+      ]
+    },
+    {
+      "name": "retryable_vs_non_retryable_decision",
+      "status": "bounded",
+      "trigger_or_symptom": "A failed delivery or queue task needs an operator recovery decision.",
+      "primary_inspect_surfaces": [
+        "delivery_receipt.json",
+        "batch_report.json",
+        "queue inspect output"
+      ],
+      "secondary_inspect_surfaces": [
+        "destination-specific details",
+        "replay/DLQ record"
+      ],
+      "decisive_fields": [
+        "failure_retryability",
+        "details.retryable",
+        "failure_kind",
+        "error_code",
+        "governance_problem"
+      ],
+      "operator_decision": "Retry/replay retryable failures; require explicit operator judgment for non-retryable or ambiguous failures.",
+      "operator_action": "Do not hide ambiguity: inspect receipt/report first, then decide replay/requeue or leave blocked.",
+      "post_action_expected_facts": [
+        "operator action is explicit as replay or requeue when taken",
+        "non-retryable cases are not silently retried by the runbook"
+      ]
+    },
+    {
+      "name": "post_recovery_verification",
+      "status": "supported",
+      "trigger_or_symptom": "An operator completed replay or requeue and needs to verify outcome.",
+      "primary_inspect_surfaces": [
+        "_dlq/delivery_done/*.json",
+        "queue inspect output",
+        "replay.db",
+        "run_meta.json"
+      ],
+      "secondary_inspect_surfaces": [
+        "batch_report.json",
+        "delivery_receipt.json"
+      ],
+      "decisive_fields": [
+        "delivery_origin",
+        "run_origin",
+        "queue bucket counts",
+        "ReplayStats.succeeded",
+        "QueueRecoveryResultV1.governance_result"
+      ],
+      "operator_decision": "Verify the post-action state before considering the incident recovered.",
+      "operator_action": "Check done/pending/poison queue counts for requeue, or delivery_done/replay payloads for replay.",
+      "post_action_expected_facts": [
+        "replayed work is visible under delivery_done or replay sink output",
+        "requeued work is visible as pending",
+        "resume/replay/requeue histories remain distinguishable"
+      ]
+    },
+    {
+      "name": "unsupported_deferred_recovery_topics",
+      "status": "unsupported",
+      "trigger_or_symptom": "An operator expects distributed redrive, cloud observability, or backend-native recovery bypassing Zephyr.",
+      "primary_inspect_surfaces": [
+        "P5_M2_RUNTIME_BOUNDARY.md",
+        "P5_M3 recovery runbook"
+      ],
+      "secondary_inspect_surfaces": [
+        "p5_runtime_boundary_matrix.json"
+      ],
+      "decisive_fields": [
+        "redrive_support=not_modeled",
+        "bounded/deferred facts"
+      ],
+      "operator_decision": "Do not treat unsupported recovery requests as current product behavior.",
+      "operator_action": "Escalate as deferred/productization work rather than performing an undocumented manual bypass.",
+      "post_action_expected_facts": [
+        "no connector-local side channel becomes the truth surface",
+        "no fake universal observability claim is introduced"
+      ]
+    }
+  ],
+  "supported_current_recovery_facts": [
+    "Delivery replay through replay_delivery_dlq is supported for current replay sinks.",
+    "Poison/inflight requeue through requeue_local_task is supported for local queues.",
+    "it-stream resume remains source-side cursor/checkpoint continuation.",
+    "uns-stream reacquisition/repartition remains source-local document work.",
+    "Replay, requeue, resume, and intake remain distinct provenance histories."
+  ],
+  "bounded_or_deferred_recovery_facts": [
+    "Redrive semantics remain not_modeled beyond explicit requeue and replay.",
+    "Operator truth is artifact-backed and repo-side, not a finished observability platform.",
+    "Some sqlite recovery visibility is result_only rather than persisted_in_history.",
+    "Backend-shaped visibility differences remain meaningful and must not be hidden."
+  ],
+  "known_environment_noise": [
+    "Windows .tmp access-denied noise is known environment noise unless it changes runtime/governance correctness."
+  ],
+  "external_network_out_of_scope": [
+    "Google Drive/TUN/network reachability is outside the core recovery/operator claim."
+  ]
+}
