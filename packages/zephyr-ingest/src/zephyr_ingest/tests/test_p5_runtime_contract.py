@@ -25,6 +25,7 @@ from zephyr_ingest.testing.p45 import (
     P45_HOME_ENV_NAME,
     format_redacted_env_summary,
     load_p45_env,
+    missing_saas_env,
 )
 
 
@@ -59,6 +60,7 @@ def test_p5_runtime_contract_artifact_matches_helper_shape() -> None:
     artifact = json.loads(P5_RUNTIME_CONTRACT_PATH.read_text(encoding="utf-8"))
     built = build_p5_runtime_contract()
     built_groups = cast(list[dict[str, object]], built["env_groups"])
+    report_text = P5_RUNTIME_REPORT_PATH.read_text(encoding="utf-8")
 
     assert artifact["phase"] == built["phase"]
     assert artifact["runtime_home_env_var"] == "ZEPHYR_P45_HOME"
@@ -68,6 +70,41 @@ def test_p5_runtime_contract_artifact_matches_helper_shape() -> None:
         group["name"] for group in built_groups
     }
     assert P5_RUNTIME_REPORT_PATH.exists()
+    assert "[p5_runtime_contract.json](p5_runtime_contract.json)" in report_text
+    assert "](/E:/" not in report_text
+
+
+@pytest.mark.auth_contract
+def test_p5_runtime_contract_accepts_intentional_google_drive_aliases() -> None:
+    with _sandbox("contract_gdrive_aliases") as sandbox:
+        repo_root = sandbox / "repo"
+        repo_root.mkdir()
+        runtime_home = _build_runtime_home(sandbox)
+        _write_text(
+            runtime_home / "env" / ".env.p45.local",
+            "\n".join(
+                (
+                    "ZEPHYR_P45_GDRIVE_FILE_ID_EXPORT=file-1",
+                    "ZEPHYR_P45_GDRIVE_ACCESS_TOKEN=token-1",
+                    "ZEPHYR_P45_GDRIVE_EXPORT_MIME_TYPE=application/pdf",
+                )
+            )
+            + "\n",
+        )
+
+        env = load_p45_env(
+            repo_root_path=repo_root,
+            environ={P45_HOME_ENV_NAME: str(runtime_home)},
+        )
+
+        assert env.require("ZEPHYR_P45_GOOGLE_DRIVE_FILE_ID") == "file-1"
+        assert env.require("ZEPHYR_P45_GOOGLE_DRIVE_ACCESS_TOKEN") == "token-1"
+        assert env.require("ZEPHYR_P45_GOOGLE_DRIVE_EXPORT_MIME_TYPE") == "application/pdf"
+        assert (
+            env.sources["ZEPHYR_P45_GOOGLE_DRIVE_FILE_ID"].split("|", maxsplit=1)[1]
+            == "alias:ZEPHYR_P45_GDRIVE_FILE_ID_EXPORT"
+        )
+        assert missing_saas_env("google-drive", env) == ()
 
 
 @pytest.mark.auth_contract

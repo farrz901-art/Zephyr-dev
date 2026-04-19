@@ -61,7 +61,7 @@ Repo files that remain templates/examples only:
 They are allowed as fallback/bootstrap aids, but they are not the canonical live runtime files.
 
 ## Env and Secret Contract
-The machine-readable contract is [p5_runtime_contract.json](/E:/Github_Projects/Zephyr/validation/p5_runtime_contract.json).
+The machine-readable contract is [p5_runtime_contract.json](p5_runtime_contract.json).
 
 The current contract distinguishes:
 

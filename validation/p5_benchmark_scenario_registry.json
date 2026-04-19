@@ -1,0 +1,197 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M4-S2 benchmark/SLI/capacity baseline harness",
+  "runtime_boundary": "bounded local same-host/shared-storage",
+  "headline_rule": "Do not collapse source-flow, destination, and recovery-overhead layers into one headline benchmark result.",
+  "measurement_unit_rule": "Each case declares its own primary measurement_unit. Throughput-like values are valid only when unit_count is explicit for that case.",
+  "first_wave_cases": [
+    {
+      "case_id": "uns_reacquisition_replay_representative",
+      "name": "UNS reacquisition plus delivery replay representative",
+      "layer": "source_flow_representative",
+      "status": "supported",
+      "measurement_unit": "document",
+      "basis": "test_p45_m7_uns_reacquisition_delivery_replay_and_batch_report_stay_aligned",
+      "objective": "Measure one bounded uns-stream document reacquisition/repartition path with shared delivery replay/report evidence.",
+      "valid_comparisons": [
+        "same case repeatability across repeated local runs"
+      ],
+      "invalid_comparisons": [
+        "direct headline comparison against the it-stream representative case",
+        "filesystem-vs-opensearch destination comparison"
+      ],
+      "measured_surfaces": [
+        "wall_clock_ms",
+        "document_count",
+        "delivery outcome summary",
+        "replay count when the case records replay artifacts",
+        "run_meta provenance",
+        "batch_report summary",
+        "delivery_receipt outcome"
+      ],
+      "partial_surfaces": [
+        "prometheus metrics",
+        "resource usage snapshot"
+      ],
+      "bounded_caveats": [
+        "One bounded document unit; not multi-document discovery or SaaS sync."
+      ]
+    },
+    {
+      "case_id": "it_resume_replay_representative",
+      "name": "IT checkpoint resume plus delivery replay representative",
+      "layer": "source_flow_representative",
+      "status": "supported",
+      "measurement_unit": "checkpoint_resume_task",
+      "basis": "test_p45_m7_it_resume_replay_preserves_resume_facts_through_shared_delivery_surface",
+      "objective": "Measure one bounded it-stream cursor-family resume path with shared delivery replay/report evidence.",
+      "valid_comparisons": [
+        "same case repeatability across repeated local runs"
+      ],
+      "invalid_comparisons": [
+        "direct headline comparison against the uns-stream representative case",
+        "filesystem-vs-opensearch destination comparison"
+      ],
+      "measured_surfaces": [
+        "wall_clock_ms",
+        "task_count",
+        "payload_count",
+        "checkpoint/resume facts",
+        "delivery outcome summary",
+        "run_meta provenance",
+        "batch_report summary"
+      ],
+      "partial_surfaces": [
+        "prometheus metrics",
+        "resource usage snapshot"
+      ],
+      "bounded_caveats": [
+        "Cursor-v1 resume only; no CDC/changefeed/consumer-group progress claim."
+      ]
+    },
+    {
+      "case_id": "filesystem_lightweight_delivery",
+      "name": "Filesystem lightweight delivery representative",
+      "layer": "destination_representative",
+      "status": "supported",
+      "measurement_unit": "delivery_payload",
+      "basis": "retained filesystem destination local-real authenticity path",
+      "objective": "Measure a lightweight durable/object-style destination path without mixing it with source-family comparisons.",
+      "valid_comparisons": [
+        "opensearch_heavier_delivery within destination layer only"
+      ],
+      "invalid_comparisons": [
+        "source-flow representative headline comparison",
+        "recovery-overhead headline comparison"
+      ],
+      "measured_surfaces": [
+        "wall_clock_ms",
+        "payload_count",
+        "delivery success/failure counts",
+        "delivery_receipt outcome",
+        "batch_report summary"
+      ],
+      "partial_surfaces": [
+        "resource usage snapshot"
+      ],
+      "bounded_caveats": [
+        "Local filesystem behavior is same-host storage only."
+      ]
+    },
+    {
+      "case_id": "opensearch_heavier_delivery",
+      "name": "OpenSearch heavier delivery representative",
+      "layer": "destination_representative",
+      "status": "supported",
+      "measurement_unit": "delivery_payload",
+      "basis": "retained OpenSearch service-live authenticity path",
+      "objective": "Measure a heavier structured sink destination path under the current local HTTPS/basic-auth/skip-TLS-verify substrate reality.",
+      "valid_comparisons": [
+        "filesystem_lightweight_delivery within destination layer only"
+      ],
+      "invalid_comparisons": [
+        "source-flow representative headline comparison",
+        "recovery-overhead headline comparison"
+      ],
+      "measured_surfaces": [
+        "wall_clock_ms",
+        "payload_count",
+        "delivery success/failure counts",
+        "retryable/non-retryable breakdown",
+        "delivery_receipt outcome",
+        "batch_report summary"
+      ],
+      "partial_surfaces": [
+        "resource usage snapshot",
+        "prometheus metrics"
+      ],
+      "bounded_caveats": [
+        "OpenSearch local runtime uses HTTPS with skip-TLS-verify for self-signed local certs."
+      ]
+    },
+    {
+      "case_id": "replay_after_failed_delivery_recovery_overhead",
+      "name": "Replay after failed delivery recovery-overhead representative",
+      "layer": "recovery_overhead",
+      "status": "bounded",
+      "measurement_unit": "inspect_decide_act_verify_workflow",
+      "basis": "P5-M3 delivery_failure_to_replay recovery scenario",
+      "objective": "Measure bounded recovery workflow overhead for inspect -> decide -> replay -> verify, not only the replay action call.",
+      "valid_comparisons": [
+        "same recovery case repeatability across repeated local runs"
+      ],
+      "invalid_comparisons": [
+        "destination throughput headline comparison",
+        "source-flow representative headline comparison"
+      ],
+      "measured_surfaces": [
+        "wall_clock_ms",
+        "dlq_pending_count",
+        "dlq_done_count",
+        "replay_attempt_count",
+        "replay_success_count",
+        "delivery_origin",
+        "batch_report summary"
+      ],
+      "partial_surfaces": [
+        "action-only replay duration",
+        "prometheus metrics"
+      ],
+      "bounded_caveats": [
+        "Redrive beyond explicit requeue/replay remains not modeled."
+      ]
+    }
+  ],
+  "sli_candidate_fields": [
+    "wall_clock_ms",
+    "process_cpu_ms",
+    "measurement_unit",
+    "unit_count",
+    "throughput_units_per_second",
+    "delivery_success_count",
+    "delivery_failure_count",
+    "retryable_failure_count",
+    "non_retryable_failure_count",
+    "replay_attempt_count",
+    "requeue_count"
+  ],
+  "bounded_caveats": [
+    "First-wave P5-M4 benchmark coverage is representative, not a full retained-surface matrix.",
+    "Source-flow representative cases, destination representative cases, and recovery overhead cases are separate layers and must not be collapsed into one headline number.",
+    "Current results target bounded local same-host/shared-storage runtime reality, not distributed, Kubernetes, cloud, or fleet capacity claims.",
+    "Prometheus/metrics, replay/requeue counts, and resource observations are partial surfaces unless a specific benchmark case records them.",
+    "TUN/Google Drive/network-dependent topics are outside the core benchmark baseline unless a later SaaS-specific benchmark case explicitly includes them.",
+    "Windows .tmp access-denied noise is known environment noise unless it changes correctness or artifact-backed result consistency."
+  ],
+  "environment_freeze": {
+    "cpu": "13th Gen Intel(R) Core(TM) i7-13700H",
+    "cores_logical_processors": "14 / 20",
+    "memory": "about 34 GB",
+    "os": "Microsoft Windows 11 Pro for Workstations 64-bit (10.0.26100)",
+    "repo_drive": "E:",
+    "runtime_home_drive": "E:",
+    "free_space_e_drive": "about 109.98 GB",
+    "tun_mode": true,
+    "known_tmp_acl_noise": true
+  }
+}
