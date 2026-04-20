@@ -81,6 +81,19 @@ class MetricsV1(TypedDict):
     dlq_written_total: int
 
 
+class RuntimeBoundaryV1(TypedDict):
+    execution_scope: Literal["bounded_local_same_host"]
+    executor: Literal["serial", "thread"]
+    worker_count: int
+    threadpool_semantics: Literal["local_threads_only", "not_used"]
+    local_lock_scope: Literal["out_root_file_lock"]
+    artifact_storage_scope: Literal["local_out_root"]
+    skip_existing: bool
+    skip_unsupported: bool
+    stale_lock_ttl_s: int | None
+    effective_destination: str
+
+
 class BatchReportV1(TypedDict):
     schema_version: Literal[1]
     run_id: str
@@ -99,6 +112,7 @@ class BatchReportV1(TypedDict):
     generated_at_utc: str
     workers: int
     executor: Literal["serial", "thread"]
+    runtime_boundary: NotRequired[RuntimeBoundaryV1]
 
     config_snapshot: NotRequired[ConfigSnapshotV1]
     metrics: NotRequired[MetricsV1]

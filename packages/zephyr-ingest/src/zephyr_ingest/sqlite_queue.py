@@ -8,7 +8,11 @@ from pathlib import Path
 from typing import Literal, cast
 
 from zephyr_ingest.queue_backend import ClaimedTask
-from zephyr_ingest.spool_queue import QueueMetricsSnapshotV1
+from zephyr_ingest.spool_queue import (
+    DEFAULT_MAX_ORPHAN_REQUEUES,
+    DEFAULT_MAX_TASK_ATTEMPTS,
+    QueueMetricsSnapshotV1,
+)
 from zephyr_ingest.task_v1 import TaskV1
 
 SqliteQueueBucket = Literal["pending", "inflight", "done", "failed", "poison"]
@@ -17,8 +21,8 @@ SqliteQueueBucket = Literal["pending", "inflight", "done", "failed", "poison"]
 @dataclass(frozen=True, slots=True)
 class SqliteQueueBackend:
     root: Path
-    max_task_attempts: int = 1
-    max_orphan_requeues: int = 1
+    max_task_attempts: int = DEFAULT_MAX_TASK_ATTEMPTS
+    max_orphan_requeues: int = DEFAULT_MAX_ORPHAN_REQUEUES
     db_filename: str = "queue.sqlite3"
     _poison_transition_total: int = field(default=0, init=False, repr=False)
     _orphan_requeue_total: int = field(default=0, init=False, repr=False)
@@ -44,6 +48,8 @@ class SqliteQueueBackend:
             done=counts["done"],
             failed=counts["failed"],
             poison=counts["poison"],
+            max_task_attempts=self.max_task_attempts,
+            max_orphan_requeues=self.max_orphan_requeues,
             poison_transition_total=self._poison_transition_total,
             orphan_requeue_total=self._orphan_requeue_total,
             stale_inflight_recovery_total=self._stale_inflight_recovery_total,

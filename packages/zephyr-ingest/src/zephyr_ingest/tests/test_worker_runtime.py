@@ -44,7 +44,13 @@ from zephyr_ingest.task_v1 import (
     TaskV1,
 )
 from zephyr_ingest.tests.test_queue_backend import make_task
-from zephyr_ingest.worker_runtime import WorkerRuntime, run_worker
+from zephyr_ingest.worker_runtime import (
+    WORKER_DRAIN_ON_EMPTY_POLICY,
+    WORKER_RUNTIME_SCOPE,
+    DrainingOnIdleWorkSource,
+    WorkerRuntime,
+    run_worker,
+)
 
 
 def test_cli_worker_invokes_runtime(
@@ -141,6 +147,67 @@ def test_worker_runtime_draining_stops_new_work_and_emits_events(
     assert any(m.startswith("worker_start ") for m in msgs)
     assert any(m.startswith("worker_draining ") for m in msgs)
     assert any(m.startswith("worker_stop ") for m in msgs)
+
+
+def test_worker_runtime_exposes_bounded_drain_stop_intent_and_runtime_scope() -> None:
+    ctx = RunContext.new(
+        pipeline_version="p-worker",
+        run_id="r-worker",
+        timestamp_utc="2026-04-04T00:00:00Z",
+    )
+    runtime = WorkerRuntime(ctx=ctx, poll_interval_ms=1)
+
+    assert runtime.runtime_scope == WORKER_RUNTIME_SCOPE
+    assert runtime.stop_intent == "none"
+    assert runtime.accepts_new_work is False
+
+    runtime._phase = WorkerPhase.RUNNING  # noqa: SLF001 - narrow lifecycle surface test # pyright: ignore[reportPrivateUsage]
+    assert runtime.accepts_new_work is True
+    runtime.request_draining()
+
+    assert runtime.phase == WorkerPhase.DRAINING
+    assert runtime.stop_intent == "drain"
+    assert runtime.accepts_new_work is False
+
+    text = render_prometheus_text(families=build_worker_prom_families(ctx=ctx, lifecycle=runtime))
+    assert (
+        'zephyr_ingest_worker_runtime_boundary_info{pipeline_version="p-worker",'
+        'runtime_scope="single_process_local_polling",stop_intent="drain",'
+        'accepts_new_work="false"} 1.0'
+    ) in text
+
+
+def test_drain_on_empty_policy_only_drains_after_work_has_been_seen(
+    tmp_path: Path,
+) -> None:
+    backend = build_local_queue_backend(kind="sqlite", root=tmp_path / "sqlite")
+    runtime = WorkerRuntime(
+        ctx=RunContext.new(
+            pipeline_version="p-worker",
+            run_id="r-worker",
+            timestamp_utc="2026-04-04T00:00:00Z",
+        ),
+        poll_interval_ms=1,
+    )
+    source = DrainingOnIdleWorkSource(
+        runtime=runtime,
+        delegate=QueueBackendWorkSource(
+            backend=backend,
+            handler=lambda task: None,
+        ),
+    )
+
+    assert source.drain_policy == WORKER_DRAIN_ON_EMPTY_POLICY
+    assert source.poll() is None
+    assert runtime.stop_intent == "none"
+
+    backend.enqueue(make_task("task-drain-after-work", kind="it"))
+    work = source.poll()
+    assert work is not None
+    work()
+
+    assert source.poll() is None
+    assert runtime.stop_intent == "drain"
 
 
 def test_health_provider_http_endpoints_reflect_lifecycle_state() -> None:

@@ -12,6 +12,16 @@ from zephyr_core import DocumentRef, PartitionResult, PartitionStrategy
 
 FlowKind = Literal["uns", "it"]
 DEFAULT_FLOW_KIND: FlowKind = "uns"
+SharedFieldSemantics = Literal["applied", "orchestration_context_only"]
+
+
+@dataclass(frozen=True, slots=True)
+class FlowProcessorSharedFieldSemantics:
+    flow_kind: FlowKind
+    unique_element_ids: SharedFieldSemantics
+    run_id: SharedFieldSemantics
+    pipeline_version: SharedFieldSemantics
+    note: str
 
 
 class PartitionFn(Protocol):
@@ -49,6 +59,18 @@ class CallableFlowProcessor:
     partition_fn: PartitionFn
     backend: object | None = None
 
+    def shared_field_semantics(self) -> FlowProcessorSharedFieldSemantics:
+        return FlowProcessorSharedFieldSemantics(
+            flow_kind=DEFAULT_FLOW_KIND,
+            unique_element_ids="applied",
+            run_id="applied",
+            pipeline_version="applied",
+            note=(
+                "legacy partition_fn adapter receives shared fields directly; exact semantics "
+                "belong to the supplied callable."
+            ),
+        )
+
     def process(
         self,
         *,
@@ -75,6 +97,9 @@ class CallableFlowProcessor:
 class UnsFlowProcessor:
     backend: object | None = None
 
+    def shared_field_semantics(self) -> FlowProcessorSharedFieldSemantics:
+        return describe_flow_processor_shared_field_semantics(flow_kind="uns")
+
     def process(
         self,
         *,
@@ -99,6 +124,9 @@ class UnsFlowProcessor:
 
 @dataclass(frozen=True, slots=True)
 class ItFlowProcessor:
+    def shared_field_semantics(self) -> FlowProcessorSharedFieldSemantics:
+        return describe_flow_processor_shared_field_semantics(flow_kind="it")
+
     def process(
         self,
         *,
@@ -109,7 +137,11 @@ class ItFlowProcessor:
         pipeline_version: str | None,
         sha256: str,
     ) -> PartitionResult:
-        del unique_element_ids, run_id, pipeline_version
+        _acknowledge_it_orchestration_context(
+            unique_element_ids=unique_element_ids,
+            run_id=run_id,
+            pipeline_version=pipeline_version,
+        )
         return process_it_file(
             filename=doc.uri,
             strategy=strategy,
@@ -135,6 +167,47 @@ def normalize_flow_input_identity_sha(
     if flow_kind == "uns":
         return normalize_uns_input_identity_sha(filename=filename, default_sha=default_sha)
     return default_sha
+
+
+def _acknowledge_it_orchestration_context(
+    *,
+    unique_element_ids: bool,
+    run_id: str | None,
+    pipeline_version: str | None,
+) -> None:
+    # These are shared orchestration context fields. Current it-stream processing owns
+    # record/checkpoint artifact identity locally, so these inputs are intentionally
+    # not forwarded as artifact-shaping controls.
+    del unique_element_ids, run_id, pipeline_version
+
+
+def describe_flow_processor_shared_field_semantics(
+    *,
+    flow_kind: FlowKind | str,
+) -> FlowProcessorSharedFieldSemantics:
+    if flow_kind == "uns":
+        return FlowProcessorSharedFieldSemantics(
+            flow_kind="uns",
+            unique_element_ids="applied",
+            run_id="applied",
+            pipeline_version="applied",
+            note=(
+                "uns-stream applies shared partition context directly through the document "
+                "partition path."
+            ),
+        )
+    if flow_kind == "it":
+        return FlowProcessorSharedFieldSemantics(
+            flow_kind="it",
+            unique_element_ids="orchestration_context_only",
+            run_id="orchestration_context_only",
+            pipeline_version="orchestration_context_only",
+            note=(
+                "it-stream keeps record/checkpoint artifact semantics flow-local; shared fields "
+                "remain orchestration context and do not shape it artifacts directly."
+            ),
+        )
+    raise ValueError(f"Unsupported flow kind: {flow_kind}")
 
 
 def build_processor_for_flow_kind(

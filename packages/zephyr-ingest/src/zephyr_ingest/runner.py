@@ -46,6 +46,7 @@ from zephyr_ingest.obs.batch_report_v1 import (
     BatchReportV1,
     DeliveryCountersV1,
     DurationStatsV1,
+    RuntimeBoundaryV1,
     StageDurationsV1,
 )
 from zephyr_ingest.obs.batch_report_v1 import (
@@ -1032,6 +1033,19 @@ def run_documents(
         "workers": cfg.workers,
         "executor": "serial" if cfg.workers <= 1 else "thread",
     }
+    runtime_boundary: RuntimeBoundaryV1 = {
+        "execution_scope": "bounded_local_same_host",
+        "executor": "serial" if cfg.workers <= 1 else "thread",
+        "worker_count": cfg.workers,
+        "threadpool_semantics": "not_used" if cfg.workers <= 1 else "local_threads_only",
+        "local_lock_scope": "out_root_file_lock",
+        "artifact_storage_scope": "local_out_root",
+        "skip_existing": cfg.skip_existing,
+        "skip_unsupported": cfg.skip_unsupported,
+        "stale_lock_ttl_s": cfg.stale_lock_ttl_s,
+        "effective_destination": getattr(destination, "name", "unknown"),
+    }
+    batch_report["runtime_boundary"] = runtime_boundary
 
     stage_durations: StageDurationsV1 = {
         "hash_ms": _duration_stats(hash_durations_ms),

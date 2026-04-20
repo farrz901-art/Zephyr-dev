@@ -325,6 +325,9 @@ def build_worker_prom_families(
 ) -> list[PromMetricFamily]:
     phase = lifecycle.phase.value
     labels = {"pipeline_version": ctx.pipeline_version}
+    runtime_scope = str(getattr(lifecycle, "runtime_scope", "bounded_local_runtime"))
+    stop_intent = str(getattr(lifecycle, "stop_intent", "none"))
+    accepts_new_work = bool(getattr(lifecycle, "accepts_new_work", phase == "running"))
 
     families = [
         PromMetricFamily(
@@ -345,12 +348,33 @@ def build_worker_prom_families(
                 )
             ],
         ),
+        PromMetricFamily(
+            name="zephyr_ingest_worker_runtime_boundary_info",
+            help=(
+                "Bounded local worker runtime boundary info. "
+                "This is not a distributed worker-platform claim."
+            ),
+            mtype="gauge",
+            samples=[
+                PromSample(
+                    "zephyr_ingest_worker_runtime_boundary_info",
+                    1.0,
+                    {
+                        **labels,
+                        "runtime_scope": runtime_scope,
+                        "stop_intent": stop_intent,
+                        "accepts_new_work": "true" if accepts_new_work else "false",
+                    },
+                )
+            ],
+        ),
     ]
 
-    if not isinstance(work_source, QueueBackendWorkSource):
+    effective_work_source = getattr(work_source, "delegate", work_source)
+    if not isinstance(effective_work_source, QueueBackendWorkSource):
         return families
 
-    backend = work_source.backend
+    backend = effective_work_source.backend
     if isinstance(backend, SupportsQueueMetricsSnapshot):
         queue_snapshot = backend.queue_metrics_snapshot()
         families.append(
@@ -376,6 +400,36 @@ def build_worker_prom_families(
         )
         families.extend(
             [
+                PromMetricFamily(
+                    name="zephyr_ingest_queue_policy_max_task_attempts",
+                    help=(
+                        "Configured bounded local queue attempts before poison transition. "
+                        "This is not a distributed retry policy."
+                    ),
+                    mtype="gauge",
+                    samples=[
+                        PromSample(
+                            "zephyr_ingest_queue_policy_max_task_attempts",
+                            float(queue_snapshot.max_task_attempts),
+                            labels,
+                        )
+                    ],
+                ),
+                PromMetricFamily(
+                    name="zephyr_ingest_queue_policy_max_orphan_requeues",
+                    help=(
+                        "Configured bounded local queue orphan requeues before poison transition. "
+                        "This is not distributed lease recovery."
+                    ),
+                    mtype="gauge",
+                    samples=[
+                        PromSample(
+                            "zephyr_ingest_queue_policy_max_orphan_requeues",
+                            float(queue_snapshot.max_orphan_requeues),
+                            labels,
+                        )
+                    ],
+                ),
                 PromMetricFamily(
                     name="zephyr_ingest_queue_poison_transitions_total",
                     help="Cumulative queue transitions into poison state.",
@@ -415,7 +469,7 @@ def build_worker_prom_families(
             ]
         )
 
-    source_snapshot = work_source.work_source_metrics_snapshot()
+    source_snapshot = effective_work_source.work_source_metrics_snapshot()
     families.append(
         PromMetricFamily(
             name="zephyr_ingest_queue_lock_contention_total",
@@ -431,7 +485,7 @@ def build_worker_prom_families(
         )
     )
 
-    lock_provider = work_source.lock_provider
+    lock_provider = effective_work_source.lock_provider
     if lock_provider is not None and isinstance(lock_provider, SupportsLockMetricsSnapshot):
         lock_snapshot = lock_provider.lock_metrics_snapshot()
         families.append(

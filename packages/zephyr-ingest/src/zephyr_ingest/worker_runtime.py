@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Callable, Protocol
+from typing import Callable, Literal, Protocol
 
 from zephyr_core import RunContext
 from zephyr_core.contracts.v2.lifecycle import Lifecycle, WorkerPhase
@@ -13,6 +13,9 @@ from zephyr_ingest.obs.prom_export import build_worker_prom_families, render_pro
 from zephyr_ingest.queue_backend import QueueBackend, QueueBackendWorkSource, TaskHandler
 
 logger = logging.getLogger(__name__)
+WorkerStopIntent = Literal["none", "drain", "stop"]
+WORKER_RUNTIME_SCOPE = "single_process_local_polling"
+WORKER_DRAIN_ON_EMPTY_POLICY = "after_first_work_then_idle"
 
 
 class WorkItem(Protocol):
@@ -33,6 +36,10 @@ class DrainingOnIdleWorkSource:
     runtime: "WorkerRuntime"
     delegate: WorkSource
     _saw_work: bool = field(default=False, init=False)
+
+    @property
+    def drain_policy(self) -> str:
+        return WORKER_DRAIN_ON_EMPTY_POLICY
 
     def poll(self) -> WorkItem | None:
         work = self.delegate.poll()
@@ -56,6 +63,22 @@ class WorkerRuntime(Lifecycle):
     @property
     def phase(self) -> WorkerPhase:
         return self._phase
+
+    @property
+    def runtime_scope(self) -> str:
+        return WORKER_RUNTIME_SCOPE
+
+    @property
+    def stop_intent(self) -> WorkerStopIntent:
+        if self._stopping_requested:
+            return "stop"
+        if self._draining_requested:
+            return "drain"
+        return "none"
+
+    @property
+    def accepts_new_work(self) -> bool:
+        return self.phase == WorkerPhase.RUNNING and self.stop_intent == "none"
 
     def request_draining(self) -> None:
         if self._phase in (WorkerPhase.STOPPED, WorkerPhase.FAILED):
@@ -85,6 +108,7 @@ class WorkerRuntime(Lifecycle):
             pipeline_version=self.ctx.pipeline_version,
             phase=str(self.phase),
             poll_interval_ms=self.poll_interval_ms,
+            runtime_scope=self.runtime_scope,
         )
         self._phase = WorkerPhase.RUNNING
         draining_logged = False
@@ -102,6 +126,9 @@ class WorkerRuntime(Lifecycle):
                         run_id=self.ctx.run_id,
                         pipeline_version=self.ctx.pipeline_version,
                         phase=str(self.phase),
+                        stop_intent=self.stop_intent,
+                        accepts_new_work=self.accepts_new_work,
+                        runtime_scope=self.runtime_scope,
                     )
                     draining_logged = True
             else:
@@ -116,6 +143,9 @@ class WorkerRuntime(Lifecycle):
                     run_id=self.ctx.run_id,
                     pipeline_version=self.ctx.pipeline_version,
                     phase=str(self.phase),
+                    stop_intent=self.stop_intent,
+                    accepts_new_work=self.accepts_new_work,
+                    runtime_scope=self.runtime_scope,
                 )
                 return 0
 
@@ -131,6 +161,8 @@ class WorkerRuntime(Lifecycle):
                         run_id=self.ctx.run_id,
                         pipeline_version=self.ctx.pipeline_version,
                         phase=str(self.phase),
+                        stop_intent=self.stop_intent,
+                        runtime_scope=self.runtime_scope,
                     )
                     raise
 
@@ -150,6 +182,8 @@ class WorkerRuntime(Lifecycle):
                         run_id=self.ctx.run_id,
                         pipeline_version=self.ctx.pipeline_version,
                         phase=str(self.phase),
+                        stop_intent=self.stop_intent,
+                        runtime_scope=self.runtime_scope,
                     )
                     raise
                 finally:

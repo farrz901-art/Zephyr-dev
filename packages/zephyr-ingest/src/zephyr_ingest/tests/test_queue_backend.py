@@ -16,7 +16,11 @@ from zephyr_ingest.queue_backend import QueueBackend, QueueBackendWorkSource
 from zephyr_ingest.queue_backend_factory import build_local_queue_backend
 from zephyr_ingest.queue_inspect import inspect_local_queue, inspect_local_spool_queue
 from zephyr_ingest.queue_recover import requeue_local_spool_task, requeue_local_task
-from zephyr_ingest.spool_queue import LocalSpoolQueue
+from zephyr_ingest.spool_queue import (
+    DEFAULT_MAX_ORPHAN_REQUEUES,
+    DEFAULT_MAX_TASK_ATTEMPTS,
+    LocalSpoolQueue,
+)
 from zephyr_ingest.sqlite_lock_provider import SqliteLockProvider
 from zephyr_ingest.sqlite_queue import SqliteQueueBackend
 from zephyr_ingest.task_idempotency import normalize_task_idempotency_key
@@ -111,6 +115,40 @@ def test_sqlite_queue_enqueue_claim_and_ack_lifecycle(tmp_path: Path) -> None:
     assert backend.claim_next() is None
 
 
+def test_sqlite_queue_defaults_are_bounded_product_safe_not_first_failure_poison(
+    tmp_path: Path,
+) -> None:
+    backend = SqliteQueueBackend(root=tmp_path / "sqlite-queue")
+    assert backend.max_task_attempts == DEFAULT_MAX_TASK_ATTEMPTS
+    assert backend.max_orphan_requeues == DEFAULT_MAX_ORPHAN_REQUEUES
+
+    backend.enqueue(_make_task("task-default-failure"))
+    first_claim = backend.claim_next()
+    assert first_claim is not None
+    backend.ack_failure(first_claim)
+    assert backend.queue_metrics_snapshot().pending == 1
+    assert backend.queue_metrics_snapshot().poison == 0
+
+    second_claim = backend.claim_next()
+    assert second_claim is not None
+    backend.ack_failure(second_claim)
+    assert backend.queue_metrics_snapshot().pending == 1
+    assert backend.queue_metrics_snapshot().poison == 0
+
+    third_claim = backend.claim_next()
+    assert third_claim is not None
+    backend.ack_failure(third_claim)
+    assert backend.queue_metrics_snapshot().pending == 0
+    assert backend.queue_metrics_snapshot().poison == 1
+
+    backend.enqueue(_make_task("task-default-orphan"))
+    orphan_claim = backend.claim_next()
+    assert orphan_claim is not None
+    backend.requeue_orphaned(orphan_claim)
+    assert backend.queue_metrics_snapshot().pending == 1
+    assert backend.queue_metrics_snapshot().poison == 1
+
+
 def test_sqlite_queue_backend_work_source_handles_lock_contention_and_stale_inflight(
     tmp_path: Path,
 ) -> None:
@@ -200,6 +238,8 @@ def test_sqlite_queue_metrics_render_shared_queue_governance_subset(tmp_path: Pa
     )
     assert 'zephyr_ingest_queue_tasks{pipeline_version="p-worker",bucket="pending"} 1.0' in text
     assert 'zephyr_ingest_queue_tasks{pipeline_version="p-worker",bucket="inflight"} 0.0' in text
+    assert 'zephyr_ingest_queue_policy_max_task_attempts{pipeline_version="p-worker"} 3.0' in text
+    assert 'zephyr_ingest_queue_policy_max_orphan_requeues{pipeline_version="p-worker"} 3.0' in text
     assert 'zephyr_ingest_queue_orphan_requeues_total{pipeline_version="p-worker"} 2.0' in text
     assert (
         'zephyr_ingest_queue_stale_inflight_recoveries_total{pipeline_version="p-worker"} 1.0'
@@ -241,6 +281,7 @@ def test_sqlite_queue_participates_in_shared_inspection_and_requeue_subset(
             "state": "poison",
             "governance_labels": [],
             "governance_problem": "poison_attempts_exhausted",
+            "state_explanation": "operator_requeue_supported_after_attempt_or_orphan_threshold",
             "poison_kind": "attempts_exhausted",
             "handling_expectation": "requeue_supported",
             "recovery_audit_support": "result_only",
@@ -324,6 +365,7 @@ def test_sqlite_queue_participates_in_shared_inspection_and_requeue_subset(
         "recovery_audit_support": "result_only",
     }
     assert pending_view["tasks"][0]["state"] == "pending"
+    assert pending_view["tasks"][0]["state_explanation"] == "ready_for_local_worker_claim"
     assert pending_view["tasks"][0]["governance_labels"] == []
     assert pending_view["tasks"][0]["governance_problem"] == "none"
     assert pending_view["tasks"][0]["poison_kind"] == "not_poison"
@@ -731,6 +773,7 @@ def test_governance_recovery_runtime_metrics_and_inspection_stay_coherent(
     )
     assert 'zephyr_ingest_queue_tasks{pipeline_version="p-worker",bucket="done"} 1.0' in text
     assert 'zephyr_ingest_queue_tasks{pipeline_version="p-worker",bucket="poison"} 0.0' in text
+    assert 'zephyr_ingest_queue_policy_max_task_attempts{pipeline_version="p-worker"} 1.0' in text
     assert 'zephyr_ingest_queue_poison_transitions_total{pipeline_version="p-worker"} 1.0' in text
 
 
@@ -747,7 +790,11 @@ def test_supported_backend_pairs_keep_governance_surfaces_coherent(
     lock_kind: Literal["file", "sqlite"],
     expects_recovery_history: bool,
 ) -> None:
-    backend = build_local_queue_backend(kind=queue_kind, root=tmp_path / f"{queue_kind}-queue")
+    backend = build_local_queue_backend(
+        kind=queue_kind,
+        root=tmp_path / f"{queue_kind}-queue",
+        max_task_attempts=1,
+    )
     lock_provider = build_local_lock_provider(
         kind=lock_kind,
         root=tmp_path / f"{lock_kind}-locks",

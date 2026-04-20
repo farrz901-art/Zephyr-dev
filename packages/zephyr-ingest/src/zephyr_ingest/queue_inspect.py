@@ -24,6 +24,13 @@ QueuePoisonKind = Literal["attempts_exhausted", "orphaned", "not_poison"]
 QueueHandlingExpectation = Literal["requeue_supported", "none"]
 QueueGovernanceProblem = Literal["none", "orphaned", "poison_attempts_exhausted", "poison_orphaned"]
 QueueInspectSummaryAuditSupport = Literal["persisted_in_history", "result_only", "none"]
+QueueStateExplanation = Literal[
+    "ready_for_local_worker_claim",
+    "claimed_by_local_worker_or_recoverable_if_stale",
+    "completed_by_local_worker",
+    "reserved_terminal_failure_bucket_not_primary_retry_path",
+    "operator_requeue_supported_after_attempt_or_orphan_threshold",
+]
 
 
 class QueueInspectSummaryDict(TypedDict):
@@ -43,6 +50,7 @@ class QueueInspectTaskDict(TypedDict):
     state: QueueTaskState
     governance_labels: list[QueueGovernanceLabel]
     governance_problem: QueueGovernanceProblem
+    state_explanation: QueueStateExplanation
     poison_kind: QueuePoisonKind
     handling_expectation: QueueHandlingExpectation
     recovery_audit_support: QueueGovernanceActionAuditSupport
@@ -131,6 +139,18 @@ class QueueInspectTaskV1:
         return "none"
 
     @property
+    def state_explanation(self) -> QueueStateExplanation:
+        if self.state == "pending":
+            return "ready_for_local_worker_claim"
+        if self.state == "inflight":
+            return "claimed_by_local_worker_or_recoverable_if_stale"
+        if self.state == "done":
+            return "completed_by_local_worker"
+        if self.state == "failed":
+            return "reserved_terminal_failure_bucket_not_primary_retry_path"
+        return "operator_requeue_supported_after_attempt_or_orphan_threshold"
+
+    @property
     def latest_governance_action(self) -> QueueGovernanceActionV1 | None:
         if self.latest_recovery is None:
             return None
@@ -148,6 +168,7 @@ class QueueInspectTaskV1:
             "state": self.state,
             "governance_labels": list(self.governance_labels),
             "governance_problem": self.governance_problem,
+            "state_explanation": self.state_explanation,
             "poison_kind": self.poison_kind,
             "handling_expectation": self.handling_expectation,
             "recovery_audit_support": self.recovery_audit_support,

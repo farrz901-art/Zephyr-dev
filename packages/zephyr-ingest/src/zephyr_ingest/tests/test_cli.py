@@ -357,6 +357,7 @@ def test_cli_queue_inspect_prints_summary_and_bucket_tasks(
             "state": "poison",
             "governance_labels": [],
             "governance_problem": "poison_attempts_exhausted",
+            "state_explanation": "operator_requeue_supported_after_attempt_or_orphan_threshold",
             "poison_kind": "attempts_exhausted",
             "handling_expectation": "requeue_supported",
             "recovery_audit_support": "persisted_in_history",

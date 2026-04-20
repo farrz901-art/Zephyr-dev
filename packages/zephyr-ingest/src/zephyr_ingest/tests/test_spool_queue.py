@@ -285,6 +285,7 @@ def test_inspect_queue_bucket_list_surfaces_governance_and_identity_metadata(
         "state": "poison",
         "governance_labels": [],
         "governance_problem": "poison_attempts_exhausted",
+        "state_explanation": "operator_requeue_supported_after_attempt_or_orphan_threshold",
         "poison_kind": "attempts_exhausted",
         "handling_expectation": "requeue_supported",
         "recovery_audit_support": "persisted_in_history",

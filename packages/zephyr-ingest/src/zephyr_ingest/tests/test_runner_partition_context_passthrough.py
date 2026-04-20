@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -176,3 +177,77 @@ def test_runner_prefers_processor_over_legacy_partition_fn(tmp_path: Path) -> No
     assert captured["pipeline_version"] == "p-test"
     assert captured["unique_element_ids"] is True
     assert isinstance(captured["sha256"], str)
+
+
+def test_runner_batch_report_exposes_bounded_local_runtime_boundary(tmp_path: Path) -> None:
+    f = tmp_path / "a.txt"
+    f.write_text("hello", encoding="utf-8")
+    doc = DocumentRef(
+        uri=str(f),
+        source="local_file",
+        discovered_at_utc="2026-01-01T00:00:00Z",
+        filename="a.txt",
+        extension=".txt",
+        size_bytes=f.stat().st_size,
+    )
+    ctx = RunContext.new(
+        pipeline_version="p-test",
+        run_id="r-test",
+        timestamp_utc="2026-01-01T00:00:00Z",
+    )
+    cfg = RunnerConfig(
+        out_root=tmp_path / "out",
+        workers=2,
+        skip_existing=True,
+        skip_unsupported=True,
+        stale_lock_ttl_s=30,
+        destination=OkDest(),
+    )
+
+    run_documents(docs=[doc], cfg=cfg, ctx=ctx, partition_fn=_partition_ok, destination=OkDest())
+
+    report = json.loads((cfg.out_root / "batch_report.json").read_text(encoding="utf-8"))
+    assert report["runtime_boundary"] == {
+        "execution_scope": "bounded_local_same_host",
+        "executor": "thread",
+        "worker_count": 2,
+        "threadpool_semantics": "local_threads_only",
+        "local_lock_scope": "out_root_file_lock",
+        "artifact_storage_scope": "local_out_root",
+        "skip_existing": True,
+        "skip_unsupported": True,
+        "stale_lock_ttl_s": 30,
+        "effective_destination": "okdest",
+    }
+
+
+def _partition_ok(
+    *,
+    filename: str,
+    strategy: PartitionStrategy = PartitionStrategy.AUTO,
+    unique_element_ids: bool = True,
+    backend: Any | None = None,
+    run_id: str | None = None,
+    pipeline_version: str | None = None,
+    sha256: str | None = None,
+    size_bytes: int | None = None,
+) -> PartitionResult:
+    del filename, strategy, unique_element_ids, backend, run_id, pipeline_version
+    return PartitionResult(
+        document=DocumentMetadata(
+            filename="a.txt",
+            mime_type="text/plain",
+            sha256=str(sha256),
+            size_bytes=int(size_bytes or 0),
+            created_at_utc="2026-01-01T00:00:00Z",
+        ),
+        engine=EngineInfo(
+            name="processor",
+            backend="test",
+            version="0",
+            strategy=PartitionStrategy.AUTO,
+        ),
+        elements=[ZephyrElement(element_id="e1", type="Text", text="hello", metadata={})],
+        normalized_text="hello",
+        warnings=[],
+    )

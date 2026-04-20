@@ -26,6 +26,8 @@ class SpoolTaskRecordDict(TypedDict):
 
 
 SpoolBucket = Literal["pending", "inflight", "done", "failed", "poison"]
+DEFAULT_MAX_TASK_ATTEMPTS = 3
+DEFAULT_MAX_ORPHAN_REQUEUES = 2
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,6 +37,8 @@ class QueueMetricsSnapshotV1:
     done: int
     failed: int
     poison: int
+    max_task_attempts: int
+    max_orphan_requeues: int
     poison_transition_total: int
     orphan_requeue_total: int
     stale_inflight_recovery_total: int
@@ -225,8 +229,8 @@ def _write_json_atomic(*, path: Path, data: Mapping[str, object]) -> None:
 @dataclass(frozen=True, slots=True)
 class LocalSpoolQueue:
     root: Path
-    max_task_attempts: int = 1
-    max_orphan_requeues: int = 1
+    max_task_attempts: int = DEFAULT_MAX_TASK_ATTEMPTS
+    max_orphan_requeues: int = DEFAULT_MAX_ORPHAN_REQUEUES
     _poison_transition_total: int = field(default=0, init=False, repr=False)
     _orphan_requeue_total: int = field(default=0, init=False, repr=False)
     _stale_inflight_recovery_total: int = field(default=0, init=False, repr=False)
@@ -275,6 +279,8 @@ class LocalSpoolQueue:
             done=len(self.list_bucket_paths(bucket="done")),
             failed=len(self.list_bucket_paths(bucket="failed")),
             poison=len(self.list_bucket_paths(bucket="poison")),
+            max_task_attempts=self.max_task_attempts,
+            max_orphan_requeues=self.max_orphan_requeues,
             poison_transition_total=self._poison_transition_total,
             orphan_requeue_total=self._orphan_requeue_total,
             stale_inflight_recovery_total=self._stale_inflight_recovery_total,

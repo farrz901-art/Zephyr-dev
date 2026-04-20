@@ -42,6 +42,7 @@ from zephyr_ingest.flow_processor import (
     ItFlowProcessor,
     UnsFlowProcessor,
     build_processor_for_flow_kind,
+    describe_flow_processor_shared_field_semantics,
     normalize_flow_input_identity_sha,
 )
 from zephyr_ingest.runner import RunnerConfig, run_documents
@@ -66,6 +67,19 @@ def test_build_processor_for_uns_flow_kind() -> None:
 def test_build_processor_for_it_flow_kind() -> None:
     processor = build_processor_for_flow_kind(flow_kind="it")
     assert isinstance(processor, ItFlowProcessor)
+
+
+def test_flow_processor_shared_field_semantics_are_explicit() -> None:
+    uns_semantics = describe_flow_processor_shared_field_semantics(flow_kind="uns")
+    it_semantics = describe_flow_processor_shared_field_semantics(flow_kind="it")
+
+    assert uns_semantics.unique_element_ids == "applied"
+    assert uns_semantics.run_id == "applied"
+    assert uns_semantics.pipeline_version == "applied"
+    assert it_semantics.unique_element_ids == "orchestration_context_only"
+    assert it_semantics.run_id == "orchestration_context_only"
+    assert it_semantics.pipeline_version == "orchestration_context_only"
+    assert "flow-local" in it_semantics.note
 
 
 def test_runner_defaults_to_uns_flow_kind(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

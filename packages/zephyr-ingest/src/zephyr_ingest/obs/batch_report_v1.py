@@ -16,6 +16,7 @@ from zephyr_core.contracts.v2.batch_report import (  # noqa: F401
     DurationStatsV1,
     MetricsV1,
     RetryV1,
+    RuntimeBoundaryV1,
     StageDurationsV1,
 )
 
@@ -31,5 +32,6 @@ __all__ = [
     "DeliveryV1",
     "RetryV1",
     "MetricsV1",
+    "RuntimeBoundaryV1",
     "BatchReportV1",
 ]

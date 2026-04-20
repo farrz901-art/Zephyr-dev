@@ -160,7 +160,7 @@ def test_p5_recovery_summary_combines_queue_delivery_and_provenance(
     tmp_path: Path,
 ) -> None:
     queue_root = tmp_path / "queue"
-    queue = build_local_queue_backend(kind="sqlite", root=queue_root)
+    queue = build_local_queue_backend(kind="sqlite", root=queue_root, max_task_attempts=1)
     task = _make_task("task-poison")
     queue.enqueue(task)
     claimed = queue.claim_next()
@@ -198,7 +198,7 @@ def test_p5_recovery_requeue_keeps_requeue_provenance_distinct(
     tmp_path: Path,
 ) -> None:
     queue_root = tmp_path / "queue"
-    queue = build_local_queue_backend(kind="sqlite", root=queue_root)
+    queue = build_local_queue_backend(kind="sqlite", root=queue_root, max_task_attempts=1)
     task = _make_task("task-requeue")
     queue.enqueue(task)
     claimed = queue.claim_next()
