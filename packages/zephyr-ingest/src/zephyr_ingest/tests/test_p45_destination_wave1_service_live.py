@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import cast
 from urllib.parse import urlsplit
@@ -12,6 +13,7 @@ from zephyr_ingest.destinations.clickhouse import ClickHouseDestination
 from zephyr_ingest.destinations.opensearch import OpenSearchDestination
 from zephyr_ingest.destinations.s3 import S3Destination, build_s3_delivery_object_key
 from zephyr_ingest.destinations.webhook import DeliveryRetryConfig, WebhookDestination
+from zephyr_ingest.testing.p5_benchmark import build_p5_benchmark_resource_name
 from zephyr_ingest.testing.p45 import (
     LoadedP45Env,
     get_p45_opensearch_auth,
@@ -277,7 +279,15 @@ def test_p45_wave1_opensearch_live_success_failures_and_worker_consistency(
     base_url = get_p45_opensearch_url(p45_env).rstrip("/")
     verify_tls = get_p45_opensearch_verify_tls(p45_env)
     auth = get_p45_opensearch_auth(p45_env)
-    index = "zephyr-p45-wave1-opensearch"
+    index = os.environ.get("ZEPHYR_P45_BENCHMARK_OPENSEARCH_INDEX")
+    if index is None:
+        index = build_p5_benchmark_resource_name(
+            case_id="opensearch_heavier_delivery",
+            run_id=tmp_path.name,
+            resource_kind="index",
+        )
+    assert index != "zephyr-p45-wave1-opensearch"
+    assert index == index.lower()
     with httpx.Client(timeout=10.0, trust_env=False, verify=verify_tls, auth=auth) as client:
         client.put(f"{base_url}/{index}", json={}).raise_for_status()
 

@@ -1,9 +1,15 @@
 {
-  "schema_version": 1,
-  "phase": "P5-M4-S2 benchmark/SLI/capacity baseline harness",
+  "schema_version": 2,
+  "phase": "P5-M4-S4 benchmark execution-surface hardening",
   "runtime_boundary": "bounded local same-host/shared-storage",
   "headline_rule": "Do not collapse source-flow, destination, and recovery-overhead layers into one headline benchmark result.",
   "measurement_unit_rule": "Each case declares its own primary measurement_unit. Throughput-like values are valid only when unit_count is explicit for that case.",
+  "baseline_run_policy": {
+    "current_required_runs": 2,
+    "current_judgment": "two_run_usable_first_wave_baseline",
+    "global_r3_required": false,
+    "targeted_later_r3_policy": "allowed only for a specific case if future instability justifies it"
+  },
   "first_wave_cases": [
     {
       "case_id": "uns_reacquisition_replay_representative",
@@ -11,7 +17,34 @@
       "layer": "source_flow_representative",
       "status": "supported",
       "measurement_unit": "document",
-      "basis": "test_p45_m7_uns_reacquisition_delivery_replay_and_batch_report_stay_aligned",
+      "carrier": {
+        "kind": "pytest",
+        "command": [
+          "uv",
+          "run",
+          "--locked",
+          "--no-sync",
+          "pytest",
+          "-n",
+          "0",
+          "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p45_m7_cross_cutting_drills.py",
+          "--auth-tier",
+          "recovery-drill",
+          "-k",
+          "test_p45_m7_uns_reacquisition_delivery_replay_and_batch_report_stay_aligned"
+        ],
+        "auth_tier": "recovery-drill",
+        "pytest_target": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p45_m7_cross_cutting_drills.py",
+        "pytest_selector": "test_p45_m7_uns_reacquisition_delivery_replay_and_batch_report_stay_aligned",
+        "expected_artifacts": [
+          "run_meta.json",
+          "delivery_receipt.json",
+          "batch_report.json",
+          "_dlq/delivery_done/*.json"
+        ],
+        "isolation_strategy": "tmp_path_scoped_artifacts",
+        "env_overrides": []
+      },
       "objective": "Measure one bounded uns-stream document reacquisition/repartition path with shared delivery replay/report evidence.",
       "valid_comparisons": [
         "same case repeatability across repeated local runs"
@@ -35,7 +68,13 @@
       ],
       "bounded_caveats": [
         "One bounded document unit; not multi-document discovery or SaaS sync."
-      ]
+      ],
+      "baseline_run_policy": {
+        "current_required_runs": 2,
+        "current_judgment": "two_run_usable_first_wave_baseline",
+        "global_r3_required": false,
+        "targeted_later_r3_policy": "allowed only for a specific case if future instability justifies it"
+      }
     },
     {
       "case_id": "it_resume_replay_representative",
@@ -43,7 +82,33 @@
       "layer": "source_flow_representative",
       "status": "supported",
       "measurement_unit": "checkpoint_resume_task",
-      "basis": "test_p45_m7_it_resume_replay_preserves_resume_facts_through_shared_delivery_surface",
+      "carrier": {
+        "kind": "pytest",
+        "command": [
+          "uv",
+          "run",
+          "--locked",
+          "--no-sync",
+          "pytest",
+          "-n",
+          "0",
+          "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p45_m7_cross_cutting_drills.py",
+          "--auth-tier",
+          "recovery-drill",
+          "-k",
+          "test_p45_m7_it_resume_replay_preserves_resume_facts_through_shared_delivery_surface"
+        ],
+        "auth_tier": "recovery-drill",
+        "pytest_target": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p45_m7_cross_cutting_drills.py",
+        "pytest_selector": "test_p45_m7_it_resume_replay_preserves_resume_facts_through_shared_delivery_surface",
+        "expected_artifacts": [
+          "run_meta.json",
+          "checkpoint.json",
+          "records.jsonl"
+        ],
+        "isolation_strategy": "tmp_path_scoped_artifacts",
+        "env_overrides": []
+      },
       "objective": "Measure one bounded it-stream cursor-family resume path with shared delivery replay/report evidence.",
       "valid_comparisons": [
         "same case repeatability across repeated local runs"
@@ -67,7 +132,13 @@
       ],
       "bounded_caveats": [
         "Cursor-v1 resume only; no CDC/changefeed/consumer-group progress claim."
-      ]
+      ],
+      "baseline_run_policy": {
+        "current_required_runs": 2,
+        "current_judgment": "two_run_usable_first_wave_baseline",
+        "global_r3_required": false,
+        "targeted_later_r3_policy": "allowed only for a specific case if future instability justifies it"
+      }
     },
     {
       "case_id": "filesystem_lightweight_delivery",
@@ -75,7 +146,30 @@
       "layer": "destination_representative",
       "status": "supported",
       "measurement_unit": "delivery_payload",
-      "basis": "retained filesystem destination local-real authenticity path",
+      "carrier": {
+        "kind": "pytest",
+        "command": [
+          "uv",
+          "run",
+          "--locked",
+          "--no-sync",
+          "pytest",
+          "-n",
+          "0",
+          "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_filesystem.py",
+          "-k",
+          "test_filesystem_destination_writes_success_artifacts"
+        ],
+        "auth_tier": null,
+        "pytest_target": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_filesystem.py",
+        "pytest_selector": "test_filesystem_destination_writes_success_artifacts",
+        "expected_artifacts": [
+          "delivery_receipt.json",
+          "batch_report.json"
+        ],
+        "isolation_strategy": "tmp_path_scoped_artifacts",
+        "env_overrides": []
+      },
       "objective": "Measure a lightweight durable/object-style destination path without mixing it with source-family comparisons.",
       "valid_comparisons": [
         "opensearch_heavier_delivery within destination layer only"
@@ -96,7 +190,13 @@
       ],
       "bounded_caveats": [
         "Local filesystem behavior is same-host storage only."
-      ]
+      ],
+      "baseline_run_policy": {
+        "current_required_runs": 2,
+        "current_judgment": "two_run_usable_first_wave_baseline",
+        "global_r3_required": false,
+        "targeted_later_r3_policy": "allowed only for a specific case if future instability justifies it"
+      }
     },
     {
       "case_id": "opensearch_heavier_delivery",
@@ -104,7 +204,34 @@
       "layer": "destination_representative",
       "status": "supported",
       "measurement_unit": "delivery_payload",
-      "basis": "retained OpenSearch service-live authenticity path",
+      "carrier": {
+        "kind": "pytest",
+        "command": [
+          "uv",
+          "run",
+          "--locked",
+          "--no-sync",
+          "pytest",
+          "-n",
+          "0",
+          "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p45_destination_wave1_service_live.py",
+          "--auth-tier",
+          "service-live",
+          "-k",
+          "test_p45_wave1_opensearch_live_success_failures_and_worker_consistency"
+        ],
+        "auth_tier": "service-live",
+        "pytest_target": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p45_destination_wave1_service_live.py",
+        "pytest_selector": "test_p45_wave1_opensearch_live_success_failures_and_worker_consistency",
+        "expected_artifacts": [
+          "delivery_receipt.json",
+          "batch_report.json"
+        ],
+        "isolation_strategy": "unique_opensearch_index_per_run",
+        "env_overrides": [
+          "ZEPHYR_P45_BENCHMARK_OPENSEARCH_INDEX={unique_index_per_run}"
+        ]
+      },
       "objective": "Measure a heavier structured sink destination path under the current local HTTPS/basic-auth/skip-TLS-verify substrate reality.",
       "valid_comparisons": [
         "filesystem_lightweight_delivery within destination layer only"
@@ -126,8 +253,15 @@
         "prometheus metrics"
       ],
       "bounded_caveats": [
-        "OpenSearch local runtime uses HTTPS with skip-TLS-verify for self-signed local certs."
-      ]
+        "OpenSearch local runtime uses HTTPS with skip-TLS-verify for self-signed local certs.",
+        "OpenSearch benchmark isolation is unique index per run, not manual pre-clean."
+      ],
+      "baseline_run_policy": {
+        "current_required_runs": 2,
+        "current_judgment": "two_run_usable_first_wave_baseline",
+        "global_r3_required": false,
+        "targeted_later_r3_policy": "allowed only for a specific case if future instability justifies it"
+      }
     },
     {
       "case_id": "replay_after_failed_delivery_recovery_overhead",
@@ -135,7 +269,33 @@
       "layer": "recovery_overhead",
       "status": "bounded",
       "measurement_unit": "inspect_decide_act_verify_workflow",
-      "basis": "P5-M3 delivery_failure_to_replay recovery scenario",
+      "carrier": {
+        "kind": "pytest",
+        "command": [
+          "uv",
+          "run",
+          "--locked",
+          "--no-sync",
+          "pytest",
+          "-n",
+          "0",
+          "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_recovery_operator.py",
+          "-k",
+          "test_p5_recovery_summary_combines_queue_delivery_and_provenance"
+        ],
+        "auth_tier": null,
+        "pytest_target": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_recovery_operator.py",
+        "pytest_selector": "test_p5_recovery_summary_combines_queue_delivery_and_provenance",
+        "expected_artifacts": [
+          "queue.sqlite3",
+          "run_meta.json",
+          "delivery_receipt.json",
+          "_dlq/delivery/*.json",
+          "_dlq/delivery_done/*.json"
+        ],
+        "isolation_strategy": "artifact_scoped_recovery_sample",
+        "env_overrides": []
+      },
       "objective": "Measure bounded recovery workflow overhead for inspect -> decide -> replay -> verify, not only the replay action call.",
       "valid_comparisons": [
         "same recovery case repeatability across repeated local runs"
@@ -159,29 +319,90 @@
       ],
       "bounded_caveats": [
         "Redrive beyond explicit requeue/replay remains not modeled."
-      ]
+      ],
+      "baseline_run_policy": {
+        "current_required_runs": 2,
+        "current_judgment": "two_run_usable_first_wave_baseline",
+        "global_r3_required": false,
+        "targeted_later_r3_policy": "allowed only for a specific case if future instability justifies it"
+      }
     }
   ],
-  "sli_candidate_fields": [
-    "wall_clock_ms",
-    "process_cpu_ms",
-    "measurement_unit",
-    "unit_count",
-    "throughput_units_per_second",
-    "delivery_success_count",
-    "delivery_failure_count",
-    "retryable_failure_count",
-    "non_retryable_failure_count",
-    "replay_attempt_count",
-    "requeue_count"
-  ],
+  "field_maturity": {
+    "wall_clock_ms": {
+      "maturity": "usable_now",
+      "headline_ready": true,
+      "reason": "Captured by the benchmark harness and comparable only inside a declared layer."
+    },
+    "process_cpu_ms": {
+      "maturity": "partial",
+      "headline_ready": false,
+      "reason": "Useful local signal but not a full resource profile."
+    },
+    "measurement_unit": {
+      "maturity": "usable_now",
+      "headline_ready": true,
+      "reason": "Required per case; prevents false cross-layer throughput comparisons."
+    },
+    "unit_count": {
+      "maturity": "usable_now",
+      "headline_ready": true,
+      "reason": "Required before throughput-like values are headline-eligible."
+    },
+    "throughput_units_per_second": {
+      "maturity": "partial",
+      "headline_ready": false,
+      "reason": "Derived only when unit_count and wall_clock_ms are explicit for one layer."
+    },
+    "delivery_success_count": {
+      "maturity": "usable_now",
+      "headline_ready": true,
+      "reason": "Artifact-backed when the carrier records delivery receipt/report facts."
+    },
+    "delivery_failure_count": {
+      "maturity": "usable_now",
+      "headline_ready": true,
+      "reason": "Artifact-backed when the carrier records delivery receipt/report facts."
+    },
+    "retryable_failure_count": {
+      "maturity": "partial",
+      "headline_ready": false,
+      "reason": "Available only when receipt/report classification is present for the case."
+    },
+    "non_retryable_failure_count": {
+      "maturity": "partial",
+      "headline_ready": false,
+      "reason": "Available only when receipt/report classification is present for the case."
+    },
+    "replay_attempt_count": {
+      "maturity": "partial",
+      "headline_ready": false,
+      "reason": "Recovery/DLQ cases can record it; not universal across benchmark layers."
+    },
+    "requeue_count": {
+      "maturity": "not_ready_for_headline",
+      "headline_ready": false,
+      "reason": "Queue requeue is not a first-wave headline benchmark surface."
+    },
+    "resource_usage_snapshot": {
+      "maturity": "partial",
+      "headline_ready": false,
+      "reason": "Bounded stdlib process/machine snapshot, not a profiler or capacity platform."
+    },
+    "prometheus_metrics_surface": {
+      "maturity": "not_ready_for_headline",
+      "headline_ready": false,
+      "reason": "Prometheus text exists in bounded drills but is not a full metrics platform."
+    }
+  },
   "bounded_caveats": [
     "First-wave P5-M4 benchmark coverage is representative, not a full retained-surface matrix.",
     "Source-flow representative cases, destination representative cases, and recovery overhead cases are separate layers and must not be collapsed into one headline number.",
     "Current results target bounded local same-host/shared-storage runtime reality, not distributed, Kubernetes, cloud, or fleet capacity claims.",
     "Prometheus/metrics, replay/requeue counts, and resource observations are partial surfaces unless a specific benchmark case records them.",
     "TUN/Google Drive/network-dependent topics are outside the core benchmark baseline unless a later SaaS-specific benchmark case explicitly includes them.",
-    "Windows .tmp access-denied noise is known environment noise unless it changes correctness or artifact-backed result consistency."
+    "Windows .tmp access-denied noise is known environment noise unless it changes correctness or artifact-backed result consistency.",
+    "The current first-wave baseline is a two-run usable baseline, not a fully statistical capacity study; targeted later r3 is only for a specific unstable case."
   ],
   "environment_freeze": {
     "cpu": "13th Gen Intel(R) Core(TM) i7-13700H",
