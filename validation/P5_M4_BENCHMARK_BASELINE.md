@@ -37,8 +37,8 @@ The OpenSearch lane no longer uses a fixed index as the benchmark end-state.
 
 OpenSearch benchmark isolation is **unique index per run**:
 
-- helper: `build_p5_benchmark_resource_name(case_id="opensearch_heavier_delivery", run_id=..., resource_kind="index")`
-- carrier env override: `ZEPHYR_P45_BENCHMARK_OPENSEARCH_INDEX={unique_index_per_run}`
+- helper: `build_p5_benchmark_resource_name(case_id="opensearch_heavier_delivery", run_id=..., resource_kind="index", prefix=...)`
+- carrier env override: `ZEPHYR_P45_BENCHMARK_OPENSEARCH_INDEX_PREFIX={namespace_only}`
 - fallback in the service-live carrier also derives a unique lower-case index from `tmp_path`
 
 Manual pre-clean is not the productized benchmark model. This prevents stale-state contamination across repeated runs and reduces operator memory burden while staying bounded to local OpenSearch substrate semantics.

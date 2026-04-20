@@ -229,7 +229,7 @@
         ],
         "isolation_strategy": "unique_opensearch_index_per_run",
         "env_overrides": [
-          "ZEPHYR_P45_BENCHMARK_OPENSEARCH_INDEX={unique_index_per_run}"
+          "ZEPHYR_P45_BENCHMARK_OPENSEARCH_INDEX_PREFIX={namespace_only}"
         ]
       },
       "objective": "Measure a heavier structured sink destination path under the current local HTTPS/basic-auth/skip-TLS-verify substrate reality.",

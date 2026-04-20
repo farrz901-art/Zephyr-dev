@@ -279,13 +279,12 @@ def test_p45_wave1_opensearch_live_success_failures_and_worker_consistency(
     base_url = get_p45_opensearch_url(p45_env).rstrip("/")
     verify_tls = get_p45_opensearch_verify_tls(p45_env)
     auth = get_p45_opensearch_auth(p45_env)
-    index = os.environ.get("ZEPHYR_P45_BENCHMARK_OPENSEARCH_INDEX")
-    if index is None:
-        index = build_p5_benchmark_resource_name(
-            case_id="opensearch_heavier_delivery",
-            run_id=tmp_path.name,
-            resource_kind="index",
-        )
+    index = build_p5_benchmark_resource_name(
+        case_id="opensearch_heavier_delivery",
+        run_id=tmp_path.name,
+        resource_kind="index",
+        prefix=os.environ.get("ZEPHYR_P45_BENCHMARK_OPENSEARCH_INDEX_PREFIX", "zephyr-p5-m4"),
+    )
     assert index != "zephyr-p45-wave1-opensearch"
     assert index == index.lower()
     with httpx.Client(timeout=10.0, trust_env=False, verify=verify_tls, auth=auth) as client:

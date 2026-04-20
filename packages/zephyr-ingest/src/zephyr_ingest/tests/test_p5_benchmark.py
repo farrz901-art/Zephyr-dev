@@ -63,7 +63,7 @@ def test_p5_benchmark_case_carrier_contracts_are_explicit() -> None:
     opensearch_carrier = _as_dict(opensearch["carrier"])
     assert opensearch_carrier["isolation_strategy"] == "unique_opensearch_index_per_run"
     assert opensearch_carrier["env_overrides"] == [
-        "ZEPHYR_P45_BENCHMARK_OPENSEARCH_INDEX={unique_index_per_run}"
+        "ZEPHYR_P45_BENCHMARK_OPENSEARCH_INDEX_PREFIX={namespace_only}"
     ]
 
 
@@ -127,6 +127,26 @@ def test_p5_benchmark_resource_name_is_unique_and_opensearch_safe() -> None:
     assert first == first.lower()
     assert "_" not in first
     assert first.endswith("-index")
+
+
+@pytest.mark.auth_contract
+def test_p5_benchmark_resource_name_prefix_override_cannot_be_full_fixed_index() -> None:
+    first = build_p5_benchmark_resource_name(
+        case_id="opensearch_heavier_delivery",
+        run_id="r1",
+        resource_kind="index",
+        prefix="custom-prefix",
+    )
+    second = build_p5_benchmark_resource_name(
+        case_id="opensearch_heavier_delivery",
+        run_id="r2",
+        resource_kind="index",
+        prefix="custom-prefix",
+    )
+
+    assert first != second
+    assert first.startswith("custom-prefix-opensearch-heavier-delivery")
+    assert second.startswith("custom-prefix-opensearch-heavier-delivery")
 
 
 @pytest.mark.auth_contract

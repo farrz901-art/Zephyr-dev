@@ -146,13 +146,12 @@ def build_p5_benchmark_resource_name(
     case_id: str,
     run_id: str,
     resource_kind: str,
+    prefix: str = "zephyr-p5-m4",
 ) -> str:
     """Build a bounded, repeatable per-run resource name for local benchmark isolation."""
     return "-".join(
         (
-            "zephyr",
-            "p5",
-            "m4",
+            _slug(prefix, max_len=32),
             _slug(case_id, max_len=42),
             _slug(run_id, max_len=36),
             _slug(resource_kind, max_len=18),
@@ -467,7 +466,7 @@ def iter_p5_benchmark_cases() -> tuple[P5BenchmarkCase, ...]:
                 ),
                 expected_artifacts=("delivery_receipt.json", "batch_report.json"),
                 isolation_strategy="unique_opensearch_index_per_run",
-                env_overrides=("ZEPHYR_P45_BENCHMARK_OPENSEARCH_INDEX={unique_index_per_run}",),
+                env_overrides=("ZEPHYR_P45_BENCHMARK_OPENSEARCH_INDEX_PREFIX={namespace_only}",),
             ),
             objective=(
                 "Measure a heavier structured sink destination path under the current local "
