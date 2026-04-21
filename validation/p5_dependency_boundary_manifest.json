@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M4-S9 dependency-boundary groundwork",
+  "domain_kind": "technical_capability_domain_not_entitlement",
+  "workspace_reality": {
+    "workspace_model": "single_body_workspace",
+    "root_dev_environment": "mixed_engineering_surface",
+    "root_dev_includes": [
+      "uns-stream[all-docs]",
+      "zephyr-core",
+      "zephyr-ingest",
+      "zephyr-api"
+    ],
+    "root_dev_all_docs_meaning": "development convenience evidence of missing cut isolation, not evidence that the entire uns-stream package is Pro"
+  },
+  "package_boundaries": [
+    {
+      "package": "uns-stream",
+      "direct_dependencies_domain": "base_surface",
+      "direct_dependency_evidence": [
+        "unstructured"
+      ],
+      "optional_extra_domain": "pro",
+      "optional_extras": [
+        "all-docs",
+        "pdf",
+        "doc",
+        "docx",
+        "ppt",
+        "pptx",
+        "xlsx",
+        "csv",
+        "tsv",
+        "md",
+        "rtf",
+        "rst",
+        "epub",
+        "odt",
+        "org",
+        "image"
+      ],
+      "extra_reserved_not_packaged": [
+        "audio",
+        "model_init"
+      ],
+      "mixed_package_truth": true
+    },
+    {
+      "package": "it-stream",
+      "direct_dependencies_domain": "base",
+      "connector_domain": "base"
+    },
+    {
+      "package": "zephyr-ingest",
+      "direct_dependencies_domain": "shared",
+      "connector_domain": "base_for_current_destinations"
+    },
+    {
+      "package": "zephyr-core",
+      "direct_dependencies_domain": "shared",
+      "connector_domain": "not_a_connector_package"
+    },
+    {
+      "package": "zephyr-api",
+      "direct_dependencies_domain": "shared",
+      "connector_domain": "not_a_connector_package"
+    }
+  ],
+  "not_yet_domain_sliced": [
+    "fixture/resource directories",
+    "pytest selection surface",
+    "runtime validation outputs",
+    "recovery and benchmark validation artifacts"
+  ]
+}

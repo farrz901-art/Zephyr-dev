@@ -1,0 +1,349 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M4-S9 capability-domain solidification",
+  "domain_model": {
+    "kind": "technical_capability_domain",
+    "not": [
+      "pricing tier",
+      "subscription tier",
+      "license tier",
+      "entitlement domain"
+    ],
+    "base": {
+      "definition": "Current shared core capability surface: all retained connectors, it-stream, and uns-stream non-extra unstructured processing.",
+      "commercial_semantics": "none"
+    },
+    "pro": {
+      "definition": "Base plus current uns-stream optional document extras; future mature enterprise connectors may be promoted here in P6 or later.",
+      "commercial_semantics": "none"
+    },
+    "extra": {
+      "definition": "Incubating or forward-looking technical capabilities, including explicit audio/model-init reserves and future unsupported document or enterprise connector surfaces.",
+      "commercial_semantics": "none",
+      "promotion_rule": "Mature Extra capabilities must be explicitly promoted into Pro by updating this matrix, dependency/build manifests, and focused drift tests."
+    }
+  },
+  "connectors": {
+    "it_stream_sources": [
+      {
+        "name": "http_json_cursor_v1",
+        "package": "it-stream",
+        "connector_type": "source",
+        "domain": "base",
+        "enterprise_grade_today": false,
+        "domain_reason": "current retained non-enterprise connector surface"
+      },
+      {
+        "name": "postgresql_incremental_v1",
+        "package": "it-stream",
+        "connector_type": "source",
+        "domain": "base",
+        "enterprise_grade_today": false,
+        "domain_reason": "current retained non-enterprise connector surface"
+      },
+      {
+        "name": "clickhouse_incremental_v1",
+        "package": "it-stream",
+        "connector_type": "source",
+        "domain": "base",
+        "enterprise_grade_today": false,
+        "domain_reason": "current retained non-enterprise connector surface"
+      },
+      {
+        "name": "kafka_partition_offset_v1",
+        "package": "it-stream",
+        "connector_type": "source",
+        "domain": "base",
+        "enterprise_grade_today": false,
+        "domain_reason": "current retained non-enterprise connector surface"
+      },
+      {
+        "name": "mongodb_incremental_v1",
+        "package": "it-stream",
+        "connector_type": "source",
+        "domain": "base",
+        "enterprise_grade_today": false,
+        "domain_reason": "current retained non-enterprise connector surface"
+      }
+    ],
+    "uns_stream_sources": [
+      {
+        "name": "http_document_v1",
+        "package": "uns-stream",
+        "connector_type": "source",
+        "domain": "base",
+        "enterprise_grade_today": false,
+        "domain_reason": "current retained non-enterprise connector surface"
+      },
+      {
+        "name": "s3_document_v1",
+        "package": "uns-stream",
+        "connector_type": "source",
+        "domain": "base",
+        "enterprise_grade_today": false,
+        "domain_reason": "current retained non-enterprise connector surface"
+      },
+      {
+        "name": "git_document_v1",
+        "package": "uns-stream",
+        "connector_type": "source",
+        "domain": "base",
+        "enterprise_grade_today": false,
+        "domain_reason": "current retained non-enterprise connector surface"
+      },
+      {
+        "name": "google_drive_document_v1",
+        "package": "uns-stream",
+        "connector_type": "source",
+        "domain": "base",
+        "enterprise_grade_today": false,
+        "domain_reason": "current retained non-enterprise connector surface"
+      },
+      {
+        "name": "confluence_document_v1",
+        "package": "uns-stream",
+        "connector_type": "source",
+        "domain": "base",
+        "enterprise_grade_today": false,
+        "domain_reason": "current retained non-enterprise connector surface"
+      }
+    ],
+    "destinations": [
+      {
+        "name": "filesystem",
+        "package": "zephyr-ingest",
+        "connector_type": "destination",
+        "domain": "base",
+        "enterprise_grade_today": false,
+        "domain_reason": "current retained non-enterprise connector surface"
+      },
+      {
+        "name": "webhook",
+        "package": "zephyr-ingest",
+        "connector_type": "destination",
+        "domain": "base",
+        "enterprise_grade_today": false,
+        "domain_reason": "current retained non-enterprise connector surface"
+      },
+      {
+        "name": "sqlite",
+        "package": "zephyr-ingest",
+        "connector_type": "destination",
+        "domain": "base",
+        "enterprise_grade_today": false,
+        "domain_reason": "current retained non-enterprise connector surface"
+      },
+      {
+        "name": "kafka",
+        "package": "zephyr-ingest",
+        "connector_type": "destination",
+        "domain": "base",
+        "enterprise_grade_today": false,
+        "domain_reason": "current retained non-enterprise connector surface"
+      },
+      {
+        "name": "weaviate",
+        "package": "zephyr-ingest",
+        "connector_type": "destination",
+        "domain": "base",
+        "enterprise_grade_today": false,
+        "domain_reason": "current retained non-enterprise connector surface"
+      },
+      {
+        "name": "s3",
+        "package": "zephyr-ingest",
+        "connector_type": "destination",
+        "domain": "base",
+        "enterprise_grade_today": false,
+        "domain_reason": "current retained non-enterprise connector surface"
+      },
+      {
+        "name": "opensearch",
+        "package": "zephyr-ingest",
+        "connector_type": "destination",
+        "domain": "base",
+        "enterprise_grade_today": false,
+        "domain_reason": "current retained non-enterprise connector surface"
+      },
+      {
+        "name": "clickhouse",
+        "package": "zephyr-ingest",
+        "connector_type": "destination",
+        "domain": "base",
+        "enterprise_grade_today": false,
+        "domain_reason": "current retained non-enterprise connector surface"
+      },
+      {
+        "name": "mongodb",
+        "package": "zephyr-ingest",
+        "connector_type": "destination",
+        "domain": "base",
+        "enterprise_grade_today": false,
+        "domain_reason": "current retained non-enterprise connector surface"
+      },
+      {
+        "name": "loki",
+        "package": "zephyr-ingest",
+        "connector_type": "destination",
+        "domain": "base",
+        "enterprise_grade_today": false,
+        "domain_reason": "current retained non-enterprise connector surface"
+      }
+    ]
+  },
+  "uns_stream_capability_surface": {
+    "package": "uns-stream",
+    "package_domain_model": "mixed_base_plus_pro_optional_extras",
+    "not_modeled_as": "whole_package_pro",
+    "base_surface": {
+      "dependency_basis": [
+        "unstructured"
+      ],
+      "capability": "non-extra unstructured document processing surface",
+      "domain": "base"
+    },
+    "pro_optional_extras": [
+      {
+        "extra": "all-docs",
+        "domain": "pro",
+        "basis": "optional unstructured extra"
+      },
+      {
+        "extra": "pdf",
+        "domain": "pro",
+        "basis": "optional unstructured extra"
+      },
+      {
+        "extra": "doc",
+        "domain": "pro",
+        "basis": "optional unstructured extra"
+      },
+      {
+        "extra": "docx",
+        "domain": "pro",
+        "basis": "optional unstructured extra"
+      },
+      {
+        "extra": "ppt",
+        "domain": "pro",
+        "basis": "optional unstructured extra"
+      },
+      {
+        "extra": "pptx",
+        "domain": "pro",
+        "basis": "optional unstructured extra"
+      },
+      {
+        "extra": "xlsx",
+        "domain": "pro",
+        "basis": "optional unstructured extra"
+      },
+      {
+        "extra": "csv",
+        "domain": "pro",
+        "basis": "optional unstructured extra"
+      },
+      {
+        "extra": "tsv",
+        "domain": "pro",
+        "basis": "optional unstructured extra"
+      },
+      {
+        "extra": "md",
+        "domain": "pro",
+        "basis": "optional unstructured extra"
+      },
+      {
+        "extra": "rtf",
+        "domain": "pro",
+        "basis": "optional unstructured extra"
+      },
+      {
+        "extra": "rst",
+        "domain": "pro",
+        "basis": "optional unstructured extra"
+      },
+      {
+        "extra": "epub",
+        "domain": "pro",
+        "basis": "optional unstructured extra"
+      },
+      {
+        "extra": "odt",
+        "domain": "pro",
+        "basis": "optional unstructured extra"
+      },
+      {
+        "extra": "org",
+        "domain": "pro",
+        "basis": "optional unstructured extra"
+      },
+      {
+        "extra": "image",
+        "domain": "pro",
+        "basis": "optional unstructured extra"
+      }
+    ],
+    "extra_reserved": [
+      {
+        "capability": "audio",
+        "domain": "extra",
+        "status": "incubating_reserved_not_current_build_cut"
+      },
+      {
+        "capability": "model_init",
+        "domain": "extra",
+        "status": "incubating_reserved_not_current_build_cut"
+      }
+    ]
+  },
+  "package_domain_ownership": [
+    {
+      "package": "zephyr-core",
+      "domain_role": "cross_domain_shared_contracts",
+      "domain": "shared"
+    },
+    {
+      "package": "zephyr-ingest",
+      "domain_role": "cross_domain_shared_orchestration_delivery_runtime",
+      "domain": "shared"
+    },
+    {
+      "package": "zephyr-api",
+      "domain_role": "cross_domain_shared_service_layer",
+      "domain": "shared"
+    },
+    {
+      "package": "it-stream",
+      "domain_role": "base_structured_flow",
+      "domain": "base"
+    },
+    {
+      "package": "uns-stream",
+      "domain_role": "mixed_base_direct_surface_plus_pro_optional_extras",
+      "domain": "mixed"
+    }
+  ],
+  "extra_to_pro_promotion": {
+    "current_extra_capabilities": [
+      "audio",
+      "model_init"
+    ],
+    "requires_explicit_promotion": true,
+    "required_update_surfaces": [
+      "validation/p5_capability_domain_matrix.json",
+      "validation/p5_dependency_boundary_manifest.json",
+      "validation/p5_build_cut_manifest.json",
+      "focused capability-domain drift tests"
+    ]
+  },
+  "not_claimed": [
+    "commercial pricing tier",
+    "license enforcement",
+    "subscription entitlement",
+    "fully buildable Base cut",
+    "fully buildable Pro cut",
+    "isolated Extra build cut",
+    "enterprise connector implementation"
+  ]
+}

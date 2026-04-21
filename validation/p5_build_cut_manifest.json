@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M4-S9 build-cut groundwork",
+  "domain_kind": "technical_capability_domain_not_entitlement",
+  "build_cuts": {
+    "base": {
+      "directly_buildable_today": false,
+      "contains": [
+        "it-stream current capabilities",
+        "uns-stream non-extra direct unstructured capability surface",
+        "all current non-enterprise source connectors",
+        "all current non-enterprise destination connectors",
+        "shared zephyr-core/zephyr-ingest/zephyr-api surfaces"
+      ],
+      "blocking_reality": "root workspace and tests are not yet domain-sliced; root dev currently pulls uns-stream[all-docs]"
+    },
+    "pro": {
+      "directly_buildable_today": false,
+      "contains": [
+        "base",
+        "current uns-stream optional document extras"
+      ],
+      "blocking_reality": "optional extras are represented, but no product cut artifact or installer contract exists yet"
+    },
+    "extra": {
+      "directly_buildable_today": false,
+      "contains": [
+        "audio",
+        "model_init"
+      ],
+      "blocking_reality": "Extra is currently an incubation domain, not a build cut"
+    }
+  },
+  "future_cut_groundwork": [
+    "domain matrix defines current assignments",
+    "dependency manifest defines direct vs optional extra reality",
+    "build-cut manifest defines what is not directly cuttable yet",
+    "drift tests protect current assignments and promotion rule"
+  ],
+  "not_claimed": [
+    "installer/release-consumable Base artifact",
+    "installer/release-consumable Pro artifact",
+    "isolated Extra artifact",
+    "repo split",
+    "license or entitlement enforcement"
+  ]
+}
