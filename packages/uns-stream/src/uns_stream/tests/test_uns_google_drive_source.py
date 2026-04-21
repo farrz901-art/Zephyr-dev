@@ -20,6 +20,86 @@ from zephyr_core import (
 )
 
 
+def _expected_google_drive_acquisition_contract(
+    *,
+    effective_timeout_s: float = 10.0,
+) -> dict[str, object]:
+    return {
+        "source_kind": "google_drive_document_v1",
+        "default_timeout_s": 10.0,
+        "effective_timeout_s": effective_timeout_s,
+        "temp_dir_prefix": ".zephyr-uns-google-drive",
+        "staging_model": "local_temp_file_before_partition",
+        "mime_mapping_scope": "limited_explicit_map_with_extensionless_fallback",
+        "trust_env": False,
+    }
+
+
+def test_google_drive_acquisition_contract_exposes_bounded_defaults() -> None:
+    contract = google_drive_source.google_drive_document_source_acquisition_contract()
+
+    assert contract.source_kind == "google_drive_document_v1"
+    assert contract.default_timeout_s == 10.0
+    assert contract.temp_dir_prefix == ".zephyr-uns-google-drive"
+    assert contract.staging_model == "local_temp_file_before_partition"
+    assert contract.mime_mapping_scope == "limited_explicit_map_with_extensionless_fallback"
+    assert ("application/pdf", ".pdf") in contract.supported_mime_extensions
+    assert ("application/octet-stream", ".bin") not in contract.supported_mime_extensions
+    assert contract.trust_env is False
+
+    config = google_drive_source.load_google_drive_document_source_config(
+        {
+            "source": {
+                "kind": "google_drive_document_v1",
+                "file_id": "file-123",
+                "access_token": "token-a",
+                "acquisition_mode": "download",
+            }
+        }
+    )
+    assert config.timeout_s == 10.0
+    assert (
+        google_drive_source.google_drive_document_source_contract_metadata(config=config)
+        == _expected_google_drive_acquisition_contract()
+    )
+
+
+def test_google_drive_limited_mime_mapping_does_not_infer_universal_extensions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = google_drive_source.GoogleDriveDocumentSourceConfigV1(
+        file_id="file-123",
+        access_token="token-a",
+        acquisition_mode="download",
+        export_mime_type=None,
+        drive_id=None,
+        timeout_s=10.0,
+    )
+
+    class _FakeResponse:
+        headers = {"Content-Type": "application/octet-stream"}
+
+        def read(self) -> bytes:
+            return b"opaque"
+
+        def __enter__(self) -> _FakeResponse:
+            return self
+
+        def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+            return None
+
+    def fake_urlopen(request: object, timeout: float = 10.0) -> object:
+        del request, timeout
+        return _FakeResponse()
+
+    monkeypatch.setattr(google_drive_source, "urlopen", fake_urlopen)
+
+    fetched = google_drive_source.fetch_google_drive_document_source(config=config)
+
+    assert fetched.filename == "drive-file-123"
+    assert fetched.mime_type == "application/octet-stream"
+
+
 def test_normalize_uns_input_identity_sha_is_stable_for_google_drive_source_specs(
     tmp_path: Path,
 ) -> None:
@@ -200,6 +280,10 @@ def test_process_file_fetches_google_drive_document_and_preserves_provenance(
     assert result.elements[0].metadata["source_etag"] == '"etag-1"'
     assert result.elements[0].metadata["fetched_filename"] == "report.pdf"
     assert result.elements[0].metadata["fetched_mime_type"] == "application/pdf"
+    assert (
+        result.elements[0].metadata["source_acquisition_contract"]
+        == _expected_google_drive_acquisition_contract()
+    )
 
 
 @pytest.mark.parametrize(("status_code", "retryable"), [(404, False), (503, True)])
@@ -236,3 +320,7 @@ def test_fetch_google_drive_document_source_maps_error_retryability(
     assert exc_info.value.details is not None
     assert exc_info.value.details.get("retryable") is retryable
     assert exc_info.value.details.get("status_code") == status_code
+    assert (
+        exc_info.value.details.get("source_acquisition_contract")
+        == _expected_google_drive_acquisition_contract()
+    )

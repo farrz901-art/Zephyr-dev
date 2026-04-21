@@ -27,6 +27,10 @@ from zephyr_core import (
 
 GOOGLE_DRIVE_DOCUMENT_SOURCE_KIND = "google_drive_document_v1"
 _DEFAULT_TIMEOUT_S = 10.0
+_TEMP_DIR_PREFIX = ".zephyr-uns-google-drive"
+_STAGING_MODEL = "local_temp_file_before_partition"
+_MIME_MAPPING_SCOPE = "limited_explicit_map_with_extensionless_fallback"
+_HTTP_TRUST_ENV = False
 _CONTENT_TYPE_EXTENSION_MAP: dict[str, str] = {
     "application/json": ".json",
     "application/pdf": ".pdf",
@@ -43,6 +47,17 @@ _CONTENT_TYPE_EXTENSION_MAP: dict[str, str] = {
 }
 
 GoogleDriveAcquisitionMode = Literal["download", "export"]
+
+
+@dataclass(frozen=True, slots=True)
+class GoogleDriveDocumentSourceAcquisitionContractV1:
+    source_kind: str
+    default_timeout_s: float
+    temp_dir_prefix: str
+    staging_model: str
+    mime_mapping_scope: str
+    supported_mime_extensions: tuple[tuple[str, str], ...]
+    trust_env: bool
 
 
 class _HttpxUrlopenResponse:
@@ -80,6 +95,36 @@ class GoogleDriveDocumentSourceFetchV1:
     filename: str
     mime_type: str | None
     content: bytes
+
+
+def google_drive_document_source_acquisition_contract() -> (
+    GoogleDriveDocumentSourceAcquisitionContractV1
+):
+    return GoogleDriveDocumentSourceAcquisitionContractV1(
+        source_kind=GOOGLE_DRIVE_DOCUMENT_SOURCE_KIND,
+        default_timeout_s=_DEFAULT_TIMEOUT_S,
+        temp_dir_prefix=_TEMP_DIR_PREFIX,
+        staging_model=_STAGING_MODEL,
+        mime_mapping_scope=_MIME_MAPPING_SCOPE,
+        supported_mime_extensions=tuple(sorted(_CONTENT_TYPE_EXTENSION_MAP.items())),
+        trust_env=_HTTP_TRUST_ENV,
+    )
+
+
+def google_drive_document_source_contract_metadata(
+    *,
+    config: GoogleDriveDocumentSourceConfigV1,
+) -> dict[str, object]:
+    contract = google_drive_document_source_acquisition_contract()
+    return {
+        "source_kind": contract.source_kind,
+        "default_timeout_s": contract.default_timeout_s,
+        "effective_timeout_s": config.timeout_s,
+        "temp_dir_prefix": contract.temp_dir_prefix,
+        "staging_model": contract.staging_model,
+        "mime_mapping_scope": contract.mime_mapping_scope,
+        "trust_env": contract.trust_env,
+    }
 
 
 def is_google_drive_document_source_spec(raw: dict[str, object]) -> bool:
@@ -253,7 +298,7 @@ def urlopen(request: Request, timeout: float = _DEFAULT_TIMEOUT_S) -> _HttpxUrlo
         with httpx.Client(
             follow_redirects=True,
             timeout=timeout,
-            trust_env=False,
+            trust_env=_HTTP_TRUST_ENV,
         ) as client:
             response = client.request(
                 request.get_method(),
@@ -342,6 +387,9 @@ def fetch_google_drive_document_source(
                 "drive_id": config.drive_id,
                 "acquisition_mode": config.acquisition_mode,
                 "export_mime_type": config.export_mime_type,
+                "source_acquisition_contract": google_drive_document_source_contract_metadata(
+                    config=config
+                ),
             },
         ) from err
     except URLError as err:
@@ -354,6 +402,9 @@ def fetch_google_drive_document_source(
                 "acquisition_mode": config.acquisition_mode,
                 "export_mime_type": config.export_mime_type,
                 "reason": str(err.reason),
+                "source_acquisition_contract": google_drive_document_source_contract_metadata(
+                    config=config
+                ),
             },
         ) from err
     except TimeoutError as err:
@@ -365,6 +416,9 @@ def fetch_google_drive_document_source(
                 "drive_id": config.drive_id,
                 "acquisition_mode": config.acquisition_mode,
                 "export_mime_type": config.export_mime_type,
+                "source_acquisition_contract": google_drive_document_source_contract_metadata(
+                    config=config
+                ),
             },
         ) from err
 
@@ -428,6 +482,7 @@ def normalize_uns_input_identity_sha(*, filename: str, default_sha: str) -> str:
 def _with_fetch_provenance(
     *,
     result: PartitionResult,
+    config: GoogleDriveDocumentSourceConfigV1,
     fetched: GoogleDriveDocumentSourceFetchV1,
     sha256: str,
 ) -> PartitionResult:
@@ -446,6 +501,9 @@ def _with_fetch_provenance(
             metadata["source_etag"] = fetched.etag
         if fetched.mime_type is not None:
             metadata["fetched_mime_type"] = fetched.mime_type
+        metadata["source_acquisition_contract"] = google_drive_document_source_contract_metadata(
+            config=config
+        )
         elements.append(
             ZephyrElement(
                 element_id=element.element_id,
@@ -496,7 +554,7 @@ def process_file(
         )
 
     fetched = fetch_google_drive_document_source(config=config)
-    tmp_dir = path.parent / f".zephyr-uns-google-drive-{uuid4().hex}"
+    tmp_dir = path.parent / f"{_TEMP_DIR_PREFIX}-{uuid4().hex}"
     tmp_dir.mkdir(parents=False, exist_ok=False)
     try:
         fetched_path = tmp_dir / fetched.filename
@@ -515,4 +573,9 @@ def process_file(
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
     resolved_sha = sha256 if sha256 is not None else result.document.sha256
-    return _with_fetch_provenance(result=result, fetched=fetched, sha256=resolved_sha)
+    return _with_fetch_provenance(
+        result=result,
+        config=config,
+        fetched=fetched,
+        sha256=resolved_sha,
+    )

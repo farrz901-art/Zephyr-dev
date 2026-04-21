@@ -51,6 +51,22 @@ class _FakeKafkaConsumer:
         return None
 
 
+def _expected_kafka_operational_contract() -> dict[str, object]:
+    return {
+        "source_kind": "kafka_partition_offset_v1",
+        "max_source_batches": 1000,
+        "offset_cursor_width": 20,
+        "default_poll_timeout_s": 1.0,
+        "consumer_group_id_shape": "zephyr-it-stream-{connection_name}",
+        "consumer_group_id": "zephyr-it-stream-events-primary",
+        "read_model": "single_topic_single_partition_explicit_offset",
+        "support_scope": (
+            "bounded local it-stream source lane; not consumer-group ownership or "
+            "rebalance semantics"
+        ),
+    }
+
+
 def _write_kafka_source_spec(
     path: Path,
     *,
@@ -83,6 +99,23 @@ def _write_kafka_source_spec(
             }
         }
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def test_kafka_source_operational_contract_exposes_bounded_limits() -> None:
+    contract = kafka_source.kafka_partition_source_operational_contract()
+
+    assert contract.source_kind == "kafka_partition_offset_v1"
+    assert contract.max_source_batches == 1000
+    assert contract.offset_cursor_width == 20
+    assert contract.default_poll_timeout_s == 1.0
+    assert contract.consumer_group_id_prefix == "zephyr-it-stream"
+    assert contract.consumer_group_id_shape == "zephyr-it-stream-{connection_name}"
+    assert contract.read_model == "single_topic_single_partition_explicit_offset"
+    assert "not consumer-group ownership" in contract.support_scope
+    assert (
+        kafka_source.kafka_partition_source_group_id(connection_name="events-primary")
+        == "zephyr-it-stream-events-primary"
+    )
 
 
 def test_kafka_source_identity_sha_is_stable_for_equivalent_specs(tmp_path: Path) -> None:
@@ -166,6 +199,7 @@ def test_kafka_source_builds_cursor_checkpoints_and_resume_provenance(
         "read_direction": "asc",
         "record_count": 2,
         "last_offset": 10,
+        "source_operational_contract": _expected_kafka_operational_contract(),
     }
 
     out_dir = tmp_path / "artifacts"
@@ -210,6 +244,10 @@ def test_kafka_source_builds_cursor_checkpoints_and_resume_provenance(
     }
     assert resumed.elements[0].metadata["emitted_at"] == "00000000000000000011"
     assert resumed.elements[1].metadata["data"]["cursor"] == "00000000000000000011"
+    assert (
+        resumed.elements[1].metadata["data"]["source_operational_contract"]
+        == _expected_kafka_operational_contract()
+    )
 
     resumed_artifacts = dump_it_artifacts(
         out_dir=tmp_path / "resumed-artifacts",
@@ -281,3 +319,70 @@ def test_kafka_source_requires_strictly_advancing_offsets(
         "offset": 10,
         "previous_offset": 10,
     }
+
+
+def test_kafka_source_fetch_uses_bounded_group_id_and_poll_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    class _FakeNativeConsumer:
+        def __init__(self, config: dict[str, object]) -> None:
+            captured["consumer_config"] = dict(config)
+
+        def list_topics(self, topic: str | None = None, timeout: float = 0.0) -> object:
+            captured["metadata_topic"] = topic
+            captured["metadata_timeout"] = timeout
+            return object()
+
+        def assign(self, assignments: list[object]) -> None:
+            captured["assignment_count"] = len(assignments)
+
+        def consume(self, num_messages: int, timeout: float) -> list[object]:
+            captured["consume_num_messages"] = num_messages
+            captured["consume_timeout"] = timeout
+            return []
+
+        def close(self) -> None:
+            captured["closed"] = True
+
+    class _FakeTopicPartition:
+        def __init__(self, topic: str, partition: int, offset: int) -> None:
+            del topic, partition, offset
+
+    class _FakeKafkaModule:
+        Consumer = _FakeNativeConsumer
+        TopicPartition = _FakeTopicPartition
+
+    def fake_import_module(name: str) -> object:
+        assert name == "confluent_kafka"
+        return _FakeKafkaModule
+
+    monkeypatch.setattr(kafka_source.importlib, "import_module", fake_import_module)
+
+    result = kafka_source.fetch_kafka_partition_source(
+        config=kafka_source.KafkaPartitionSourceConfigV1(
+            stream="orders",
+            connection_name="events-primary",
+            brokers=("broker-a:9092", "broker-b:9092"),
+            topic="orders.events",
+            partition=2,
+            offset_start=8,
+            batch_size=2,
+        )
+    )
+
+    assert result.logs == [("INFO", "source exhausted after batch=1")]
+    assert captured["consumer_config"] == {
+        "bootstrap.servers": "broker-a:9092,broker-b:9092",
+        "group.id": "zephyr-it-stream-events-primary",
+        "enable.auto.commit": False,
+        "enable.partition.eof": False,
+        "auto.offset.reset": "error",
+    }
+    assert captured["metadata_topic"] == "orders.events"
+    assert captured["metadata_timeout"] == 1.0
+    assert captured["assignment_count"] == 1
+    assert captured["consume_num_messages"] == 2
+    assert captured["consume_timeout"] == 1.0
+    assert captured["closed"] is True

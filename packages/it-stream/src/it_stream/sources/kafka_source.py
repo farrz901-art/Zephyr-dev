@@ -12,6 +12,24 @@ KAFKA_PARTITION_SOURCE_KIND = "kafka_partition_offset_v1"
 _MAX_KAFKA_SOURCE_BATCHES = 1000
 _OFFSET_CURSOR_WIDTH = 20
 _DEFAULT_POLL_TIMEOUT_S = 1.0
+_CONSUMER_GROUP_ID_PREFIX = "zephyr-it-stream"
+_CONSUMER_GROUP_ID_SHAPE = "zephyr-it-stream-{connection_name}"
+_BOUNDED_READ_MODEL = "single_topic_single_partition_explicit_offset"
+_BOUNDED_SUPPORT_SCOPE = (
+    "bounded local it-stream source lane; not consumer-group ownership or rebalance semantics"
+)
+
+
+@dataclass(frozen=True, slots=True)
+class KafkaPartitionSourceOperationalContractV1:
+    source_kind: str
+    max_source_batches: int
+    offset_cursor_width: int
+    default_poll_timeout_s: float
+    consumer_group_id_prefix: str
+    consumer_group_id_shape: str
+    read_model: str
+    support_scope: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,6 +90,42 @@ def is_kafka_partition_source_spec(raw: dict[str, object]) -> bool:
         return False
     typed_source = cast("dict[str, object]", source)
     return typed_source.get("kind") == KAFKA_PARTITION_SOURCE_KIND
+
+
+def kafka_partition_source_operational_contract() -> KafkaPartitionSourceOperationalContractV1:
+    return KafkaPartitionSourceOperationalContractV1(
+        source_kind=KAFKA_PARTITION_SOURCE_KIND,
+        max_source_batches=_MAX_KAFKA_SOURCE_BATCHES,
+        offset_cursor_width=_OFFSET_CURSOR_WIDTH,
+        default_poll_timeout_s=_DEFAULT_POLL_TIMEOUT_S,
+        consumer_group_id_prefix=_CONSUMER_GROUP_ID_PREFIX,
+        consumer_group_id_shape=_CONSUMER_GROUP_ID_SHAPE,
+        read_model=_BOUNDED_READ_MODEL,
+        support_scope=_BOUNDED_SUPPORT_SCOPE,
+    )
+
+
+def kafka_partition_source_group_id(*, connection_name: str) -> str:
+    return f"{_CONSUMER_GROUP_ID_PREFIX}-{connection_name}"
+
+
+def _operational_contract_metadata(
+    *,
+    config: KafkaPartitionSourceConfigV1,
+) -> dict[str, object]:
+    contract = kafka_partition_source_operational_contract()
+    return {
+        "source_kind": contract.source_kind,
+        "max_source_batches": contract.max_source_batches,
+        "offset_cursor_width": contract.offset_cursor_width,
+        "default_poll_timeout_s": contract.default_poll_timeout_s,
+        "consumer_group_id_shape": contract.consumer_group_id_shape,
+        "consumer_group_id": kafka_partition_source_group_id(
+            connection_name=config.connection_name
+        ),
+        "read_model": contract.read_model,
+        "support_scope": contract.support_scope,
+    }
 
 
 def _read_required_non_empty_string(
@@ -329,7 +383,7 @@ def _connect_kafka_partition_source(
 
     consumer_config: dict[str, object] = {
         "bootstrap.servers": ",".join(config.brokers),
-        "group.id": f"zephyr-it-stream-{config.connection_name}",
+        "group.id": kafka_partition_source_group_id(connection_name=config.connection_name),
         "enable.auto.commit": False,
         "enable.partition.eof": False,
         "auto.offset.reset": "error",
@@ -584,6 +638,7 @@ def fetch_kafka_partition_source(
                 "read_direction": "asc",
                 "record_count": len(batch_records),
                 "last_offset": final_batch_offset,
+                "source_operational_contract": _operational_contract_metadata(config=config),
             }
         )
         logs.append(
