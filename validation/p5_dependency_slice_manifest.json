@@ -1,0 +1,102 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M4-S10 dependency-slice skeleton",
+  "domain_kind": "technical_capability_domain_not_entitlement",
+  "root_dev_convenience": {
+    "includes": [
+      "uns-stream[all-docs]",
+      "zephyr-core",
+      "zephyr-ingest",
+      "zephyr-api"
+    ],
+    "meaning": "engineering convenience only; not product-cut truth and not evidence that uns-stream is whole-package Pro"
+  },
+  "slices": {
+    "shared": {
+      "packages": [
+        "zephyr-core",
+        "zephyr-ingest",
+        "zephyr-api"
+      ],
+      "cut_role": "shared across Base and Pro skeletons"
+    },
+    "base": {
+      "product_cut_ready": false,
+      "package_intent": [
+        "it-stream current Base structured flow",
+        "uns-stream direct non-extra unstructured surface"
+      ],
+      "uns_stream_dependency_mode": {
+        "direct_dependency_basis": "unstructured",
+        "exclude_optional_extras_by_default": true
+      },
+      "connectors": {
+        "sources": [
+          "http_json_cursor_v1",
+          "postgresql_incremental_v1",
+          "clickhouse_incremental_v1",
+          "kafka_partition_offset_v1",
+          "mongodb_incremental_v1",
+          "http_document_v1",
+          "s3_document_v1",
+          "git_document_v1",
+          "google_drive_document_v1",
+          "confluence_document_v1"
+        ],
+        "single_sink_destinations": [
+          "filesystem",
+          "webhook",
+          "sqlite",
+          "kafka",
+          "weaviate",
+          "s3",
+          "opensearch",
+          "clickhouse",
+          "mongodb",
+          "loki"
+        ],
+        "composition_surfaces": [
+          "fanout"
+        ]
+      }
+    },
+    "pro_incremental": {
+      "product_cut_ready": false,
+      "requires_base": true,
+      "uns_stream_optional_extras": [
+        "all-docs",
+        "pdf",
+        "doc",
+        "docx",
+        "ppt",
+        "pptx",
+        "xlsx",
+        "csv",
+        "tsv",
+        "md",
+        "rtf",
+        "rst",
+        "epub",
+        "odt",
+        "org",
+        "image"
+      ],
+      "not_modeled_as": "whole_uns_stream_package"
+    },
+    "extra": {
+      "product_cut_ready": false,
+      "default_included": false,
+      "reserved_capabilities": [
+        "audio",
+        "model_init"
+      ],
+      "dependency_intent": "incubating_non_default_no_committed_package_slice"
+    }
+  },
+  "not_yet_sliced": [
+    "fixtures/resources",
+    "pytest selection",
+    "runtime validation outputs",
+    "release/installer outputs"
+  ]
+}

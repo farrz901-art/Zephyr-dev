@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M4-S10 packaging-output skeleton",
+  "domain_kind": "technical_capability_domain_not_entitlement",
+  "output_status": "validation_artifacts_only_not_product_packages",
+  "future_outputs": {
+    "base": {
+      "installable_today": false,
+      "may_consume": [
+        "validation/p5_capability_domain_matrix.json",
+        "validation/p5_product_cut_manifest.json",
+        "validation/p5_dependency_slice_manifest.json",
+        "validation/p5_destination_surface_classification.json"
+      ],
+      "must_not_assume": [
+        "uns-stream optional extras",
+        "installer contract exists"
+      ]
+    },
+    "pro": {
+      "installable_today": false,
+      "may_consume": [
+        "Base skeleton",
+        "uns-stream optional extras from dependency slice manifest"
+      ],
+      "must_not_assume": [
+        "whole uns-stream package is Pro",
+        "enterprise connectors are implemented"
+      ]
+    },
+    "extra": {
+      "installable_today": false,
+      "default_packaged": false,
+      "may_consume": [
+        "audio/model_init reserved truth"
+      ],
+      "must_not_assume": [
+        "Extra is ready for default packaging"
+      ]
+    }
+  },
+  "deferred": [
+    "installer/release-consumable outputs",
+    "domain-sliced tests and fixtures",
+    "repo split",
+    "commercial entitlement enforcement",
+    "deployment packaging"
+  ]
+}

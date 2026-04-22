@@ -1,0 +1,105 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M4-S10 build-cut packaging skeleton",
+  "domain_kind": "technical_capability_domain_not_entitlement",
+  "skeleton_status": "groundwork_only_not_installable",
+  "cuts": {
+    "base": {
+      "directly_buildable_today": false,
+      "intended_contains": {
+        "shared_core": [
+          "zephyr-core"
+        ],
+        "shared_orchestration": [
+          "zephyr-ingest"
+        ],
+        "shared_service": [
+          "zephyr-api"
+        ],
+        "flow_packages": [
+          "it-stream",
+          "uns-stream direct non-extra unstructured surface"
+        ],
+        "source_connectors": {
+          "it_stream": [
+            "http_json_cursor_v1",
+            "postgresql_incremental_v1",
+            "clickhouse_incremental_v1",
+            "kafka_partition_offset_v1",
+            "mongodb_incremental_v1"
+          ],
+          "uns_stream": [
+            "http_document_v1",
+            "s3_document_v1",
+            "git_document_v1",
+            "google_drive_document_v1",
+            "confluence_document_v1"
+          ]
+        },
+        "single_sink_destinations": [
+          "filesystem",
+          "webhook",
+          "sqlite",
+          "kafka",
+          "weaviate",
+          "s3",
+          "opensearch",
+          "clickhouse",
+          "mongodb",
+          "loki"
+        ],
+        "destination_composition_surfaces": [
+          "fanout"
+        ]
+      },
+      "not_directly_cuttable_because": [
+        "workspace is still single-body",
+        "root dev includes uns-stream[all-docs]",
+        "tests, fixtures, and validation outputs are not domain-sliced"
+      ]
+    },
+    "pro": {
+      "directly_buildable_today": false,
+      "inherits": "base",
+      "incremental_additions": {
+        "uns_stream_optional_extras": [
+          "all-docs",
+          "pdf",
+          "doc",
+          "docx",
+          "ppt",
+          "pptx",
+          "xlsx",
+          "csv",
+          "tsv",
+          "md",
+          "rtf",
+          "rst",
+          "epub",
+          "odt",
+          "org",
+          "image"
+        ],
+        "future_mature_enterprise_connectors": "deferred_not_in_s10"
+      },
+      "not_modeled_as": "whole_uns_stream_package"
+    },
+    "extra": {
+      "directly_buildable_today": false,
+      "default_packaged": false,
+      "incubating_reserved_capabilities": [
+        "audio",
+        "model_init"
+      ],
+      "promotion_rule": "explicit_promotion_to_pro_required"
+    }
+  },
+  "not_claimed": [
+    "installable Base artifact",
+    "installable Pro artifact",
+    "installable Extra artifact",
+    "license or entitlement enforcement",
+    "repo split",
+    "deployment packaging"
+  ]
+}

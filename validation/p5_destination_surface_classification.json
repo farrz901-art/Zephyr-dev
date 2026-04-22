@@ -1,0 +1,87 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M4-S10 destination surface classification",
+  "single_sink_destinations": [
+    {
+      "name": "filesystem",
+      "surface_type": "single_sink_destination_connector",
+      "domain": "base",
+      "composition_surface": false
+    },
+    {
+      "name": "webhook",
+      "surface_type": "single_sink_destination_connector",
+      "domain": "base",
+      "composition_surface": false
+    },
+    {
+      "name": "sqlite",
+      "surface_type": "single_sink_destination_connector",
+      "domain": "base",
+      "composition_surface": false
+    },
+    {
+      "name": "kafka",
+      "surface_type": "single_sink_destination_connector",
+      "domain": "base",
+      "composition_surface": false
+    },
+    {
+      "name": "weaviate",
+      "surface_type": "single_sink_destination_connector",
+      "domain": "base",
+      "composition_surface": false
+    },
+    {
+      "name": "s3",
+      "surface_type": "single_sink_destination_connector",
+      "domain": "base",
+      "composition_surface": false
+    },
+    {
+      "name": "opensearch",
+      "surface_type": "single_sink_destination_connector",
+      "domain": "base",
+      "composition_surface": false
+    },
+    {
+      "name": "clickhouse",
+      "surface_type": "single_sink_destination_connector",
+      "domain": "base",
+      "composition_surface": false
+    },
+    {
+      "name": "mongodb",
+      "surface_type": "single_sink_destination_connector",
+      "domain": "base",
+      "composition_surface": false
+    },
+    {
+      "name": "loki",
+      "surface_type": "single_sink_destination_connector",
+      "domain": "base",
+      "composition_surface": false
+    }
+  ],
+  "composition_surfaces": [
+    {
+      "name": "fanout",
+      "surface_type": "destination_composition_orchestration",
+      "domain": "base_composition_surface",
+      "single_sink_connector": false,
+      "reason": "orchestrates child destinations rather than writing one sink itself"
+    }
+  ],
+  "abstract_surfaces": [
+    {
+      "name": "base.py",
+      "surface_type": "abstract_destination_base_not_connector",
+      "single_sink_connector": false
+    }
+  ],
+  "rules": [
+    "fanout must not be classified as a single sink connector",
+    "single sink connector lists must not include abstract destination base classes",
+    "composition surfaces may be Base capability surfaces without becoming sink connectors"
+  ]
+}
