@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M4-S12 usage runtime output surface",
+  "authoritative_artifact": "usage_record.json",
+  "runtime_emitted_today": true,
+  "lightweight_discovery": {
+    "run_meta_json": "usage_record links to run_id/task_id/provenance; run_meta is not overstuffed",
+    "delivery_receipt_json": "usage_record records delivery outcome/failure summary",
+    "batch_report_json": "batch root usage_record records aggregate non-billing outcome"
+  },
+  "redaction_boundary": {
+    "must_not_include": [
+      "secret values",
+      "tokens",
+      "credential strings",
+      "billing price",
+      "license or entitlement decision"
+    ]
+  },
+  "bounded_claim": "local artifact-backed runtime usage facts, not fleet billing telemetry"
+}

@@ -1,0 +1,332 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M4-S12 source contract alignment",
+  "domain_kind": "technical_capability_domain_not_entitlement",
+  "source_contract_status": "machine_readable_retained_source_truth",
+  "uns_stream_sources": [
+    {
+      "source_id": "http_document_v1",
+      "source_kind": "http_document_v1",
+      "package": "uns-stream",
+      "flow_family": "uns",
+      "retained": true,
+      "technical_capability_domain": "base",
+      "enterprise_grade_today": false,
+      "auth_surface": "optional request headers; no secret material in task identity",
+      "raw_unit_relation": {
+        "primary_raw_unit": "document",
+        "relation": "one explicit document/blob/page-body selection enters partitioning",
+        "not_primary": [
+          "page",
+          "elements_count",
+          "normalized_text_len",
+          "delivery_success"
+        ]
+      },
+      "source_model": "document_acquisition_snapshot",
+      "boundedness": [
+        "one document-like unit per task",
+        "no long-lived sync or webhook delta ownership",
+        "source-native handles are not shared runtime artifacts"
+      ],
+      "not_claimed": [
+        "enterprise connector",
+        "fully generalized source platform",
+        "billing or entitlement domain"
+      ]
+    },
+    {
+      "source_id": "s3_document_v1",
+      "source_kind": "s3_document_v1",
+      "package": "uns-stream",
+      "flow_family": "uns",
+      "retained": true,
+      "technical_capability_domain": "base",
+      "enterprise_grade_today": false,
+      "auth_surface": "runtime S3 credentials/session; bucket/key/version are identity facts",
+      "raw_unit_relation": {
+        "primary_raw_unit": "document",
+        "relation": "one explicit document/blob/page-body selection enters partitioning",
+        "not_primary": [
+          "page",
+          "elements_count",
+          "normalized_text_len",
+          "delivery_success"
+        ]
+      },
+      "source_model": "document_acquisition_snapshot",
+      "boundedness": [
+        "one document-like unit per task",
+        "no long-lived sync or webhook delta ownership",
+        "source-native handles are not shared runtime artifacts"
+      ],
+      "not_claimed": [
+        "enterprise connector",
+        "fully generalized source platform",
+        "billing or entitlement domain"
+      ]
+    },
+    {
+      "source_id": "git_document_v1",
+      "source_kind": "git_document_v1",
+      "package": "uns-stream",
+      "flow_family": "uns",
+      "retained": true,
+      "technical_capability_domain": "base",
+      "enterprise_grade_today": false,
+      "auth_surface": "optional repository credentials; repo/ref/path are identity facts",
+      "raw_unit_relation": {
+        "primary_raw_unit": "document",
+        "relation": "one explicit document/blob/page-body selection enters partitioning",
+        "not_primary": [
+          "page",
+          "elements_count",
+          "normalized_text_len",
+          "delivery_success"
+        ]
+      },
+      "source_model": "document_acquisition_snapshot",
+      "boundedness": [
+        "one document-like unit per task",
+        "no long-lived sync or webhook delta ownership",
+        "source-native handles are not shared runtime artifacts"
+      ],
+      "not_claimed": [
+        "enterprise connector",
+        "fully generalized source platform",
+        "billing or entitlement domain"
+      ]
+    },
+    {
+      "source_id": "google_drive_document_v1",
+      "source_kind": "google_drive_document_v1",
+      "package": "uns-stream",
+      "flow_family": "uns",
+      "retained": true,
+      "technical_capability_domain": "base",
+      "enterprise_grade_today": false,
+      "auth_surface": "runtime OAuth/bearer token; trust_env remains disabled",
+      "raw_unit_relation": {
+        "primary_raw_unit": "document",
+        "relation": "one explicit document/blob/page-body selection enters partitioning",
+        "not_primary": [
+          "page",
+          "elements_count",
+          "normalized_text_len",
+          "delivery_success"
+        ]
+      },
+      "source_model": "document_acquisition_snapshot",
+      "boundedness": [
+        "one document-like unit per task",
+        "no long-lived sync or webhook delta ownership",
+        "source-native handles are not shared runtime artifacts"
+      ],
+      "not_claimed": [
+        "enterprise connector",
+        "fully generalized source platform",
+        "billing or entitlement domain"
+      ]
+    },
+    {
+      "source_id": "confluence_document_v1",
+      "source_kind": "confluence_document_v1",
+      "package": "uns-stream",
+      "flow_family": "uns",
+      "retained": true,
+      "technical_capability_domain": "base",
+      "enterprise_grade_today": false,
+      "auth_surface": "runtime token/session; site/page/version are identity facts",
+      "raw_unit_relation": {
+        "primary_raw_unit": "document",
+        "relation": "one explicit document/blob/page-body selection enters partitioning",
+        "not_primary": [
+          "page",
+          "elements_count",
+          "normalized_text_len",
+          "delivery_success"
+        ]
+      },
+      "source_model": "document_acquisition_snapshot",
+      "boundedness": [
+        "one document-like unit per task",
+        "no long-lived sync or webhook delta ownership",
+        "source-native handles are not shared runtime artifacts"
+      ],
+      "not_claimed": [
+        "enterprise connector",
+        "fully generalized source platform",
+        "billing or entitlement domain"
+      ]
+    }
+  ],
+  "it_stream_sources": [
+    {
+      "source_id": "http_json_cursor_v1",
+      "source_kind": "http_json_cursor_v1",
+      "package": "it-stream",
+      "flow_family": "it",
+      "retained": true,
+      "technical_capability_domain": "base",
+      "enterprise_grade_today": false,
+      "auth_surface": "optional request headers; cursor selector is identity/progress fact",
+      "raw_unit_relation": {
+        "primary_raw_unit": "record_or_emitted_item",
+        "relation": "structured records/items emitted from bounded cursor/incremental reads",
+        "not_primary": [
+          "delivery_success",
+          "checkpoint"
+        ],
+        "maturity": "bounded_not_fully_first_class"
+      },
+      "source_model": "structured_progress_snapshot",
+      "boundedness": [
+        "explicit cursor/progress-family subset",
+        "no CDC/oplog/consumer-group ownership",
+        "checkpoint/resume remains bounded current cursor_v1 evidence"
+      ],
+      "not_claimed": [
+        "enterprise connector",
+        "fully generalized source platform",
+        "billing or entitlement domain"
+      ]
+    },
+    {
+      "source_id": "postgresql_incremental_v1",
+      "source_kind": "postgresql_incremental_v1",
+      "package": "it-stream",
+      "flow_family": "it",
+      "retained": true,
+      "technical_capability_domain": "base",
+      "enterprise_grade_today": false,
+      "auth_surface": "runtime database credentials; table/query selector is identity fact",
+      "raw_unit_relation": {
+        "primary_raw_unit": "record_or_emitted_item",
+        "relation": "structured records/items emitted from bounded cursor/incremental reads",
+        "not_primary": [
+          "delivery_success",
+          "checkpoint"
+        ],
+        "maturity": "bounded_not_fully_first_class"
+      },
+      "source_model": "structured_progress_snapshot",
+      "boundedness": [
+        "explicit cursor/progress-family subset",
+        "no CDC/oplog/consumer-group ownership",
+        "checkpoint/resume remains bounded current cursor_v1 evidence"
+      ],
+      "not_claimed": [
+        "enterprise connector",
+        "fully generalized source platform",
+        "billing or entitlement domain"
+      ]
+    },
+    {
+      "source_id": "clickhouse_incremental_v1",
+      "source_kind": "clickhouse_incremental_v1",
+      "package": "it-stream",
+      "flow_family": "it",
+      "retained": true,
+      "technical_capability_domain": "base",
+      "enterprise_grade_today": false,
+      "auth_surface": "runtime database credentials; query/window selector is identity fact",
+      "raw_unit_relation": {
+        "primary_raw_unit": "record_or_emitted_item",
+        "relation": "structured records/items emitted from bounded cursor/incremental reads",
+        "not_primary": [
+          "delivery_success",
+          "checkpoint"
+        ],
+        "maturity": "bounded_not_fully_first_class"
+      },
+      "source_model": "structured_progress_snapshot",
+      "boundedness": [
+        "explicit cursor/progress-family subset",
+        "no CDC/oplog/consumer-group ownership",
+        "checkpoint/resume remains bounded current cursor_v1 evidence"
+      ],
+      "not_claimed": [
+        "enterprise connector",
+        "fully generalized source platform",
+        "billing or entitlement domain"
+      ]
+    },
+    {
+      "source_id": "kafka_partition_offset_v1",
+      "source_kind": "kafka_partition_offset_v1",
+      "package": "it-stream",
+      "flow_family": "it",
+      "retained": true,
+      "technical_capability_domain": "base",
+      "enterprise_grade_today": false,
+      "auth_surface": "runtime broker/auth config; topic/partition/offset are progress facts",
+      "raw_unit_relation": {
+        "primary_raw_unit": "record_or_emitted_item",
+        "relation": "structured records/items emitted from bounded cursor/incremental reads",
+        "not_primary": [
+          "delivery_success",
+          "checkpoint"
+        ],
+        "maturity": "bounded_not_fully_first_class"
+      },
+      "source_model": "structured_progress_snapshot",
+      "boundedness": [
+        "explicit cursor/progress-family subset",
+        "no CDC/oplog/consumer-group ownership",
+        "checkpoint/resume remains bounded current cursor_v1 evidence"
+      ],
+      "not_claimed": [
+        "enterprise connector",
+        "fully generalized source platform",
+        "billing or entitlement domain"
+      ]
+    },
+    {
+      "source_id": "mongodb_incremental_v1",
+      "source_kind": "mongodb_incremental_v1",
+      "package": "it-stream",
+      "flow_family": "it",
+      "retained": true,
+      "technical_capability_domain": "base",
+      "enterprise_grade_today": false,
+      "auth_surface": "runtime database credentials; collection/cursor selector is identity fact",
+      "raw_unit_relation": {
+        "primary_raw_unit": "record_or_emitted_item",
+        "relation": "structured records/items emitted from bounded cursor/incremental reads",
+        "not_primary": [
+          "delivery_success",
+          "checkpoint"
+        ],
+        "maturity": "bounded_not_fully_first_class"
+      },
+      "source_model": "structured_progress_snapshot",
+      "boundedness": [
+        "explicit cursor/progress-family subset",
+        "no CDC/oplog/consumer-group ownership",
+        "checkpoint/resume remains bounded current cursor_v1 evidence"
+      ],
+      "not_claimed": [
+        "enterprise connector",
+        "fully generalized source platform",
+        "billing or entitlement domain"
+      ]
+    }
+  ],
+  "source_model_asymmetry": {
+    "uns": "document acquisition to partition-entry path",
+    "it": "structured cursor/incremental progression to emitted records/items",
+    "intentionally_not_claimed": "uns and it sources are fully symmetric implementations"
+  },
+  "capability_domain_rule": {
+    "all_current_retained_sources": "base",
+    "pro_not_default_for_uns_stream": true,
+    "extra_not_default": true,
+    "root_dev_all_docs_does_not_mark_runtime_usage_pro": true
+  },
+  "not_claimed": [
+    "commercial entitlement",
+    "enterprise connector implementation",
+    "full source registry parity with destination/backend specs",
+    "distributed runtime or fleet source ownership"
+  ]
+}

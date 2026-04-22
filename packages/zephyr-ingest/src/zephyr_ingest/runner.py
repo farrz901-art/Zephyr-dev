@@ -62,6 +62,7 @@ from zephyr_ingest.task_v1 import (
     TaskKind,
     TaskV1,
 )
+from zephyr_ingest.usage_record import write_batch_usage_record_v1, write_usage_record_v1
 
 logger = logging.getLogger(__name__)
 
@@ -362,6 +363,7 @@ def process_task(
             )
 
             _write_delivery_receipt(out_dir, receipt)
+            write_usage_record_v1(out_dir=out_dir, task=task, meta=meta, receipt=receipt)
 
             dlq_written = False
             delivery_retryable: bool | None = None
@@ -507,6 +509,7 @@ def process_task(
             )
 
             _write_delivery_receipt(out_dir, receipt)
+            write_usage_record_v1(out_dir=out_dir, task=task, meta=meta, receipt=receipt)
 
             dlq_written = False
 
@@ -1082,6 +1085,18 @@ def run_documents(
     (out_root / "batch_report.json").write_text(
         json.dumps(batch_report, ensure_ascii=False, indent=2),
         encoding="utf-8",
+    )
+    write_batch_usage_record_v1(
+        out_root=out_root,
+        run_id=ctx.run_id,
+        pipeline_version=ctx.pipeline_version,
+        docs_total=total,
+        docs_success=success,
+        docs_failed=failed,
+        docs_skipped=skipped_existing + skipped_unsupported,
+        delivery_total=delivery_total,
+        delivery_ok=delivery_ok,
+        delivery_failed=delivery_failed,
     )
 
     log_event(

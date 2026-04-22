@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M4-S12 source surface classification",
+  "uns_document_acquisition_sources": [
+    "http_document_v1",
+    "s3_document_v1",
+    "git_document_v1",
+    "google_drive_document_v1",
+    "confluence_document_v1"
+  ],
+  "it_structured_progress_sources": [
+    "http_json_cursor_v1",
+    "postgresql_incremental_v1",
+    "clickhouse_incremental_v1",
+    "kafka_partition_offset_v1",
+    "mongodb_incremental_v1"
+  ],
+  "classification_rules": {
+    "uns": [
+      "document/file/content acquisition",
+      "snapshot-style source selection",
+      "handoff into document partitioning"
+    ],
+    "it": [
+      "structured record transport",
+      "cursor/checkpoint/resume progression",
+      "bounded emitted records/items"
+    ]
+  },
+  "misread_guards": [
+    "do not treat staging/materialization details as source contract",
+    "do not mix document acquisition sources with structured progress sources",
+    "do not infer enterprise-grade support from retained non-enterprise source truth"
+  ]
+}

@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M4-S12 runtime-native usage emission",
+  "usage_record": {
+    "artifact": "usage_record.json",
+    "record_kinds": [
+      "raw_technical_usage_fact_v1",
+      "raw_technical_usage_batch_summary_v1"
+    ],
+    "authoritative_usage_truth": true,
+    "placement": [
+      "per task/run artifact directory beside run_meta.json and delivery_receipt.json",
+      "batch root aggregate beside batch_report.json"
+    ],
+    "not": [
+      "billing record",
+      "pricing input",
+      "license entitlement",
+      "subscription allowance",
+      "quota decision"
+    ]
+  },
+  "capability_domains_used": {
+    "runtime_emitted": true,
+    "shape": {
+      "base": "bool",
+      "pro": "bool",
+      "extra": "bool",
+      "evidence": "list[str]"
+    },
+    "current_default_for_retained_sources": {
+      "base": true,
+      "pro": false,
+      "extra": false
+    },
+    "mixed_uns_stream_rule": "Base uns-stream runtime use is not marked Pro unless explicit optional-extra capability evidence is present",
+    "extra_reserved": [
+      "audio",
+      "model_init"
+    ]
+  },
+  "raw_units": {
+    "uns": {
+      "primary_raw_unit": "document",
+      "not_primary": [
+        "page",
+        "elements_count",
+        "normalized_text_len"
+      ]
+    },
+    "it": {
+      "primary_raw_unit": "record_or_emitted_item",
+      "maturity": "bounded_not_fully_first_class"
+    }
+  },
+  "recovery_symmetry": {
+    "success": "status=succeeded and failure_stage=none",
+    "failure": "status=failed/skipped with run or delivery failure_stage",
+    "batch": "batch root usage_record.json records aggregate success/partial/empty status",
+    "resume": "recovery_kind=resume via run_origin=resume",
+    "replay": "recovery_kind=replay via delivery_origin=replay",
+    "requeue": "recovery_kind=requeue via run_origin=requeue",
+    "redrive": "recovery_kind=redrive; not collapsed into replay/requeue"
+  }
+}
