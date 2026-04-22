@@ -1,0 +1,88 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M4-S11 usage raw-fact hardening",
+  "usage_kind": "raw_technical_usage_fact",
+  "not": [
+    "billing record",
+    "pricing input",
+    "license entitlement",
+    "subscription allowance",
+    "quota decision"
+  ],
+  "usage_record_shape": {
+    "record_kind": "raw_usage_fact_v1_skeleton",
+    "runtime_emitted_today": false,
+    "minimum_linkage": [
+      "task.kind",
+      "task.task_id",
+      "run_meta.run_id",
+      "run_meta.provenance.task_id",
+      "run_meta.provenance.run_origin",
+      "run_meta.provenance.delivery_origin",
+      "run_meta.provenance.execution_mode"
+    ],
+    "result_linkage": [
+      "run_meta.outcome",
+      "run_meta.error.code",
+      "delivery_receipt.ok",
+      "delivery_receipt.shared_summary",
+      "batch_report docs/delivery counters"
+    ],
+    "capability_domains_used_marker": "capability_domains_used"
+  },
+  "raw_processing_units": {
+    "uns": {
+      "primary_raw_unit": "document",
+      "stable_today": true,
+      "not_primary_raw_units": [
+        "page",
+        "elements_count",
+        "normalized_text_len",
+        "delivery_success"
+      ],
+      "reason": "one document/blob/page-body selection is the stable current unit; pages are not universal, and elements/text length are derivative metrics"
+    },
+    "it": {
+      "primary_raw_unit": "record_or_emitted_item",
+      "stable_today": "bounded",
+      "not_fully_first_class_today": true,
+      "useful_linkage": [
+        "checkpoint_identity_key",
+        "task_identity_key",
+        "run_origin=resume"
+      ],
+      "reason": "structured emitted records/items are the conservative raw unit, but current runtime artifacts have not promoted it into a universal first-class field"
+    }
+  },
+  "capability_domains_used": {
+    "marker_kind": "technical_capability_domain_used_not_entitlement",
+    "shape": {
+      "base": "bool",
+      "pro": "bool",
+      "extra": "bool",
+      "evidence": "list[str]"
+    },
+    "base_rule": "current Base connectors and Base flow surfaces set Base evidence",
+    "pro_rule": "only explicit current uns-stream optional-extra usage or future mature enterprise connectors set Pro evidence",
+    "extra_rule": "only explicit reserved/incubating Extra capability usage sets Extra evidence",
+    "mixed_uns_stream_rule": "uns-stream direct non-extra document processing is Base and must not be marked Pro just because the package has optional extras",
+    "root_dev_all_docs_rule": "root dev uns-stream[all-docs] is engineering convenience and must not mark runtime usage as Pro",
+    "extra_reserved_capabilities": [
+      "audio",
+      "model_init"
+    ],
+    "default_marker_for_current_base_path": {
+      "base": true,
+      "pro": false,
+      "extra": false
+    }
+  },
+  "not_claimed": [
+    "runtime RunMetaV1 already emits usage_record",
+    "runtime RunMetaV1 already emits capability_domains_used",
+    "page is a universal raw unit",
+    "elements_count is a primary raw unit",
+    "normalized_text_len is a primary raw unit",
+    "retry/replay billing semantics"
+  ]
+}

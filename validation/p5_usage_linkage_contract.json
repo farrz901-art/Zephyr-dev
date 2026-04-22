@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M4-S11 usage linkage contract",
+  "task_contract": {
+    "kind_values": [
+      "uns",
+      "it"
+    ],
+    "do_not_add_runtime_observation_kinds": [
+      "replay",
+      "delivery",
+      "batch",
+      "worker_task"
+    ],
+    "stable_fields": [
+      "task_id",
+      "kind",
+      "inputs.document",
+      "execution.strategy",
+      "execution.unique_element_ids",
+      "identity.pipeline_version",
+      "identity.sha256"
+    ]
+  },
+  "run_meta_contract": {
+    "stable_linkage_fields": [
+      "run_id",
+      "pipeline_version",
+      "provenance.task_id",
+      "provenance.task_identity_key",
+      "provenance.checkpoint_identity_key",
+      "provenance.run_origin",
+      "provenance.delivery_origin",
+      "provenance.execution_mode"
+    ],
+    "raw_runtime_fact_fields": [
+      "metrics.duration_ms",
+      "metrics.attempts",
+      "metrics.elements_count",
+      "metrics.normalized_text_len"
+    ],
+    "failure_fields": [
+      "error.code",
+      "error.message",
+      "error.details",
+      "outcome"
+    ],
+    "not_first_class_today": [
+      "usage_record",
+      "capability_domains_used"
+    ]
+  },
+  "recovery_linkage": {
+    "resume": {
+      "run_origin": "resume",
+      "delivery_origin": "primary",
+      "decisive_fields": [
+        "checkpoint_identity_key",
+        "task_identity_key"
+      ]
+    },
+    "replay": {
+      "delivery_origin": "replay",
+      "decisive_fields": [
+        "run_origin",
+        "task_id",
+        "task_identity_key"
+      ]
+    },
+    "requeue": {
+      "run_origin": "requeue",
+      "delivery_origin": "primary",
+      "decisive_fields": [
+        "task_id",
+        "task_identity_key"
+      ]
+    }
+  }
+}

@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M4-S11 usage success/failure classification",
+  "success_surfaces": {
+    "run_success": {
+      "required_facts": [
+        "run_meta.run_id",
+        "run_meta.outcome",
+        "metrics.duration_ms"
+      ],
+      "usage_recordable": true
+    },
+    "delivery_success": {
+      "required_facts": [
+        "delivery_receipt.ok=true",
+        "destination"
+      ],
+      "usage_recordable": true,
+      "not_raw_unit": true
+    },
+    "batch_success_or_partial": {
+      "required_facts": [
+        "docs counters",
+        "delivery counters"
+      ],
+      "usage_recordable": true
+    }
+  },
+  "failure_surfaces": {
+    "run_failure": {
+      "required_facts": [
+        "run_meta.run_id",
+        "error.code",
+        "error.message"
+      ],
+      "usage_recordable": true
+    },
+    "delivery_failure": {
+      "required_facts": [
+        "delivery_receipt.ok=false",
+        "details.retryable",
+        "details.failure_kind",
+        "details.error_code"
+      ],
+      "usage_recordable": true
+    },
+    "batch_failure_or_partial": {
+      "required_facts": [
+        "docs.failed",
+        "delivery.failed",
+        "error_code aggregates"
+      ],
+      "usage_recordable": true
+    }
+  },
+  "recovery_surfaces": {
+    "resume": "preserve run_origin=resume and checkpoint linkage",
+    "replay": "preserve delivery_origin=replay and delivery/DLQ linkage",
+    "requeue": "preserve run_origin=requeue and queue governance linkage",
+    "redrive": "do not collapse into replay/requeue unless explicitly modeled"
+  },
+  "not_claimed": [
+    "retry billing",
+    "replay billing",
+    "failure chargeability",
+    "entitlement decision"
+  ]
+}

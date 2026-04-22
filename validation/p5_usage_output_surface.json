@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M4-S11 usage output surface",
+  "current_usage_like_surfaces": {
+    "run_meta": {
+      "available": true,
+      "fields": [
+        "run_id",
+        "pipeline_version",
+        "metrics.duration_ms",
+        "metrics.attempts",
+        "metrics.elements_count",
+        "metrics.normalized_text_len",
+        "error.code",
+        "provenance.task_id",
+        "provenance.run_origin",
+        "provenance.delivery_origin"
+      ],
+      "usage_record_field_present_today": false,
+      "capability_domains_used_field_present_today": false
+    },
+    "delivery_receipt": {
+      "available": true,
+      "fields": [
+        "destination",
+        "ok",
+        "details.retryable",
+        "details.failure_kind",
+        "details.error_code",
+        "shared_summary"
+      ]
+    },
+    "batch_report": {
+      "available": true,
+      "fields": [
+        "docs.total",
+        "docs.success",
+        "docs.failed",
+        "docs.skipped",
+        "delivery.total",
+        "delivery.ok",
+        "delivery.failed"
+      ]
+    }
+  },
+  "future_usage_record_surface": {
+    "status": "manifested_not_runtime_emitted",
+    "must_remain_redaction_safe": true,
+    "must_not_include": [
+      "secret values",
+      "tokens",
+      "billing price",
+      "customer entitlement decision"
+    ]
+  }
+}
