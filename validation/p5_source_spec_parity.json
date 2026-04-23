@@ -3,8 +3,8 @@
   "phase": "P5-M4-S13 source spec parity bounded reduction",
   "full_source_spec_registry_parity_today": false,
   "current_source_spec_ids_in_registry": [],
-  "source_contract_truth_source": "E:\\Github_Projects\\Zephyr\\validation\\p5_source_contract_matrix.json",
-  "source_usage_linkage_truth_source": "E:\\Github_Projects\\Zephyr\\validation\\p5_source_usage_linkage.json",
+  "source_contract_truth_source": "validation/p5_source_contract_matrix.json",
+  "source_usage_linkage_truth_source": "validation/p5_source_usage_linkage.json",
   "canonical_source_spec_direction": [
     {
       "source_contract_id": "http_document_v1",

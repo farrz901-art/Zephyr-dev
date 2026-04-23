@@ -6,10 +6,6 @@ from pathlib import Path
 from typing import Final, Literal, cast
 
 from zephyr_ingest.spec.registry import list_spec_ids
-from zephyr_ingest.testing.p5_source_contracts import (
-    P5_SOURCE_CONTRACT_MATRIX_PATH,
-    P5_SOURCE_USAGE_LINKAGE_PATH,
-)
 from zephyr_ingest.testing.p45 import repo_root
 
 GovernanceAuditSeverity = Literal["error", "warning", "info"]
@@ -225,8 +221,8 @@ def build_p5_source_spec_parity() -> dict[str, object]:
         "phase": "P5-M4-S13 source spec parity bounded reduction",
         "full_source_spec_registry_parity_today": False,
         "current_source_spec_ids_in_registry": source_spec_ids,
-        "source_contract_truth_source": str(P5_SOURCE_CONTRACT_MATRIX_PATH),
-        "source_usage_linkage_truth_source": str(P5_SOURCE_USAGE_LINKAGE_PATH),
+        "source_contract_truth_source": "validation/p5_source_contract_matrix.json",
+        "source_usage_linkage_truth_source": "validation/p5_source_usage_linkage.json",
         "canonical_source_spec_direction": _source_spec_mapping(),
         "canonical_runtime_linkage": {
             "normalizer": "zephyr_ingest.usage_record.normalize_source_contract_id",
