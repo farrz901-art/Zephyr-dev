@@ -1,0 +1,262 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M5-S0 retained-surface inventory freeze",
+  "inventory_status": "frozen_for_m5_validation_planning",
+  "m4_closeout_dependency": "P5-M4 closeout gate resolved; M5 does not reopen M4 debt",
+  "retained_sources": {
+    "uns_stream": [
+      {
+        "source_id": "http_document_v1",
+        "flow_family": "uns",
+        "domain": "base",
+        "enterprise_grade_today": false,
+        "m5_expectations": [
+          "at_least_one_success_path",
+          "at_least_one_abnormal_or_failure_path",
+          "usage_and_provenance_visibility"
+        ]
+      },
+      {
+        "source_id": "s3_document_v1",
+        "flow_family": "uns",
+        "domain": "base",
+        "enterprise_grade_today": false,
+        "m5_expectations": [
+          "at_least_one_success_path",
+          "at_least_one_abnormal_or_failure_path",
+          "usage_and_provenance_visibility"
+        ]
+      },
+      {
+        "source_id": "git_document_v1",
+        "flow_family": "uns",
+        "domain": "base",
+        "enterprise_grade_today": false,
+        "m5_expectations": [
+          "at_least_one_success_path",
+          "at_least_one_abnormal_or_failure_path",
+          "usage_and_provenance_visibility"
+        ]
+      },
+      {
+        "source_id": "google_drive_document_v1",
+        "flow_family": "uns",
+        "domain": "base",
+        "enterprise_grade_today": false,
+        "m5_expectations": [
+          "at_least_one_success_path",
+          "at_least_one_abnormal_or_failure_path",
+          "usage_and_provenance_visibility"
+        ]
+      },
+      {
+        "source_id": "confluence_document_v1",
+        "flow_family": "uns",
+        "domain": "base",
+        "enterprise_grade_today": false,
+        "m5_expectations": [
+          "at_least_one_success_path",
+          "at_least_one_abnormal_or_failure_path",
+          "usage_and_provenance_visibility"
+        ]
+      }
+    ],
+    "it_stream": [
+      {
+        "source_id": "http_json_cursor_v1",
+        "flow_family": "it",
+        "domain": "base",
+        "enterprise_grade_today": false,
+        "m5_expectations": [
+          "at_least_one_success_path",
+          "at_least_one_abnormal_or_failure_path",
+          "usage_and_provenance_visibility"
+        ]
+      },
+      {
+        "source_id": "postgresql_incremental_v1",
+        "flow_family": "it",
+        "domain": "base",
+        "enterprise_grade_today": false,
+        "m5_expectations": [
+          "at_least_one_success_path",
+          "at_least_one_abnormal_or_failure_path",
+          "usage_and_provenance_visibility"
+        ]
+      },
+      {
+        "source_id": "clickhouse_incremental_v1",
+        "flow_family": "it",
+        "domain": "base",
+        "enterprise_grade_today": false,
+        "m5_expectations": [
+          "at_least_one_success_path",
+          "at_least_one_abnormal_or_failure_path",
+          "usage_and_provenance_visibility"
+        ]
+      },
+      {
+        "source_id": "kafka_partition_offset_v1",
+        "flow_family": "it",
+        "domain": "base",
+        "enterprise_grade_today": false,
+        "m5_expectations": [
+          "at_least_one_success_path",
+          "at_least_one_abnormal_or_failure_path",
+          "usage_and_provenance_visibility"
+        ]
+      },
+      {
+        "source_id": "mongodb_incremental_v1",
+        "flow_family": "it",
+        "domain": "base",
+        "enterprise_grade_today": false,
+        "m5_expectations": [
+          "at_least_one_success_path",
+          "at_least_one_abnormal_or_failure_path",
+          "usage_and_provenance_visibility"
+        ]
+      }
+    ]
+  },
+  "retained_destinations": {
+    "single_sink_destinations": [
+      {
+        "destination": "filesystem",
+        "surface_type": "single_sink_destination_connector",
+        "domain": "base",
+        "enterprise_grade_today": false,
+        "m5_expectations": [
+          "at_least_one_baseline_success_chain"
+        ]
+      },
+      {
+        "destination": "webhook",
+        "surface_type": "single_sink_destination_connector",
+        "domain": "base",
+        "enterprise_grade_today": false,
+        "m5_expectations": [
+          "at_least_one_baseline_success_chain"
+        ]
+      },
+      {
+        "destination": "sqlite",
+        "surface_type": "single_sink_destination_connector",
+        "domain": "base",
+        "enterprise_grade_today": false,
+        "m5_expectations": [
+          "at_least_one_baseline_success_chain"
+        ]
+      },
+      {
+        "destination": "kafka",
+        "surface_type": "single_sink_destination_connector",
+        "domain": "base",
+        "enterprise_grade_today": false,
+        "m5_expectations": [
+          "at_least_one_baseline_success_chain"
+        ]
+      },
+      {
+        "destination": "weaviate",
+        "surface_type": "single_sink_destination_connector",
+        "domain": "base",
+        "enterprise_grade_today": false,
+        "m5_expectations": [
+          "at_least_one_baseline_success_chain"
+        ]
+      },
+      {
+        "destination": "s3",
+        "surface_type": "single_sink_destination_connector",
+        "domain": "base",
+        "enterprise_grade_today": false,
+        "m5_expectations": [
+          "at_least_one_baseline_success_chain"
+        ]
+      },
+      {
+        "destination": "opensearch",
+        "surface_type": "single_sink_destination_connector",
+        "domain": "base",
+        "enterprise_grade_today": false,
+        "m5_expectations": [
+          "at_least_one_baseline_success_chain"
+        ]
+      },
+      {
+        "destination": "clickhouse",
+        "surface_type": "single_sink_destination_connector",
+        "domain": "base",
+        "enterprise_grade_today": false,
+        "m5_expectations": [
+          "at_least_one_baseline_success_chain"
+        ]
+      },
+      {
+        "destination": "mongodb",
+        "surface_type": "single_sink_destination_connector",
+        "domain": "base",
+        "enterprise_grade_today": false,
+        "m5_expectations": [
+          "at_least_one_baseline_success_chain"
+        ]
+      },
+      {
+        "destination": "loki",
+        "surface_type": "single_sink_destination_connector",
+        "domain": "base",
+        "enterprise_grade_today": false,
+        "m5_expectations": [
+          "at_least_one_baseline_success_chain"
+        ]
+      }
+    ],
+    "composition_orchestration_surfaces": [
+      {
+        "destination": "fanout",
+        "surface_type": "destination_composition_orchestration",
+        "single_sink_connector": false,
+        "domain": "base_composition_surface",
+        "m5_expectations": [
+          "at_least_one_success_chain",
+          "at_least_one_partial_or_failure_chain"
+        ]
+      }
+    ]
+  },
+  "runtime_governance_usage_provenance_surfaces": [
+    "TaskV1",
+    "FlowProcessor",
+    "Delivery",
+    "run_meta.json",
+    "delivery_receipt.json",
+    "batch_report.json",
+    "usage_record.json",
+    "queue.sqlite3",
+    "spool queue",
+    "queue inspect",
+    "queue requeue",
+    "replay delivery",
+    "verify recovery result",
+    "_governance/actions/<action_id>.json",
+    "_dlq/delivery"
+  ],
+  "capability_domain_assumptions": {
+    "current_retained_sources": "base_non_enterprise",
+    "current_retained_destinations": "base_non_enterprise",
+    "technical_domains_not_commercial": true,
+    "pro": "base plus current uns-stream optional extras; not a default M5 execution claim",
+    "extra": "incubating/non-default; not part of retained M5 execution surface"
+  },
+  "excluded_scope": [
+    "distributed runtime",
+    "cloud or Kubernetes packaging",
+    "billing pricing entitlement",
+    "RBAC approval workflow",
+    "enterprise connector implementation",
+    "real deep matrix execution in S0",
+    "benchmark expansion in S0",
+    "release bundle implementation in S0"
+  ]
+}

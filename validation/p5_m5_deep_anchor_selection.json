@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M5-S0 representative deep-anchor selection freeze",
+  "selection_strategy": "representative_layered_anchors_not_equal_depth_all_pairs",
+  "anchors": {
+    "filesystem": {
+      "anchor_type": "lightweight_baseline_destination",
+      "why": "low-cost artifact path for repeated execution and baseline output stability",
+      "depth": "deep_anchor"
+    },
+    "opensearch": {
+      "anchor_type": "real_service_destination",
+      "why": "service-backed sink requiring cleanup/isolation discipline",
+      "depth": "deep_anchor"
+    },
+    "webhook": {
+      "anchor_type": "delivery_failure_replay_verify",
+      "why": "simple failure surface for replay and verify governance checks",
+      "depth": "representative_deep_anchor"
+    },
+    "kafka": {
+      "anchor_type": "delivery_failure_replay_verify",
+      "why": "structured sink failure/replay anchor without claiming broker-runtime ownership",
+      "depth": "representative_deep_anchor"
+    },
+    "spool_queue": {
+      "anchor_type": "poison_orphan_requeue_inspect_verify",
+      "why": "local artifact queue governance anchor",
+      "depth": "representative_deep_anchor"
+    },
+    "sqlite_queue": {
+      "anchor_type": "poison_orphan_requeue_inspect_verify",
+      "why": "same-host/shared-storage queue governance anchor",
+      "depth": "representative_deep_anchor"
+    },
+    "google_drive_document_v1": {
+      "anchor_type": "representative_uns_saas_source",
+      "why": "bounded SaaS document acquisition with source->usage visibility",
+      "depth": "representative_deep_anchor"
+    },
+    "confluence_document_v1": {
+      "anchor_type": "representative_uns_saas_source",
+      "why": "knowledge-space acquisition with bounded source/provenance pressure",
+      "depth": "representative_deep_anchor"
+    },
+    "kafka_partition_offset_v1": {
+      "anchor_type": "representative_it_streaming_source",
+      "why": "bounded partition/offset source pressure without distributed consumer claims",
+      "depth": "representative_deep_anchor"
+    },
+    "fanout": {
+      "anchor_type": "destination_composition_orchestration",
+      "why": "composition aggregate and partial-failure behavior must not be read as a sink",
+      "depth": "composition_deep_anchor",
+      "single_sink_connector": false
+    }
+  },
+  "non_deep_surfaces": {
+    "coverage": "baseline_success_and_abnormal_paths_as_applicable",
+    "not": "equal-depth all-pairs proof"
+  },
+  "excluded_scope": [
+    "distributed runtime",
+    "cloud or Kubernetes packaging",
+    "billing pricing entitlement",
+    "RBAC approval workflow",
+    "enterprise connector implementation",
+    "real deep matrix execution in S0",
+    "benchmark expansion in S0",
+    "release bundle implementation in S0"
+  ]
+}
