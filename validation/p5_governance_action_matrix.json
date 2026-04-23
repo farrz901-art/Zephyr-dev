@@ -36,7 +36,7 @@
       "runtime_behavior": "real",
       "cli": "zephyr-ingest queue inspect",
       "python_entry": "inspect_local_queue",
-      "receipt_support": "receipt_supported_by_helper_not_auto_written",
+      "receipt_support": "opt_in_persisted_receipt",
       "receipt_root": "caller_selected_artifact_root/_governance/actions/<action_id>.json",
       "underlying_audit_reality": "read_only_result_surface",
       "provenance_linkage": "task identity and queue state only when tasks are listed",
@@ -45,12 +45,12 @@
     {
       "action_kind": "verify_recovery_result",
       "category": "verification",
-      "runtime_behavior": "not_first_class_runtime_action",
-      "cli": null,
-      "python_entry": null,
-      "receipt_support": "contract_modeled_not_runtime_first_class",
-      "receipt_root": null,
-      "underlying_audit_reality": "manual/helper verification remains external to runtime",
+      "runtime_behavior": "real",
+      "cli": "tools/p5_m4_closeout_report.py plus Python entry",
+      "python_entry": "verify_recovery_result",
+      "receipt_support": "persisted_receipt",
+      "receipt_root": "caller_selected_artifact_root/_governance/actions/<action_id>.json",
+      "underlying_audit_reality": "read-only verification over explicit evidence paths",
       "provenance_linkage": "bounded by inspected run_meta/delivery/queue evidence",
       "usage_linkage": "bounded by inspected usage_record evidence"
     }

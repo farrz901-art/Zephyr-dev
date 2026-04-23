@@ -151,7 +151,6 @@ def build_p5_source_contract_matrix() -> dict[str, object]:
         "not_claimed": [
             "commercial entitlement",
             "enterprise connector implementation",
-            "full source registry parity with destination/backend specs",
             "distributed runtime or fleet source ownership",
         ],
     }

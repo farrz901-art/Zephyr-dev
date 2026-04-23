@@ -326,7 +326,6 @@
   "not_claimed": [
     "commercial entitlement",
     "enterprise connector implementation",
-    "full source registry parity with destination/backend specs",
     "distributed runtime or fleet source ownership"
   ]
 }

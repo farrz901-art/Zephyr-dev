@@ -15,6 +15,7 @@ from zephyr_ingest.governance_action import (
 )
 from zephyr_ingest.obs.events import log_event
 from zephyr_ingest.queue_backend_factory import LocalQueueBackendKind
+from zephyr_ingest.source_contracts import normalize_source_contract_id
 from zephyr_ingest.spool_queue import (
     QueueRecoveryProvenanceV1,
     load_spool_record,
@@ -51,6 +52,7 @@ class QueueRecoveryResultDict(TypedDict):
     failure_count: int
     orphan_count: int
     recorded_at_utc: str
+    source_contract_id: str | None
 
 
 class QueueRecoveryError(ValueError):
@@ -78,6 +80,7 @@ class QueueRecoveryResultV1:
     failure_count: int
     orphan_count: int
     recorded_at_utc: str
+    source_contract_id: str | None = None
     task_identity_key: str | None = None
     audit_support: QueueGovernanceActionAuditSupport = "result_only"
 
@@ -98,6 +101,7 @@ class QueueRecoveryResultV1:
             "failure_count": self.failure_count,
             "orphan_count": self.orphan_count,
             "recorded_at_utc": self.recorded_at_utc,
+            "source_contract_id": self.source_contract_id,
         }
 
     def to_run_provenance(self) -> RunProvenanceV1:
@@ -165,6 +169,7 @@ def requeue_local_task(
         recovery_kind="requeue",
         task_id=result.task_id,
         task_identity_key=result.task_identity_key,
+        source_contract_id=result.source_contract_id,
         result_summary={
             "governance_result": result.governance_result,
             "source_bucket": result.source_bucket,
@@ -236,6 +241,12 @@ def requeue_local_spool_task(
     task_identity_key = None
     if record.task.identity is not None:
         task_identity_key = normalize_task_idempotency_key(record.task)
+    source_contract_id = record.task.inputs.document.source_contract_id
+    if source_contract_id is None:
+        source_contract_id = normalize_source_contract_id(
+            task_kind=record.task.kind,
+            task_document_source=record.task.inputs.document.source,
+        )
     return QueueRecoveryResultV1(
         root=str(resolved_root),
         task_id=record.task.task_id,
@@ -246,6 +257,7 @@ def requeue_local_spool_task(
         failure_count=record.governance.failure_count,
         orphan_count=record.governance.orphan_count,
         recorded_at_utc=recorded_at_utc,
+        source_contract_id=source_contract_id,
         task_identity_key=task_identity_key,
         audit_support="persisted_in_history",
     )
@@ -294,6 +306,12 @@ def requeue_local_sqlite_task(
     task_identity_key = None
     if task.identity is not None:
         task_identity_key = normalize_task_idempotency_key(task)
+    source_contract_id = task.inputs.document.source_contract_id
+    if source_contract_id is None:
+        source_contract_id = normalize_source_contract_id(
+            task_kind=task.kind,
+            task_document_source=task.inputs.document.source,
+        )
     recorded_at_utc = now_utc_isoformat()
     return QueueRecoveryResultV1(
         root=str(resolved_root),
@@ -313,6 +331,7 @@ def requeue_local_sqlite_task(
         failure_count=_read_sqlite_int(row=row, key="failure_count"),
         orphan_count=_read_sqlite_int(row=row, key="orphan_count"),
         recorded_at_utc=recorded_at_utc,
+        source_contract_id=source_contract_id,
         task_identity_key=task_identity_key,
         audit_support="result_only",
     )

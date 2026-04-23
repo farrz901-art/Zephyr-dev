@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M4 residual risk after S14 closeout",
+  "residual_risks": [
+    {
+      "risk": "distributed_runtime_not_claimed",
+      "classification": "explicit_non_claim",
+      "why_not_m4_debt": "M4 proves bounded local/same-host behavior only"
+    },
+    {
+      "risk": "cloud_kubernetes_packaging_not_claimed",
+      "classification": "post_m4_out_of_scope",
+      "why_not_m4_debt": "S10 produced packaging skeletons, not installers/deployment"
+    },
+    {
+      "risk": "billing_entitlement_rbac_not_claimed",
+      "classification": "explicit_non_claim",
+      "why_not_m4_debt": "technical usage/governance facts are non-commercial"
+    },
+    {
+      "risk": "enterprise_connectors_not_implemented",
+      "classification": "post_m4_out_of_scope",
+      "why_not_m4_debt": "current retained connectors are Base and non-enterprise"
+    }
+  ],
+  "must_not_hide": [
+    "verify_first_class_runtime_manual_action",
+    "inspect_persisted_receipt_without_default_mutation",
+    "retained_source_spec_registry_parity",
+    "canonical_source_contract_id_end_to_end",
+    "governance_history_backfill_path",
+    "governance_vocabulary_normalized"
+  ]
+}

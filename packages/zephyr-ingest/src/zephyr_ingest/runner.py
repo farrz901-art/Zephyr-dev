@@ -53,6 +53,7 @@ from zephyr_ingest.obs.batch_report_v1 import (
     MetricsV1 as BatchMetricsV1,
 )
 from zephyr_ingest.obs.events import log_event
+from zephyr_ingest.source_contracts import normalize_source_contract_id
 from zephyr_ingest.task_idempotency import normalize_task_idempotency_key
 from zephyr_ingest.task_v1 import (
     TaskDocumentInputV1,
@@ -251,7 +252,15 @@ def _build_task_for_document(
     return TaskV1(
         task_id=sha256,
         kind=task_kind,
-        inputs=TaskInputsV1(document=TaskDocumentInputV1.from_document_ref(doc)),
+        inputs=TaskInputsV1(
+            document=TaskDocumentInputV1.from_document_ref(
+                doc,
+                source_contract_id=normalize_source_contract_id(
+                    task_kind=task_kind,
+                    task_document_source=doc.source,
+                ),
+            )
+        ),
         execution=TaskExecutionV1(
             strategy=cfg.strategy,
             unique_element_ids=cfg.unique_element_ids,

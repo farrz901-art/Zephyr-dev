@@ -12,6 +12,7 @@ TaskKind = Literal["uns", "it"]
 class TaskDocumentInputV1Dict(TypedDict):
     uri: str
     source: str
+    source_contract_id: NotRequired[str]
     discovered_at_utc: str
     filename: str
     extension: str
@@ -84,9 +85,12 @@ class TaskDocumentInputV1:
     filename: str
     extension: str
     size_bytes: int
+    source_contract_id: str | None = None
 
     @classmethod
-    def from_document_ref(cls, doc: DocumentRef) -> TaskDocumentInputV1:
+    def from_document_ref(
+        cls, doc: DocumentRef, *, source_contract_id: str | None = None
+    ) -> TaskDocumentInputV1:
         return cls(
             uri=doc.uri,
             source=doc.source,
@@ -94,6 +98,7 @@ class TaskDocumentInputV1:
             filename=doc.filename,
             extension=doc.extension,
             size_bytes=doc.size_bytes,
+            source_contract_id=source_contract_id,
         )
 
     def to_document_ref(self) -> DocumentRef:
@@ -107,7 +112,7 @@ class TaskDocumentInputV1:
         )
 
     def to_dict(self) -> TaskDocumentInputV1Dict:
-        return {
+        payload: TaskDocumentInputV1Dict = {
             "uri": self.uri,
             "source": self.source,
             "discovered_at_utc": self.discovered_at_utc,
@@ -115,9 +120,18 @@ class TaskDocumentInputV1:
             "extension": self.extension,
             "size_bytes": self.size_bytes,
         }
+        if self.source_contract_id is not None:
+            payload["source_contract_id"] = self.source_contract_id
+        return payload
 
     @classmethod
     def from_dict(cls, data: Mapping[str, object]) -> TaskDocumentInputV1:
+        source_contract_id_obj = data.get("source_contract_id")
+        source_contract_id = None
+        if source_contract_id_obj is not None:
+            if not isinstance(source_contract_id_obj, str):
+                raise TypeError("TaskV1 document field 'source_contract_id' must be a string")
+            source_contract_id = source_contract_id_obj
         return cls(
             uri=_require_str(data=data, key="uri"),
             source=_require_str(data=data, key="source"),
@@ -125,6 +139,7 @@ class TaskDocumentInputV1:
             filename=_require_str(data=data, key="filename"),
             extension=_require_str(data=data, key="extension"),
             size_bytes=_require_int(data=data, key="size_bytes"),
+            source_contract_id=source_contract_id,
         )
 
 

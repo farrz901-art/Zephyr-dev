@@ -363,6 +363,7 @@ def test_requeue_poison_task_moves_to_pending_and_preserves_governance(tmp_path:
         "failure_count": 1,
         "orphan_count": 0,
         "recorded_at_utc": result_payload["recorded_at_utc"],
+        "source_contract_id": None,
     }
     assert not (queue.poison_dir / "task-requeue-poison.json").exists()
     assert pending_path.exists()
@@ -425,6 +426,7 @@ def test_requeue_inflight_task_moves_to_pending_and_preserves_governance(tmp_pat
         "failure_count": 0,
         "orphan_count": 0,
         "recorded_at_utc": result_payload["recorded_at_utc"],
+        "source_contract_id": None,
     }
     assert not inflight_path.exists()
     assert pending_path.exists()

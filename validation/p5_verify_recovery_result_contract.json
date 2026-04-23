@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M4-S14 verify first-classization",
+  "action_kind": "verify_recovery_result",
+  "category": "verification",
+  "python_entry": "zephyr_ingest.governance_action.verify_recovery_result",
+  "receipt_support": "persisted_receipt",
+  "events": [
+    "governance_action_start",
+    "manual_verify_result",
+    "governance_action_result",
+    "audit_linkage_written"
+  ],
+  "state_change": false,
+  "not_claimed": [
+    "RBAC approval",
+    "billing decision",
+    "complete historical reconstruction"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M4-S14 inspect persisted receipt",
+  "action_kind": "inspect_queue",
+  "category": "read_only",
+  "python_entry": "zephyr_ingest.queue_inspect.write_queue_inspect_receipt",
+  "default_behavior": "inspect_local_queue remains read_only_result_only",
+  "receipt_behavior": "opt_in_persisted_receipt_to_caller_selected_artifact_root",
+  "state_change": false,
+  "not_claimed": [
+    "queue mutation",
+    "distributed governance audit"
+  ]
+}

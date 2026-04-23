@@ -334,6 +334,7 @@ def test_sqlite_queue_participates_in_shared_inspection_and_requeue_subset(
         "failure_count": 1,
         "orphan_count": 0,
         "recorded_at_utc": recovery.recorded_at_utc,
+        "source_contract_id": None,
     }
     assert recovery.to_run_provenance().to_dict() == {
         "run_origin": "requeue",

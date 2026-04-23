@@ -42,7 +42,7 @@
     "verify_recovery_result": {
       "changes_state": false,
       "recovery_kind": "manual_verification",
-      "usage_linkage_status": "not_first_class_runtime_action"
+      "usage_linkage_status": "receipt_field_available_when_usage_record_known"
     }
   },
   "not_claimed": [

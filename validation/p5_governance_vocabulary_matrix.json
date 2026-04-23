@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M4-S14 governance vocabulary normalization",
+  "action_support_ladder": [
+    "modeled_contract",
+    "runtime_entry",
+    "receipt_capable",
+    "automatic_persisted_receipt",
+    "opt_in_persisted_receipt",
+    "backfill_capable"
+  ],
+  "persistence_status": [
+    "automatic_persisted_receipt",
+    "opt_in_persisted_receipt",
+    "backfilled_persisted_receipt",
+    "history_only",
+    "result_only",
+    "insufficient_evidence"
+  ],
+  "evidence_completeness": [
+    "complete",
+    "partial",
+    "insufficient_evidence"
+  ],
+  "actions": {
+    "requeue": {
+      "category": "state_changing",
+      "persistence_status": "automatic_persisted_receipt",
+      "backfill_status": "backfill_capable"
+    },
+    "replay_delivery": {
+      "category": "state_changing",
+      "persistence_status": "automatic_persisted_receipt",
+      "backfill_status": "backfill_capable"
+    },
+    "inspect_queue": {
+      "category": "read_only",
+      "persistence_status": "opt_in_persisted_receipt",
+      "backfill_status": "not_applicable"
+    },
+    "verify_recovery_result": {
+      "category": "verification",
+      "persistence_status": "automatic_persisted_receipt",
+      "backfill_status": "not_applicable"
+    }
+  },
+  "not_claimed": [
+    "RBAC",
+    "approval workflow",
+    "multi-operator governance platform"
+  ]
+}

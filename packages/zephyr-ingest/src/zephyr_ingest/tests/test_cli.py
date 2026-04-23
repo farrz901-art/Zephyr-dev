@@ -420,6 +420,7 @@ def test_cli_queue_requeue_prints_recovery_result(
         "failure_count": 1,
         "orphan_count": 0,
         "recorded_at_utc": payload["recorded_at_utc"],
+        "source_contract_id": None,
     }
     assert (queue.pending_dir / "task-recover-cli.json").exists()
     assert not (queue.poison_dir / "task-recover-cli.json").exists()
@@ -502,6 +503,7 @@ def test_cli_queue_sqlite_backend_supports_shared_inspection_and_requeue_subset(
         "failure_count": 1,
         "orphan_count": 0,
         "recorded_at_utc": requeue_payload["recorded_at_utc"],
+        "source_contract_id": None,
     }
 
 

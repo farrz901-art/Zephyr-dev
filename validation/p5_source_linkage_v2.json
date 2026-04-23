@@ -1,0 +1,115 @@
+{
+  "schema_version": 2,
+  "phase": "P5-M4-S14 canonical source linkage",
+  "canonical_source_contract_id_status": "normal_retained_paths_are_end_to_end",
+  "source_entries": [
+    {
+      "source_contract_id": "http_document_v1",
+      "source_spec_id": "source.uns.http_document.v1",
+      "registry_status": "registered",
+      "runtime_fields": [
+        "TaskV1.inputs.document.source_contract_id",
+        "usage_record.source.source_contract_id",
+        "governance_action_receipt_v1.linkage.source_contract_id"
+      ]
+    },
+    {
+      "source_contract_id": "s3_document_v1",
+      "source_spec_id": "source.uns.s3_document.v1",
+      "registry_status": "registered",
+      "runtime_fields": [
+        "TaskV1.inputs.document.source_contract_id",
+        "usage_record.source.source_contract_id",
+        "governance_action_receipt_v1.linkage.source_contract_id"
+      ]
+    },
+    {
+      "source_contract_id": "git_document_v1",
+      "source_spec_id": "source.uns.git_document.v1",
+      "registry_status": "registered",
+      "runtime_fields": [
+        "TaskV1.inputs.document.source_contract_id",
+        "usage_record.source.source_contract_id",
+        "governance_action_receipt_v1.linkage.source_contract_id"
+      ]
+    },
+    {
+      "source_contract_id": "google_drive_document_v1",
+      "source_spec_id": "source.uns.google_drive_document.v1",
+      "registry_status": "registered",
+      "runtime_fields": [
+        "TaskV1.inputs.document.source_contract_id",
+        "usage_record.source.source_contract_id",
+        "governance_action_receipt_v1.linkage.source_contract_id"
+      ]
+    },
+    {
+      "source_contract_id": "confluence_document_v1",
+      "source_spec_id": "source.uns.confluence_document.v1",
+      "registry_status": "registered",
+      "runtime_fields": [
+        "TaskV1.inputs.document.source_contract_id",
+        "usage_record.source.source_contract_id",
+        "governance_action_receipt_v1.linkage.source_contract_id"
+      ]
+    },
+    {
+      "source_contract_id": "http_json_cursor_v1",
+      "source_spec_id": "source.it.http_json_cursor.v1",
+      "registry_status": "registered",
+      "runtime_fields": [
+        "TaskV1.inputs.document.source_contract_id",
+        "usage_record.source.source_contract_id",
+        "governance_action_receipt_v1.linkage.source_contract_id"
+      ]
+    },
+    {
+      "source_contract_id": "postgresql_incremental_v1",
+      "source_spec_id": "source.it.postgresql_incremental.v1",
+      "registry_status": "registered",
+      "runtime_fields": [
+        "TaskV1.inputs.document.source_contract_id",
+        "usage_record.source.source_contract_id",
+        "governance_action_receipt_v1.linkage.source_contract_id"
+      ]
+    },
+    {
+      "source_contract_id": "clickhouse_incremental_v1",
+      "source_spec_id": "source.it.clickhouse_incremental.v1",
+      "registry_status": "registered",
+      "runtime_fields": [
+        "TaskV1.inputs.document.source_contract_id",
+        "usage_record.source.source_contract_id",
+        "governance_action_receipt_v1.linkage.source_contract_id"
+      ]
+    },
+    {
+      "source_contract_id": "kafka_partition_offset_v1",
+      "source_spec_id": "source.it.kafka_partition_offset.v1",
+      "registry_status": "registered",
+      "runtime_fields": [
+        "TaskV1.inputs.document.source_contract_id",
+        "usage_record.source.source_contract_id",
+        "governance_action_receipt_v1.linkage.source_contract_id"
+      ]
+    },
+    {
+      "source_contract_id": "mongodb_incremental_v1",
+      "source_spec_id": "source.it.mongodb_incremental.v1",
+      "registry_status": "registered",
+      "runtime_fields": [
+        "TaskV1.inputs.document.source_contract_id",
+        "usage_record.source.source_contract_id",
+        "governance_action_receipt_v1.linkage.source_contract_id"
+      ]
+    }
+  ],
+  "fallback_policy": {
+    "flow_family_only": "exceptional for non-retained or legacy tasks lacking canonical ids",
+    "alias_normalization": "bounded compatibility fallback, not the primary source truth"
+  },
+  "not_claimed": [
+    "future source additions are automatically canonical without registry update",
+    "uns and it source models are symmetric"
+  ]
+}

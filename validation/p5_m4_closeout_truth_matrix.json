@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M4 final closeout gated by S14-A",
+  "closeout_gate": {
+    "verify_first_class_runtime_manual_action": "resolved",
+    "inspect_persisted_receipt_without_default_mutation": "resolved",
+    "retained_source_spec_registry_parity": "resolved",
+    "canonical_source_contract_id_end_to_end": "resolved",
+    "governance_history_backfill_path": "resolved",
+    "governance_vocabulary_normalized": "resolved"
+  },
+  "gate_valid": true,
+  "truth_surfaces": {
+    "runtime": "resolved",
+    "recovery_operator": "resolved",
+    "benchmark": "resolved",
+    "bounded_concurrency": "resolved",
+    "capability_domains": "resolved",
+    "product_cut_packaging_skeleton": "resolved",
+    "usage_facts": "resolved",
+    "source_contracts": "resolved",
+    "runtime_usage_emission": "resolved",
+    "governance_manual_action": "resolved"
+  },
+  "source_registry_parity": {
+    "full_retained_source_registry_parity": true,
+    "registered_source_spec_ids": [
+      "source.it.clickhouse_incremental.v1",
+      "source.it.http_json_cursor.v1",
+      "source.it.kafka_partition_offset.v1",
+      "source.it.mongodb_incremental.v1",
+      "source.it.postgresql_incremental.v1",
+      "source.uns.confluence_document.v1",
+      "source.uns.git_document.v1",
+      "source.uns.google_drive_document.v1",
+      "source.uns.http_document.v1",
+      "source.uns.s3_document.v1"
+    ]
+  },
+  "not_claimed": [
+    "distributed runtime",
+    "cloud or Kubernetes packaging",
+    "billing pricing entitlement",
+    "RBAC approval workflow",
+    "enterprise connector implementation"
+  ]
+}

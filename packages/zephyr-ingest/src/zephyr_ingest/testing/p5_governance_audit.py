@@ -71,7 +71,7 @@ def build_p5_governance_action_matrix() -> dict[str, object]:
                 "runtime_behavior": "real",
                 "cli": "zephyr-ingest queue inspect",
                 "python_entry": "inspect_local_queue",
-                "receipt_support": "receipt_supported_by_helper_not_auto_written",
+                "receipt_support": "opt_in_persisted_receipt",
                 "receipt_root": (
                     "caller_selected_artifact_root/_governance/actions/<action_id>.json"
                 ),
@@ -82,14 +82,14 @@ def build_p5_governance_action_matrix() -> dict[str, object]:
             {
                 "action_kind": "verify_recovery_result",
                 "category": "verification",
-                "runtime_behavior": "not_first_class_runtime_action",
-                "cli": None,
-                "python_entry": None,
-                "receipt_support": "contract_modeled_not_runtime_first_class",
-                "receipt_root": None,
-                "underlying_audit_reality": (
-                    "manual/helper verification remains external to runtime"
+                "runtime_behavior": "real",
+                "cli": "tools/p5_m4_closeout_report.py plus Python entry",
+                "python_entry": "verify_recovery_result",
+                "receipt_support": "persisted_receipt",
+                "receipt_root": (
+                    "caller_selected_artifact_root/_governance/actions/<action_id>.json"
                 ),
+                "underlying_audit_reality": ("read-only verification over explicit evidence paths"),
                 "provenance_linkage": "bounded by inspected run_meta/delivery/queue evidence",
                 "usage_linkage": "bounded by inspected usage_record evidence",
             },
@@ -176,7 +176,7 @@ def build_p5_governance_usage_linkage() -> dict[str, object]:
             "verify_recovery_result": {
                 "changes_state": False,
                 "recovery_kind": "manual_verification",
-                "usage_linkage_status": "not_first_class_runtime_action",
+                "usage_linkage_status": "receipt_field_available_when_usage_record_known",
             },
         },
         "not_claimed": [
@@ -207,7 +207,7 @@ def _source_spec_mapping() -> list[dict[str, object]]:
                 "source_contract_id": source_contract_id,
                 "proposed_source_spec_id": proposed_spec_id,
                 "flow_family": flow_family,
-                "status": "contracted_not_in_spec_registry",
+                "status": "registered_in_spec_registry",
             }
         )
     return mappings
@@ -218,22 +218,21 @@ def build_p5_source_spec_parity() -> dict[str, object]:
     source_spec_ids = [spec_id for spec_id in spec_ids if spec_id.startswith("source.")]
     return {
         "schema_version": 1,
-        "phase": "P5-M4-S13 source spec parity bounded reduction",
-        "full_source_spec_registry_parity_today": False,
+        "phase": "P5-M4-S14 source spec parity completion",
+        "full_source_spec_registry_parity_today": True,
         "current_source_spec_ids_in_registry": source_spec_ids,
         "source_contract_truth_source": "validation/p5_source_contract_matrix.json",
         "source_usage_linkage_truth_source": "validation/p5_source_usage_linkage.json",
         "canonical_source_spec_direction": _source_spec_mapping(),
         "canonical_runtime_linkage": {
             "normalizer": "zephyr_ingest.usage_record.normalize_source_contract_id",
-            "status": "canonical mapping helper now explicit; fallback remains flow_family_only",
+            "status": "normal retained paths carry canonical ids; fallback remains exceptional",
         },
         "asymmetry_preserved": {
             "uns": "document acquisition source ids",
             "it": "structured progress source ids",
         },
         "not_claimed": [
-            "source specs are fully registered",
             "uns and it sources are symmetric",
             "all future source additions join usage linkage automatically",
         ],
@@ -310,8 +309,9 @@ def validate_p5_governance_audit_artifacts() -> list[P5GovernanceAuditCheck]:
     checks.append(
         P5GovernanceAuditCheck(
             name="governance_matrix_preserves_bounded_action_differences",
-            ok=verify["runtime_behavior"] == "not_first_class_runtime_action"
-            and inspect["category"] == "read_only",
+            ok=verify["runtime_behavior"] == "real"
+            and inspect["category"] == "read_only"
+            and inspect["receipt_support"] == "opt_in_persisted_receipt",
             detail=f"verify={verify['runtime_behavior']} inspect={inspect['category']}",
         )
     )
@@ -334,8 +334,8 @@ def validate_p5_governance_audit_artifacts() -> list[P5GovernanceAuditCheck]:
     source_parity = build_p5_source_spec_parity()
     checks.append(
         P5GovernanceAuditCheck(
-            name="source_spec_parity_is_bounded_not_full",
-            ok=source_parity["full_source_spec_registry_parity_today"] is False
+            name="source_spec_parity_is_complete_for_retained_sources",
+            ok=source_parity["full_source_spec_registry_parity_today"] is True
             and len(cast(list[object], source_parity["canonical_source_spec_direction"])) == 10,
             detail=f"registry={source_parity['current_source_spec_ids_in_registry']}",
         )
@@ -348,15 +348,15 @@ def validate_p5_governance_audit_artifacts() -> list[P5GovernanceAuditCheck]:
                 "governance/manual-action truth is bounded",
                 "governance_action_receipt_v1",
                 "not RBAC",
-                "verify is not first-class",
+                "verify is first-class",
             ),
         ),
         (
             P5_SOURCE_SPEC_PARITY_REPORT_PATH,
             (
-                "source spec parity remains partial",
+                "source spec parity is complete for retained sources",
                 "canonical source spec direction",
-                "flow_family_only fallback remains honest",
+                "flow_family_only fallback is exceptional",
             ),
         ),
     ):
@@ -395,9 +395,9 @@ def format_p5_governance_audit_summary() -> str:
             "P5-M4-S13 governance/manual-action truth:",
             "- governance/manual-action truth is bounded and non-RBAC",
             "- requeue and replay_delivery now have persisted governance action receipts",
-            "- inspect_queue remains read-only; verify is not first-class runtime action",
+            "- inspect_queue remains read-only with opt-in receipt; verify is first-class",
             "- governance receipts link task/run/provenance/usage/source fields when available",
-            "- source spec parity remains partial with canonical source spec direction captured",
+            "- source spec parity is complete for retained sources",
         )
     )
 

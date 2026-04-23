@@ -7,8 +7,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal, TypedDict, cast
 
+from zephyr_ingest.governance_action import (
+    GovernanceEvidenceRefV1,
+    build_governance_action_receipt_v1,
+    write_governance_action_receipt_v1,
+)
 from zephyr_ingest.queue_backend_factory import LocalQueueBackendKind
 from zephyr_ingest.queue_recover import QueueGovernanceActionAuditSupport, QueueGovernanceActionV1
+from zephyr_ingest.source_contracts import normalize_source_contract_id
 from zephyr_ingest.spool_queue import (
     QueueRecoveryProvenanceV1Dict,
     SpoolBucket,
@@ -213,6 +219,44 @@ def inspect_local_queue(
     if backend_kind == "spool":
         return inspect_local_spool_queue(root=root, bucket=bucket, limit=limit)
     return inspect_local_sqlite_queue(root=root, bucket=bucket, limit=limit)
+
+
+def write_queue_inspect_receipt(
+    *,
+    artifact_root: Path,
+    inspect_result: QueueInspectResultV1,
+) -> Path:
+    first_task = inspect_result.tasks[0] if inspect_result.tasks else None
+    source_contract_id = None
+    if first_task is not None:
+        source_contract_id = normalize_source_contract_id(
+            task_kind="uns" if first_task.kind == "uns" else "it",
+            task_document_source=first_task.source,
+        )
+    evidence_refs: list[GovernanceEvidenceRefV1] = [
+        {"kind": "queue_inspect_result", "ref": inspect_result.root}
+    ]
+    evidence_refs.extend(
+        {"kind": "queue_task_ref", "ref": task.record_path} for task in inspect_result.tasks[:5]
+    )
+    receipt = build_governance_action_receipt_v1(
+        action_kind="inspect_queue",
+        action_category="read_only",
+        status="observed",
+        audit_support="persisted_receipt",
+        recovery_kind=None,
+        task_id=None if first_task is None else first_task.task_id,
+        source_contract_id=source_contract_id,
+        result_summary={
+            "changed_state": False,
+            "queue_root": inspect_result.root,
+            "bucket": inspect_result.bucket,
+            "listed_tasks": inspect_result.summary.listed_tasks,
+            "governance_problem_tasks": inspect_result.summary.governance_problem_tasks,
+        },
+        evidence_refs=tuple(evidence_refs),
+    )
+    return write_governance_action_receipt_v1(artifact_root=artifact_root, receipt=receipt)
 
 
 def inspect_local_spool_queue(

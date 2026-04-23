@@ -134,11 +134,8 @@ def test_p5_governance_matrix_preserves_action_differences() -> None:
     assert by_kind["requeue"]["receipt_support"] == "automatic_persisted_receipt"
     assert by_kind["replay_delivery"]["provenance_linkage"] == "delivery_origin=replay"
     assert by_kind["inspect_queue"]["category"] == "read_only"
-    assert (
-        by_kind["inspect_queue"]["receipt_support"]
-        == "receipt_supported_by_helper_not_auto_written"
-    )
-    assert by_kind["verify_recovery_result"]["runtime_behavior"] == "not_first_class_runtime_action"
+    assert by_kind["inspect_queue"]["receipt_support"] == "opt_in_persisted_receipt"
+    assert by_kind["verify_recovery_result"]["runtime_behavior"] == "real"
     assert "RBAC" in cast(list[object], matrix["not_claimed"])
 
 
@@ -269,7 +266,7 @@ def test_source_spec_parity_keeps_partial_truth_and_canonical_mapping() -> None:
     mappings = cast(list[dict[str, object]], parity["canonical_source_spec_direction"])
     runtime_linkage = cast(dict[str, object], parity["canonical_runtime_linkage"])
 
-    assert parity["full_source_spec_registry_parity_today"] is False
+    assert parity["full_source_spec_registry_parity_today"] is True
     assert len(mappings) == 10
     assert mappings[0]["proposed_source_spec_id"] == "source.uns.http_document.v1"
     assert runtime_linkage["normalizer"] == (
@@ -348,9 +345,9 @@ def test_p5_governance_audit_cli_prints_paths_json_checks_and_summary(
     assert p5_governance_main(["--check-artifacts"]) == 0
     check_output = capsys.readouterr()
     assert "governance_action_matrix_matches_helper -> ok" in check_output.out
-    assert "source_spec_parity_is_bounded_not_full -> ok" in check_output.out
+    assert "source_spec_parity_is_complete_for_retained_sources -> ok" in check_output.out
 
     assert p5_governance_main([]) == 0
     summary_output = capsys.readouterr()
     assert "bounded and non-RBAC" in summary_output.out
-    assert "source spec parity remains partial" in summary_output.out
+    assert "source spec parity is complete" in summary_output.out

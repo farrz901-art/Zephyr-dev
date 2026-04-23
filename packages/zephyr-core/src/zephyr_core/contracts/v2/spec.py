@@ -27,7 +27,7 @@ class SpecFieldV1(TypedDict):
 class ConnectorSpecV1(TypedDict):
     id: str
     version: Literal[1]
-    kind: Literal["destination", "backend"]
+    kind: Literal["destination", "backend", "source"]
     name: str
     description: str
     fields: list[SpecFieldV1]

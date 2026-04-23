@@ -6,6 +6,7 @@ from typing import Literal, TypedDict, cast
 
 from zephyr_core import RunMetaV1
 from zephyr_ingest.destinations.base import DeliveryReceipt
+from zephyr_ingest.source_contracts import normalize_source_contract_id
 from zephyr_ingest.task_v1 import TaskKind, TaskV1
 
 USAGE_RECORD_SCHEMA_VERSION: Literal[1] = 1
@@ -101,50 +102,6 @@ class BatchUsageRecordV1(TypedDict):
     result: BatchUsageResultV1
     source_linkage_scope: Literal["aggregate_from_task_records_and_batch_report"]
     not_claimed: list[str]
-
-
-_UNS_SOURCE_CONTRACT_BY_DOCUMENT_SOURCE: dict[str, str] = {
-    "http": "http_document_v1",
-    "http_document": "http_document_v1",
-    "http_document_v1": "http_document_v1",
-    "url": "http_document_v1",
-    "s3": "s3_document_v1",
-    "s3_document": "s3_document_v1",
-    "s3_document_v1": "s3_document_v1",
-    "git": "git_document_v1",
-    "git_document": "git_document_v1",
-    "git_document_v1": "git_document_v1",
-    "google_drive": "google_drive_document_v1",
-    "google_drive_document": "google_drive_document_v1",
-    "google_drive_document_v1": "google_drive_document_v1",
-    "confluence": "confluence_document_v1",
-    "confluence_document": "confluence_document_v1",
-    "confluence_document_v1": "confluence_document_v1",
-}
-
-_IT_SOURCE_CONTRACT_BY_DOCUMENT_SOURCE: dict[str, str] = {
-    "http_json_cursor": "http_json_cursor_v1",
-    "http_json_cursor_v1": "http_json_cursor_v1",
-    "postgresql": "postgresql_incremental_v1",
-    "postgresql_incremental": "postgresql_incremental_v1",
-    "postgresql_incremental_v1": "postgresql_incremental_v1",
-    "clickhouse": "clickhouse_incremental_v1",
-    "clickhouse_incremental": "clickhouse_incremental_v1",
-    "clickhouse_incremental_v1": "clickhouse_incremental_v1",
-    "kafka": "kafka_partition_offset_v1",
-    "kafka_partition_offset": "kafka_partition_offset_v1",
-    "kafka_partition_offset_v1": "kafka_partition_offset_v1",
-    "mongodb": "mongodb_incremental_v1",
-    "mongodb_incremental": "mongodb_incremental_v1",
-    "mongodb_incremental_v1": "mongodb_incremental_v1",
-}
-
-
-def normalize_source_contract_id(*, task_kind: TaskKind, task_document_source: str) -> str | None:
-    source = task_document_source.strip().lower()
-    if task_kind == "uns":
-        return _UNS_SOURCE_CONTRACT_BY_DOCUMENT_SOURCE.get(source)
-    return _IT_SOURCE_CONTRACT_BY_DOCUMENT_SOURCE.get(source)
 
 
 def _raw_unit(*, task_kind: TaskKind) -> RawUnitV1:
@@ -264,10 +221,12 @@ def build_usage_record_v1(
     meta: RunMetaV1,
     receipt: DeliveryReceipt | None,
 ) -> UsageRecordV1:
-    source_contract_id = normalize_source_contract_id(
-        task_kind=task.kind,
-        task_document_source=task.inputs.document.source,
-    )
+    source_contract_id = task.inputs.document.source_contract_id
+    if source_contract_id is None:
+        source_contract_id = normalize_source_contract_id(
+            task_kind=task.kind,
+            task_document_source=task.inputs.document.source,
+        )
     source_relation: Literal["document_selection", "structured_emitted_item"]
     source_relation = "document_selection" if task.kind == "uns" else "structured_emitted_item"
     source_status: Literal["linked", "flow_family_only"]
