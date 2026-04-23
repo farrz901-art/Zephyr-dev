@@ -140,9 +140,9 @@ _IT_SOURCE_CONTRACT_BY_DOCUMENT_SOURCE: dict[str, str] = {
 }
 
 
-def _source_contract_id(*, task: TaskV1) -> str | None:
-    source = task.inputs.document.source.strip().lower()
-    if task.kind == "uns":
+def normalize_source_contract_id(*, task_kind: TaskKind, task_document_source: str) -> str | None:
+    source = task_document_source.strip().lower()
+    if task_kind == "uns":
         return _UNS_SOURCE_CONTRACT_BY_DOCUMENT_SOURCE.get(source)
     return _IT_SOURCE_CONTRACT_BY_DOCUMENT_SOURCE.get(source)
 
@@ -264,7 +264,10 @@ def build_usage_record_v1(
     meta: RunMetaV1,
     receipt: DeliveryReceipt | None,
 ) -> UsageRecordV1:
-    source_contract_id = _source_contract_id(task=task)
+    source_contract_id = normalize_source_contract_id(
+        task_kind=task.kind,
+        task_document_source=task.inputs.document.source,
+    )
     source_relation: Literal["document_selection", "structured_emitted_item"]
     source_relation = "document_selection" if task.kind == "uns" else "structured_emitted_item"
     source_status: Literal["linked", "flow_family_only"]

@@ -20,6 +20,10 @@ EventName = Literal[
     "replay_done",
     "replay_attempt",
     "replay_result",
+    "governance_action_start",
+    "governance_action_result",
+    "manual_verify_result",
+    "audit_linkage_written",
 ]
 
 

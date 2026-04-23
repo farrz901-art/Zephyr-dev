@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import time
 from dataclasses import dataclass
@@ -8,6 +9,11 @@ from pathlib import Path
 from typing import Literal, TypedDict, cast
 
 from zephyr_core.contracts.v1.run_meta import RunProvenanceV1
+from zephyr_ingest.governance_action import (
+    build_governance_action_receipt_v1,
+    write_governance_action_receipt_v1,
+)
+from zephyr_ingest.obs.events import log_event
 from zephyr_ingest.queue_backend_factory import LocalQueueBackendKind
 from zephyr_ingest.spool_queue import (
     QueueRecoveryProvenanceV1,
@@ -18,6 +24,8 @@ from zephyr_ingest.spool_queue import (
 )
 from zephyr_ingest.task_idempotency import normalize_task_idempotency_key
 from zephyr_ingest.task_v1 import TaskV1
+
+logger = logging.getLogger(__name__)
 
 RecoverableSpoolBucket = Literal["poison", "inflight"]
 QueueGovernanceActionKind = Literal["requeue"]
@@ -127,17 +135,64 @@ def requeue_local_task(
     task_id: str,
     backend_kind: LocalQueueBackendKind = "spool",
 ) -> QueueRecoveryResultV1:
+    log_event(
+        logger,
+        level=logging.INFO,
+        event="governance_action_start",
+        action_kind="requeue",
+        root=root,
+        source_bucket=source_bucket,
+        task_id=task_id,
+        backend_kind=backend_kind,
+    )
     if backend_kind == "spool":
-        return requeue_local_spool_task(
+        result = requeue_local_spool_task(
             root=root,
             source_bucket=source_bucket,
             task_id=task_id,
         )
-    return requeue_local_sqlite_task(
-        root=root,
-        source_bucket=source_bucket,
-        task_id=task_id,
+    else:
+        result = requeue_local_sqlite_task(
+            root=root,
+            source_bucket=source_bucket,
+            task_id=task_id,
+        )
+    receipt = build_governance_action_receipt_v1(
+        action_kind="requeue",
+        action_category="state_changing",
+        status="succeeded",
+        audit_support="persisted_receipt",
+        recovery_kind="requeue",
+        task_id=result.task_id,
+        task_identity_key=result.task_identity_key,
+        result_summary={
+            "governance_result": result.governance_result,
+            "source_bucket": result.source_bucket,
+            "target_bucket": "pending",
+            "backend_kind": backend_kind,
+            "underlying_audit_support": result.audit_support,
+        },
+        evidence_refs=(
+            {"kind": "source_task_ref", "ref": result.source_path},
+            {"kind": "target_task_ref", "ref": result.target_path},
+        ),
     )
+    receipt_path = write_governance_action_receipt_v1(
+        artifact_root=Path(result.root),
+        receipt=receipt,
+        logger=logger,
+    )
+    log_event(
+        logger,
+        level=logging.INFO,
+        event="governance_action_result",
+        action_kind="requeue",
+        action_id=receipt.action_id,
+        task_id=result.task_id,
+        ok=True,
+        receipt_path=receipt_path,
+    )
+    return result
 
 
 def requeue_local_spool_task(

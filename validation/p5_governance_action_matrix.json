@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M4-S13 governance/manual-action audit hardening",
+  "scope": "bounded_local_operator_actions_not_rbac_or_approval_platform",
+  "actions": [
+    {
+      "action_kind": "requeue",
+      "category": "state_changing",
+      "runtime_behavior": "real",
+      "cli": "zephyr-ingest queue requeue",
+      "python_entry": "requeue_local_task",
+      "receipt_support": "automatic_persisted_receipt",
+      "receipt_root": "queue_root/_governance/actions/<action_id>.json",
+      "underlying_audit_reality": {
+        "spool": "persisted_in_history_plus_receipt",
+        "sqlite": "result_only_plus_receipt"
+      },
+      "provenance_linkage": "run_origin=requeue",
+      "usage_linkage": "receipt can reference usage_record when caller has usage evidence"
+    },
+    {
+      "action_kind": "replay_delivery",
+      "category": "state_changing",
+      "runtime_behavior": "real",
+      "cli": "zephyr-ingest replay-delivery",
+      "python_entry": "replay_delivery_dlq",
+      "receipt_support": "automatic_persisted_receipt",
+      "receipt_root": "out_root/_governance/actions/<action_id>.json",
+      "underlying_audit_reality": "DLQ/delivery_done movement plus receipt",
+      "provenance_linkage": "delivery_origin=replay",
+      "usage_linkage": "receipt can reference usage_record when caller has usage evidence"
+    },
+    {
+      "action_kind": "inspect_queue",
+      "category": "read_only",
+      "runtime_behavior": "real",
+      "cli": "zephyr-ingest queue inspect",
+      "python_entry": "inspect_local_queue",
+      "receipt_support": "receipt_supported_by_helper_not_auto_written",
+      "receipt_root": "caller_selected_artifact_root/_governance/actions/<action_id>.json",
+      "underlying_audit_reality": "read_only_result_surface",
+      "provenance_linkage": "task identity and queue state only when tasks are listed",
+      "usage_linkage": "bounded; inspect does not create usage facts"
+    },
+    {
+      "action_kind": "verify_recovery_result",
+      "category": "verification",
+      "runtime_behavior": "not_first_class_runtime_action",
+      "cli": null,
+      "python_entry": null,
+      "receipt_support": "contract_modeled_not_runtime_first_class",
+      "receipt_root": null,
+      "underlying_audit_reality": "manual/helper verification remains external to runtime",
+      "provenance_linkage": "bounded by inspected run_meta/delivery/queue evidence",
+      "usage_linkage": "bounded by inspected usage_record evidence"
+    }
+  ],
+  "not_claimed": [
+    "RBAC",
+    "approval workflow",
+    "multi-operator collaboration platform",
+    "billing or entitlement action",
+    "full parity across requeue/replay/inspect/verify persistence"
+  ]
+}

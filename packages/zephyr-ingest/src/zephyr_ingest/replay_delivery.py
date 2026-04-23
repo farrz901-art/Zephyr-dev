@@ -44,6 +44,11 @@ from zephyr_ingest.destinations.weaviate import (
     weaviate_failed_object_status,
 )
 from zephyr_ingest.destinations.webhook import WebhookDestination
+from zephyr_ingest.governance_action import (
+    GovernanceActionStatus,
+    build_governance_action_receipt_v1,
+    write_governance_action_receipt_v1,
+)
 from zephyr_ingest.obs.events import log_event
 
 logger = logging.getLogger(__name__)
@@ -626,6 +631,18 @@ def replay_delivery_dlq(
     log_event(
         logger,
         level=logging.INFO,
+        event="governance_action_start",
+        action_kind="replay_delivery",
+        out_root=out_root,
+        destination=sink.name,
+        total=len(files),
+        dry_run=dry_run,
+        move_done=move_done,
+    )
+
+    log_event(
+        logger,
+        level=logging.INFO,
         event="replay_start",
         out_root=out_root,
         destination=sink.name,
@@ -640,6 +657,8 @@ def replay_delivery_dlq(
         done_dir.mkdir(parents=True, exist_ok=True)
 
     attempted = succeeded = failed = moved = 0
+    first_task_id: str | None = None
+    first_run_id: str | None = None
 
     for fp in files:
         attempted += 1
@@ -668,6 +687,14 @@ def replay_delivery_dlq(
             continue
 
         run_meta = _run_meta_with_replay_provenance(run_meta=cast("dict[str, Any]", run_meta_raw))
+        if first_run_id is None:
+            first_run_id = run_id
+        provenance_obj = run_meta.get("provenance")
+        if first_task_id is None and isinstance(provenance_obj, dict):
+            provenance = cast("dict[str, object]", provenance_obj)
+            task_id_obj = provenance.get("task_id")
+            if isinstance(task_id_obj, str):
+                first_task_id = task_id_obj
 
         log_event(
             logger,
@@ -754,10 +781,57 @@ def replay_delivery_dlq(
         moved_to_done=moved,
     )
 
-    return ReplayStats(
+    stats = ReplayStats(
         total=len(files),
         attempted=attempted,
         succeeded=succeeded,
         failed=failed,
         moved_to_done=moved,
     )
+    if dry_run:
+        governance_receipt_status: GovernanceActionStatus = "observed"
+    elif failed == 0:
+        governance_receipt_status = "succeeded"
+    else:
+        governance_receipt_status = "failed"
+    governance_receipt = build_governance_action_receipt_v1(
+        action_kind="replay_delivery",
+        action_category="state_changing",
+        status=governance_receipt_status,
+        audit_support="persisted_receipt",
+        recovery_kind="replay",
+        task_id=first_task_id,
+        run_id=first_run_id,
+        result_summary={
+            "total": stats.total,
+            "attempted": stats.attempted,
+            "succeeded": stats.succeeded,
+            "failed": stats.failed,
+            "moved_to_done": stats.moved_to_done,
+            "destination": sink.name,
+            "dry_run": dry_run,
+            "move_done": move_done,
+        },
+        evidence_refs=(
+            {"kind": "delivery_dlq_dir", "ref": str((out_root / "_dlq" / "delivery").resolve())},
+            {
+                "kind": "delivery_done_dir",
+                "ref": str((out_root / "_dlq" / "delivery_done").resolve()),
+            },
+        ),
+    )
+    receipt_path = write_governance_action_receipt_v1(
+        artifact_root=out_root,
+        receipt=governance_receipt,
+        logger=logger,
+    )
+    log_event(
+        logger,
+        level=logging.INFO,
+        event="governance_action_result",
+        action_kind="replay_delivery",
+        action_id=governance_receipt.action_id,
+        ok=failed == 0,
+        receipt_path=receipt_path,
+    )
+    return stats

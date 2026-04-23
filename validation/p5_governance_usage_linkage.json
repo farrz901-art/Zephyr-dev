@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M4-S13 governance to usage/provenance linkage",
+  "linkage_fields": {
+    "task": [
+      "task_id",
+      "task_identity_key"
+    ],
+    "run": [
+      "run_id",
+      "checkpoint_identity_key"
+    ],
+    "usage": [
+      "usage_record_ref"
+    ],
+    "source": [
+      "source_contract_id"
+    ],
+    "evidence": [
+      "evidence_refs",
+      "result_summary"
+    ]
+  },
+  "action_linkage": {
+    "requeue": {
+      "changes_state": true,
+      "recovery_kind": "requeue",
+      "provenance_marker": "run_origin=requeue",
+      "usage_linkage_status": "receipt_field_available_when_usage_record_known"
+    },
+    "replay_delivery": {
+      "changes_state": true,
+      "recovery_kind": "replay",
+      "provenance_marker": "delivery_origin=replay",
+      "usage_linkage_status": "receipt_field_available_when_usage_record_known"
+    },
+    "inspect_queue": {
+      "changes_state": false,
+      "recovery_kind": null,
+      "usage_linkage_status": "read_only_no_usage_fact_created"
+    },
+    "verify_recovery_result": {
+      "changes_state": false,
+      "recovery_kind": "manual_verification",
+      "usage_linkage_status": "not_first_class_runtime_action"
+    }
+  },
+  "not_claimed": [
+    "perfect linkage for every historical action",
+    "billing action ledger",
+    "RBAC or approval audit system"
+  ]
+}

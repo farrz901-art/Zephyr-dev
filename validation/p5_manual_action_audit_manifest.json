@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M4-S13 manual action audit manifest",
+  "receipt_record_kind": "governance_action_receipt_v1",
+  "logical_artifact": "governance_action.json",
+  "physical_layout": "_governance/actions/<action_id>.json",
+  "required_fields": [
+    "action_id",
+    "action_kind",
+    "action_category",
+    "recorded_at_utc",
+    "status",
+    "audit_support",
+    "recovery_kind",
+    "linkage.task_id",
+    "linkage.run_id",
+    "linkage.task_identity_key",
+    "linkage.checkpoint_identity_key",
+    "linkage.usage_record_ref",
+    "linkage.source_contract_id",
+    "evidence_refs",
+    "result_summary",
+    "not_claimed"
+  ],
+  "event_taxonomy": {
+    "runtime_events": [
+      "governance_action_start",
+      "governance_action_result",
+      "audit_linkage_written"
+    ],
+    "reserved_or_helper_events": [
+      "manual_verify_result"
+    ],
+    "not_claimed": "full governance event platform"
+  },
+  "redaction_boundary": {
+    "must_not_include": [
+      "secret values",
+      "tokens",
+      "credentials",
+      "billing price"
+    ]
+  }
+}

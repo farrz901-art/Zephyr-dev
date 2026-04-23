@@ -1,0 +1,83 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M4-S13 source spec parity bounded reduction",
+  "full_source_spec_registry_parity_today": false,
+  "current_source_spec_ids_in_registry": [],
+  "source_contract_truth_source": "E:\\Github_Projects\\Zephyr\\validation\\p5_source_contract_matrix.json",
+  "source_usage_linkage_truth_source": "E:\\Github_Projects\\Zephyr\\validation\\p5_source_usage_linkage.json",
+  "canonical_source_spec_direction": [
+    {
+      "source_contract_id": "http_document_v1",
+      "proposed_source_spec_id": "source.uns.http_document.v1",
+      "flow_family": "uns",
+      "status": "contracted_not_in_spec_registry"
+    },
+    {
+      "source_contract_id": "s3_document_v1",
+      "proposed_source_spec_id": "source.uns.s3_document.v1",
+      "flow_family": "uns",
+      "status": "contracted_not_in_spec_registry"
+    },
+    {
+      "source_contract_id": "git_document_v1",
+      "proposed_source_spec_id": "source.uns.git_document.v1",
+      "flow_family": "uns",
+      "status": "contracted_not_in_spec_registry"
+    },
+    {
+      "source_contract_id": "google_drive_document_v1",
+      "proposed_source_spec_id": "source.uns.google_drive_document.v1",
+      "flow_family": "uns",
+      "status": "contracted_not_in_spec_registry"
+    },
+    {
+      "source_contract_id": "confluence_document_v1",
+      "proposed_source_spec_id": "source.uns.confluence_document.v1",
+      "flow_family": "uns",
+      "status": "contracted_not_in_spec_registry"
+    },
+    {
+      "source_contract_id": "http_json_cursor_v1",
+      "proposed_source_spec_id": "source.it.http_json_cursor.v1",
+      "flow_family": "it",
+      "status": "contracted_not_in_spec_registry"
+    },
+    {
+      "source_contract_id": "postgresql_incremental_v1",
+      "proposed_source_spec_id": "source.it.postgresql_incremental.v1",
+      "flow_family": "it",
+      "status": "contracted_not_in_spec_registry"
+    },
+    {
+      "source_contract_id": "clickhouse_incremental_v1",
+      "proposed_source_spec_id": "source.it.clickhouse_incremental.v1",
+      "flow_family": "it",
+      "status": "contracted_not_in_spec_registry"
+    },
+    {
+      "source_contract_id": "kafka_partition_offset_v1",
+      "proposed_source_spec_id": "source.it.kafka_partition_offset.v1",
+      "flow_family": "it",
+      "status": "contracted_not_in_spec_registry"
+    },
+    {
+      "source_contract_id": "mongodb_incremental_v1",
+      "proposed_source_spec_id": "source.it.mongodb_incremental.v1",
+      "flow_family": "it",
+      "status": "contracted_not_in_spec_registry"
+    }
+  ],
+  "canonical_runtime_linkage": {
+    "normalizer": "zephyr_ingest.usage_record.normalize_source_contract_id",
+    "status": "canonical mapping helper now explicit; fallback remains flow_family_only"
+  },
+  "asymmetry_preserved": {
+    "uns": "document acquisition source ids",
+    "it": "structured progress source ids"
+  },
+  "not_claimed": [
+    "source specs are fully registered",
+    "uns and it sources are symmetric",
+    "all future source additions join usage linkage automatically"
+  ]
+}
