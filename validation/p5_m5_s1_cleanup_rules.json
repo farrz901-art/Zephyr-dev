@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M5-S1 cleanup and isolation rules",
+  "rules": {
+    "filesystem_outputs": {
+      "rule": "independent out_root, basetemp, or case output dir per run",
+      "applies_to": [
+        "filesystem destination carriers",
+        "usage/provenance output chains",
+        "fanout child outputs"
+      ]
+    },
+    "opensearch_targets": {
+      "rule": "independent index or unique run-specific target with explicit cleanup",
+      "applies_to": [
+        "opensearch destination carrier"
+      ]
+    },
+    "sqlite_queue": {
+      "rule": "independent queue.sqlite3 or queue root per case",
+      "applies_to": [
+        "sqlite queue governance helpers"
+      ]
+    },
+    "spool_queue": {
+      "rule": "independent spool root; do not reuse buckets across cases",
+      "applies_to": [
+        "spool queue governance helpers"
+      ]
+    },
+    "replay_db": {
+      "rule": "independent replay.db per replay-supporting carrier",
+      "applies_to": [
+        "replay-related support carriers"
+      ]
+    },
+    "governance_receipts": {
+      "rule": "independent _governance/actions/<action_id>.json scope per run",
+      "applies_to": [
+        "light governance visibility outputs"
+      ]
+    },
+    "fanout_outputs": {
+      "rule": "child outputs and aggregate artifacts stay case-scoped together",
+      "applies_to": [
+        "fanout success and partial/failure carrier"
+      ]
+    },
+    "saas_and_service_live": {
+      "rule": "independent case identity; no reliance on residual remote state; use explicit cleanup or unique isolation when needed",
+      "applies_to": [
+        "google drive source carrier",
+        "confluence source carrier",
+        "webhook/opensearch/weaviate/kafka service-style destinations"
+      ]
+    }
+  },
+  "not_allowed": [
+    "reuse dirty residual state",
+    "shared out_root across independent baseline cases",
+    "fanout child output collision across cases",
+    "implicit remote cleanup assumptions"
+  ]
+}

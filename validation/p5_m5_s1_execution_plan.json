@@ -1,0 +1,245 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M5-S1 retained-surface baseline execution",
+  "status": "baseline_layer_only",
+  "scope": {
+    "layer": "layer_1_baseline_coverage",
+    "deep_validation": "deferred_to_s2",
+    "repeatability_soak_cleanup_execution": "deferred_to_s3",
+    "governance_visibility": "light"
+  },
+  "execution_size": {
+    "source_success_units": 10,
+    "source_abnormal_units": 10,
+    "destination_success_units": 10,
+    "fanout_units": 2,
+    "baseline_execution_units_total": 32,
+    "light_visibility_support_units": 2
+  },
+  "exact_carrier_artifact": "validation/p5_m5_s1_exact_carriers.json",
+  "cleanup_rules_artifact": "validation/p5_m5_s1_cleanup_rules.json",
+  "covered_chains": {
+    "source_to_usage_record": {
+      "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_usage_runtime.py",
+      "coverage": "source -> task -> run -> delivery -> usage_record.json"
+    },
+    "source_abnormal_to_usage_failure": {
+      "carrier_policy": "source-specific abnormal carriers",
+      "coverage": "source abnormal/failure -> run_meta.json/delivery_receipt.json -> usage failure surface"
+    },
+    "destination_success": {
+      "carrier_policy": "retained destination baseline success carriers"
+    },
+    "fanout_success": {
+      "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_fanout.py",
+      "surface_type": "composition_orchestration"
+    },
+    "fanout_partial_or_failure": {
+      "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_fanout.py",
+      "surface_type": "composition_orchestration"
+    },
+    "light_governance_visibility": {
+      "carriers": [
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_usage_runtime.py",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_governance_audit.py"
+      ],
+      "not": "full replay/requeue/verify walkthrough per retained source"
+    }
+  },
+  "deferred_boundaries": {
+    "s2_not_run_here": [
+      "representative deep source validation",
+      "delivery failure -> replay -> verify deep walkthrough",
+      "poison/orphan -> requeue -> inspect -> verify deep walkthrough"
+    ],
+    "s3_not_run_here": [
+      "repeatability execution",
+      "soak execution",
+      "cleanup repetition proof"
+    ]
+  },
+  "grouped_execution_commands": [
+    {
+      "name": "uns_source_baseline",
+      "scope": "all retained uns success + abnormal carriers",
+      "command": "uv run --locked --no-sync pytest -n 0 packages/uns-stream/src/uns_stream/tests/test_uns_http_source.py packages/uns-stream/src/uns_stream/tests/test_uns_s3_source.py packages/uns-stream/src/uns_stream/tests/test_uns_git_source.py packages/uns-stream/src/uns_stream/tests/test_uns_google_drive_source.py packages/uns-stream/src/uns_stream/tests/test_uns_confluence_source.py"
+    },
+    {
+      "name": "it_source_baseline",
+      "scope": "all retained it success + abnormal carriers",
+      "command": "uv run --locked --no-sync pytest -n 0 packages/it-stream/src/it_stream/tests/test_http_source.py packages/it-stream/src/it_stream/tests/test_postgresql_source.py packages/it-stream/src/it_stream/tests/test_clickhouse_source.py packages/it-stream/src/it_stream/tests/test_kafka_source.py packages/it-stream/src/it_stream/tests/test_mongodb_source.py"
+    },
+    {
+      "name": "destination_and_fanout_baseline",
+      "scope": "all retained single-sink baseline success carriers plus fanout success/failure",
+      "command": "uv run --locked --no-sync pytest -n 0 packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_filesystem.py packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_webhook.py packages/zephyr-ingest/src/zephyr_ingest/tests/test_sqlite_destination.py packages/zephyr-ingest/src/zephyr_ingest/tests/test_s3_destination.py packages/zephyr-ingest/src/zephyr_ingest/tests/test_opensearch_destination.py packages/zephyr-ingest/src/zephyr_ingest/tests/test_weaviate_destination.py packages/zephyr-ingest/src/zephyr_ingest/tests/test_clickhouse_destination.py packages/zephyr-ingest/src/zephyr_ingest/tests/test_mongodb_destination.py packages/zephyr-ingest/src/zephyr_ingest/tests/test_loki_destination.py packages/zephyr-ingest/src/zephyr_ingest/tests/test_kafka_destination.py packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_fanout.py"
+    },
+    {
+      "name": "light_visibility_support",
+      "scope": "usage/provenance/governance visibility stays light rather than deep walkthrough",
+      "command": "uv run --locked --no-sync pytest -n 0 packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_usage_runtime.py packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_governance_audit.py"
+    },
+    {
+      "name": "s1_artifact_drift",
+      "scope": "S1 artifact/helper drift protection",
+      "command": "uv run --locked --no-sync pytest -n 0 packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_m5_s1.py"
+    }
+  ],
+  "fanout_truth": {
+    "surface_type": "destination_composition_orchestration",
+    "single_sink_connector": false
+  },
+  "excluded_scope": [
+    "distributed runtime",
+    "cloud or Kubernetes packaging",
+    "billing pricing entitlement",
+    "RBAC approval workflow",
+    "enterprise connector implementation"
+  ],
+  "exact_carriers": {
+    "schema_version": 1,
+    "phase": "P5-M5-S1 exact baseline carriers",
+    "carrier_granularity": "file_level_exact_carrier",
+    "retained_source_carriers": {
+      "uns_stream": [
+        {
+          "source_id": "http_document_v1",
+          "flow_family": "uns",
+          "success_carrier": "packages/uns-stream/src/uns_stream/tests/test_uns_http_source.py",
+          "abnormal_carrier": "packages/uns-stream/src/uns_stream/tests/test_uns_http_source.py",
+          "carrier_granularity": "file_level_exact_carrier"
+        },
+        {
+          "source_id": "s3_document_v1",
+          "flow_family": "uns",
+          "success_carrier": "packages/uns-stream/src/uns_stream/tests/test_uns_s3_source.py",
+          "abnormal_carrier": "packages/uns-stream/src/uns_stream/tests/test_uns_s3_source.py",
+          "carrier_granularity": "file_level_exact_carrier"
+        },
+        {
+          "source_id": "git_document_v1",
+          "flow_family": "uns",
+          "success_carrier": "packages/uns-stream/src/uns_stream/tests/test_uns_git_source.py",
+          "abnormal_carrier": "packages/uns-stream/src/uns_stream/tests/test_uns_git_source.py",
+          "carrier_granularity": "file_level_exact_carrier"
+        },
+        {
+          "source_id": "google_drive_document_v1",
+          "flow_family": "uns",
+          "success_carrier": "packages/uns-stream/src/uns_stream/tests/test_uns_google_drive_source.py",
+          "abnormal_carrier": "packages/uns-stream/src/uns_stream/tests/test_uns_google_drive_source.py",
+          "carrier_granularity": "file_level_exact_carrier"
+        },
+        {
+          "source_id": "confluence_document_v1",
+          "flow_family": "uns",
+          "success_carrier": "packages/uns-stream/src/uns_stream/tests/test_uns_confluence_source.py",
+          "abnormal_carrier": "packages/uns-stream/src/uns_stream/tests/test_uns_confluence_source.py",
+          "carrier_granularity": "file_level_exact_carrier"
+        }
+      ],
+      "it_stream": [
+        {
+          "source_id": "http_json_cursor_v1",
+          "flow_family": "it",
+          "success_carrier": "packages/it-stream/src/it_stream/tests/test_http_source.py",
+          "abnormal_carrier": "packages/it-stream/src/it_stream/tests/test_http_source.py",
+          "carrier_granularity": "file_level_exact_carrier"
+        },
+        {
+          "source_id": "postgresql_incremental_v1",
+          "flow_family": "it",
+          "success_carrier": "packages/it-stream/src/it_stream/tests/test_postgresql_source.py",
+          "abnormal_carrier": "packages/it-stream/src/it_stream/tests/test_postgresql_source.py",
+          "carrier_granularity": "file_level_exact_carrier"
+        },
+        {
+          "source_id": "clickhouse_incremental_v1",
+          "flow_family": "it",
+          "success_carrier": "packages/it-stream/src/it_stream/tests/test_clickhouse_source.py",
+          "abnormal_carrier": "packages/it-stream/src/it_stream/tests/test_clickhouse_source.py",
+          "carrier_granularity": "file_level_exact_carrier"
+        },
+        {
+          "source_id": "kafka_partition_offset_v1",
+          "flow_family": "it",
+          "success_carrier": "packages/it-stream/src/it_stream/tests/test_kafka_source.py",
+          "abnormal_carrier": "packages/it-stream/src/it_stream/tests/test_kafka_source.py",
+          "carrier_granularity": "file_level_exact_carrier"
+        },
+        {
+          "source_id": "mongodb_incremental_v1",
+          "flow_family": "it",
+          "success_carrier": "packages/it-stream/src/it_stream/tests/test_mongodb_source.py",
+          "abnormal_carrier": "packages/it-stream/src/it_stream/tests/test_mongodb_source.py",
+          "carrier_granularity": "file_level_exact_carrier"
+        }
+      ]
+    },
+    "retained_destination_success_carriers": [
+      {
+        "destination": "filesystem",
+        "surface_type": "single_sink_destination_connector",
+        "success_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_filesystem.py"
+      },
+      {
+        "destination": "webhook",
+        "surface_type": "single_sink_destination_connector",
+        "success_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_webhook.py"
+      },
+      {
+        "destination": "sqlite",
+        "surface_type": "single_sink_destination_connector",
+        "success_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_sqlite_destination.py"
+      },
+      {
+        "destination": "s3",
+        "surface_type": "single_sink_destination_connector",
+        "success_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_s3_destination.py"
+      },
+      {
+        "destination": "opensearch",
+        "surface_type": "single_sink_destination_connector",
+        "success_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_opensearch_destination.py"
+      },
+      {
+        "destination": "weaviate",
+        "surface_type": "single_sink_destination_connector",
+        "success_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_weaviate_destination.py"
+      },
+      {
+        "destination": "clickhouse",
+        "surface_type": "single_sink_destination_connector",
+        "success_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_clickhouse_destination.py"
+      },
+      {
+        "destination": "mongodb",
+        "surface_type": "single_sink_destination_connector",
+        "success_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_mongodb_destination.py"
+      },
+      {
+        "destination": "loki",
+        "surface_type": "single_sink_destination_connector",
+        "success_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_loki_destination.py"
+      },
+      {
+        "destination": "kafka",
+        "surface_type": "single_sink_destination_connector",
+        "success_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_kafka_destination.py"
+      }
+    ],
+    "fanout": {
+      "surface_type": "destination_composition_orchestration",
+      "single_sink_connector": false,
+      "success_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_fanout.py",
+      "partial_or_failure_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_fanout.py"
+    },
+    "light_visibility_support": {
+      "governance_visibility_level": "light",
+      "support_carriers": [
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_usage_runtime.py",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_governance_audit.py"
+      ]
+    }
+  }
+}

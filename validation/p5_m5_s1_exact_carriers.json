@@ -1,0 +1,146 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M5-S1 exact baseline carriers",
+  "carrier_granularity": "file_level_exact_carrier",
+  "retained_source_carriers": {
+    "uns_stream": [
+      {
+        "source_id": "http_document_v1",
+        "flow_family": "uns",
+        "success_carrier": "packages/uns-stream/src/uns_stream/tests/test_uns_http_source.py",
+        "abnormal_carrier": "packages/uns-stream/src/uns_stream/tests/test_uns_http_source.py",
+        "carrier_granularity": "file_level_exact_carrier"
+      },
+      {
+        "source_id": "s3_document_v1",
+        "flow_family": "uns",
+        "success_carrier": "packages/uns-stream/src/uns_stream/tests/test_uns_s3_source.py",
+        "abnormal_carrier": "packages/uns-stream/src/uns_stream/tests/test_uns_s3_source.py",
+        "carrier_granularity": "file_level_exact_carrier"
+      },
+      {
+        "source_id": "git_document_v1",
+        "flow_family": "uns",
+        "success_carrier": "packages/uns-stream/src/uns_stream/tests/test_uns_git_source.py",
+        "abnormal_carrier": "packages/uns-stream/src/uns_stream/tests/test_uns_git_source.py",
+        "carrier_granularity": "file_level_exact_carrier"
+      },
+      {
+        "source_id": "google_drive_document_v1",
+        "flow_family": "uns",
+        "success_carrier": "packages/uns-stream/src/uns_stream/tests/test_uns_google_drive_source.py",
+        "abnormal_carrier": "packages/uns-stream/src/uns_stream/tests/test_uns_google_drive_source.py",
+        "carrier_granularity": "file_level_exact_carrier"
+      },
+      {
+        "source_id": "confluence_document_v1",
+        "flow_family": "uns",
+        "success_carrier": "packages/uns-stream/src/uns_stream/tests/test_uns_confluence_source.py",
+        "abnormal_carrier": "packages/uns-stream/src/uns_stream/tests/test_uns_confluence_source.py",
+        "carrier_granularity": "file_level_exact_carrier"
+      }
+    ],
+    "it_stream": [
+      {
+        "source_id": "http_json_cursor_v1",
+        "flow_family": "it",
+        "success_carrier": "packages/it-stream/src/it_stream/tests/test_http_source.py",
+        "abnormal_carrier": "packages/it-stream/src/it_stream/tests/test_http_source.py",
+        "carrier_granularity": "file_level_exact_carrier"
+      },
+      {
+        "source_id": "postgresql_incremental_v1",
+        "flow_family": "it",
+        "success_carrier": "packages/it-stream/src/it_stream/tests/test_postgresql_source.py",
+        "abnormal_carrier": "packages/it-stream/src/it_stream/tests/test_postgresql_source.py",
+        "carrier_granularity": "file_level_exact_carrier"
+      },
+      {
+        "source_id": "clickhouse_incremental_v1",
+        "flow_family": "it",
+        "success_carrier": "packages/it-stream/src/it_stream/tests/test_clickhouse_source.py",
+        "abnormal_carrier": "packages/it-stream/src/it_stream/tests/test_clickhouse_source.py",
+        "carrier_granularity": "file_level_exact_carrier"
+      },
+      {
+        "source_id": "kafka_partition_offset_v1",
+        "flow_family": "it",
+        "success_carrier": "packages/it-stream/src/it_stream/tests/test_kafka_source.py",
+        "abnormal_carrier": "packages/it-stream/src/it_stream/tests/test_kafka_source.py",
+        "carrier_granularity": "file_level_exact_carrier"
+      },
+      {
+        "source_id": "mongodb_incremental_v1",
+        "flow_family": "it",
+        "success_carrier": "packages/it-stream/src/it_stream/tests/test_mongodb_source.py",
+        "abnormal_carrier": "packages/it-stream/src/it_stream/tests/test_mongodb_source.py",
+        "carrier_granularity": "file_level_exact_carrier"
+      }
+    ]
+  },
+  "retained_destination_success_carriers": [
+    {
+      "destination": "filesystem",
+      "surface_type": "single_sink_destination_connector",
+      "success_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_filesystem.py"
+    },
+    {
+      "destination": "webhook",
+      "surface_type": "single_sink_destination_connector",
+      "success_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_webhook.py"
+    },
+    {
+      "destination": "sqlite",
+      "surface_type": "single_sink_destination_connector",
+      "success_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_sqlite_destination.py"
+    },
+    {
+      "destination": "s3",
+      "surface_type": "single_sink_destination_connector",
+      "success_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_s3_destination.py"
+    },
+    {
+      "destination": "opensearch",
+      "surface_type": "single_sink_destination_connector",
+      "success_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_opensearch_destination.py"
+    },
+    {
+      "destination": "weaviate",
+      "surface_type": "single_sink_destination_connector",
+      "success_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_weaviate_destination.py"
+    },
+    {
+      "destination": "clickhouse",
+      "surface_type": "single_sink_destination_connector",
+      "success_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_clickhouse_destination.py"
+    },
+    {
+      "destination": "mongodb",
+      "surface_type": "single_sink_destination_connector",
+      "success_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_mongodb_destination.py"
+    },
+    {
+      "destination": "loki",
+      "surface_type": "single_sink_destination_connector",
+      "success_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_loki_destination.py"
+    },
+    {
+      "destination": "kafka",
+      "surface_type": "single_sink_destination_connector",
+      "success_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_kafka_destination.py"
+    }
+  ],
+  "fanout": {
+    "surface_type": "destination_composition_orchestration",
+    "single_sink_connector": false,
+    "success_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_fanout.py",
+    "partial_or_failure_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_fanout.py"
+  },
+  "light_visibility_support": {
+    "governance_visibility_level": "light",
+    "support_carriers": [
+      "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_usage_runtime.py",
+      "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_governance_audit.py"
+    ]
+  }
+}

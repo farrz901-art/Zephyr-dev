@@ -3959,6 +3959,7 @@ source = { virtual = "." }
 [package.dev-dependencies]
 dev = [
     { name = "pre-commit" },
+    { name = "pyright" },
     { name = "uns-stream", extra = ["all-docs"] },
     { name = "zephyr-api" },
     { name = "zephyr-core" },
@@ -3985,6 +3986,7 @@ test = [
 [package.metadata.requires-dev]
 dev = [
     { name = "pre-commit", specifier = ">=4.0.0,<5.0.0" },
+    { name = "pyright", specifier = ">=1.1.408" },
     { name = "uns-stream", extras = ["all-docs"], editable = "packages/uns-stream" },
     { name = "zephyr-api", editable = "packages/zephyr-api" },
     { name = "zephyr-core", editable = "packages/zephyr-core" },

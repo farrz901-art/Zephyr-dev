@@ -25,6 +25,7 @@ dev = [
   "zephyr-core",          # 联动：让根环境包含核心库
   "zephyr-ingest",
   "zephyr-api",
+  "pyright>=1.1.408",
 ]
 
 [tool.uv.workspace]
