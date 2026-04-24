@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M5-S2 deep cleanup and isolation rules",
+  "rules": {
+    "webhook_deep_runs": {
+      "rule": "independent out_root, independent _dlq/delivery and delivery_done, independent governance receipt scope"
+    },
+    "kafka_deep_runs": {
+      "rule": "independent topic/run identity, replay.db, out_root, governance receipts; do not rely on residual broker state"
+    },
+    "opensearch_deep_runs": {
+      "rule": "independent index/namespace/run-specific target with explicit cleanup or unique isolation"
+    },
+    "spool_queue_deep_runs": {
+      "rule": "independent spool root; no bucket reuse across cases"
+    },
+    "sqlite_queue_deep_runs": {
+      "rule": "independent queue.sqlite3 or queue root per case"
+    },
+    "replay_db": {
+      "rule": "single-case replay.db; no reuse across deep anchors"
+    },
+    "verify_receipts": {
+      "rule": "case-scoped _governance/actions/<action_id>.json"
+    },
+    "backfill_outputs": {
+      "rule": "case-scoped outputs; do not mix with replay/requeue/inspect receipt dirs"
+    },
+    "google_drive_and_confluence": {
+      "rule": "independent case identity; no residual remote state; explicit cleanup or unique naming if needed"
+    },
+    "kafka_partition_offset": {
+      "rule": "independent topic/run/checkpoint identity; do not reuse consumer progress or checkpoint artifacts"
+    },
+    "fanout_deep_runs": {
+      "rule": "child outputs and aggregate outputs stay in the same case scope; do not mix with direct-sink cases"
+    },
+    "filesystem_control_anchor": {
+      "rule": "independent low-cost output scope; used as a control anchor, not a deep sink permutation expansion"
+    }
+  },
+  "not_allowed": [
+    "reuse dirty residual state",
+    "shared replay.db across independent deep anchors",
+    "mix fanout child outputs with direct-sink cases",
+    "implicit remote cleanup assumptions",
+    "residual broker progress reuse"
+  ]
+}

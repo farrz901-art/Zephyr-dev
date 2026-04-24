@@ -1,0 +1,217 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M5-S2 grouped deep closures",
+  "closures": {
+    "failure_replay_verify_governance_receipt": {
+      "included_anchors": [
+        "webhook",
+        "kafka",
+        "opensearch"
+      ],
+      "carrier_sets": {
+        "failure_anchors": {
+          "webhook": {
+            "failure_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_webhook.py",
+            "replay_carriers": [
+              "packages/zephyr-ingest/src/zephyr_ingest/tests/test_replay_delivery.py"
+            ],
+            "verify_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_recovery_operator.py",
+            "governance_receipt_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_governance_audit.py",
+            "usage_provenance_linkage_carriers": [
+              "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_usage_runtime.py",
+              "packages/zephyr-ingest/src/zephyr_ingest/tests/test_replay_delivery.py"
+            ]
+          },
+          "kafka": {
+            "failure_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_kafka_destination.py",
+            "replay_carriers": [
+              "packages/zephyr-ingest/src/zephyr_ingest/tests/test_replay_delivery.py",
+              "packages/zephyr-ingest/src/zephyr_ingest/tests/test_replay_kafka_sink.py"
+            ],
+            "verify_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_recovery_operator.py",
+            "governance_receipt_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_governance_audit.py",
+            "usage_provenance_linkage_carriers": [
+              "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_usage_runtime.py"
+            ]
+          },
+          "opensearch": {
+            "failure_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_opensearch_destination.py",
+            "replay_carriers": [
+              "packages/zephyr-ingest/src/zephyr_ingest/tests/test_replay_delivery.py"
+            ],
+            "verify_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_recovery_operator.py",
+            "governance_receipt_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_governance_audit.py",
+            "usage_provenance_linkage_carriers": [
+              "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_usage_runtime.py"
+            ]
+          }
+        },
+        "shared_replay": [
+          "packages/zephyr-ingest/src/zephyr_ingest/tests/test_replay_delivery.py",
+          "packages/zephyr-ingest/src/zephyr_ingest/tests/test_replay_kafka_sink.py"
+        ],
+        "shared_verify": [
+          "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_recovery_operator.py"
+        ],
+        "shared_governance": [
+          "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_governance_audit.py"
+        ],
+        "shared_usage_provenance": [
+          "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_usage_runtime.py"
+        ]
+      },
+      "grouped_command_name": "delivery_failure_replay_verify_deep",
+      "proves": [
+        "destination failure anchors are explicitly linked to replay",
+        "verify step is explicit rather than inferred",
+        "governance receipt closure is explicit rather than implied"
+      ]
+    },
+    "poison_orphan_requeue_inspect_verify": {
+      "included_anchors": [
+        "spool_queue",
+        "sqlite_queue"
+      ],
+      "carrier_sets": {
+        "queue_anchors": {
+          "spool_queue": {
+            "poison_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_spool_queue.py::test_requeue_poison_task_moves_to_pending_and_preserves_governance",
+            "orphan_or_inflight_carriers": [
+              "packages/zephyr-ingest/src/zephyr_ingest/tests/test_spool_queue.py::test_recover_stale_inflight_moves_task_back_to_pending",
+              "packages/zephyr-ingest/src/zephyr_ingest/tests/test_spool_queue.py::test_recover_stale_inflight_transitions_to_poison_at_orphan_threshold"
+            ],
+            "requeue_carriers": [
+              "packages/zephyr-ingest/src/zephyr_ingest/tests/test_spool_queue.py::test_requeue_poison_task_moves_to_pending_and_preserves_governance",
+              "packages/zephyr-ingest/src/zephyr_ingest/tests/test_spool_queue.py::test_requeue_inflight_task_moves_to_pending_and_preserves_governance"
+            ],
+            "inspect_carriers": [
+              "packages/zephyr-ingest/src/zephyr_ingest/tests/test_spool_queue.py::test_inspect_queue_bucket_list_surfaces_governance_and_identity_metadata",
+              "packages/zephyr-ingest/src/zephyr_ingest/tests/test_spool_queue.py::test_inspect_queue_is_read_only"
+            ],
+            "verify_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_recovery_operator.py",
+            "governance_receipt_backfill_carriers": [
+              "packages/zephyr-ingest/src/zephyr_ingest/tests/test_spool_queue.py",
+              "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_governance_audit.py"
+            ],
+            "audit_support_level": "persisted_in_history"
+          },
+          "sqlite_queue": {
+            "poison_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_queue_backend.py::test_sqlite_queue_participates_in_shared_inspection_and_requeue_subset",
+            "orphan_or_inflight_carriers": [
+              "packages/zephyr-ingest/src/zephyr_ingest/tests/test_queue_backend.py::test_sqlite_queue_backend_work_source_handles_lock_contention_and_stale_inflight"
+            ],
+            "requeue_carriers": [
+              "packages/zephyr-ingest/src/zephyr_ingest/tests/test_queue_backend.py::test_sqlite_queue_participates_in_shared_inspection_and_requeue_subset"
+            ],
+            "inspect_carriers": [
+              "packages/zephyr-ingest/src/zephyr_ingest/tests/test_queue_backend.py::test_sqlite_queue_participates_in_shared_inspection_and_requeue_subset"
+            ],
+            "verify_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_recovery_operator.py",
+            "governance_receipt_backfill_carriers": [
+              "packages/zephyr-ingest/src/zephyr_ingest/tests/test_queue_backend.py",
+              "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_governance_audit.py"
+            ],
+            "audit_support_level": "result_only"
+          }
+        },
+        "shared_verify": [
+          "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_recovery_operator.py"
+        ],
+        "shared_governance": [
+          "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_governance_audit.py"
+        ]
+      },
+      "grouped_command_name": "queue_requeue_inspect_verify_deep",
+      "support_difference": {
+        "spool_queue": "persisted_in_history",
+        "sqlite_queue": "result_only"
+      }
+    },
+    "source_contract_id_usage_governance_provenance": {
+      "included_anchors": [
+        "google_drive_document_v1",
+        "confluence_document_v1",
+        "kafka_partition_offset_v1"
+      ],
+      "carrier_sets": {
+        "source_anchors": {
+          "google_drive_document_v1": {
+            "success_deep_carrier": "packages/uns-stream/src/uns_stream/tests/test_uns_google_drive_source.py",
+            "abnormal_or_failure_deep_carrier": "packages/uns-stream/src/uns_stream/tests/test_uns_google_drive_source.py",
+            "source_contract_id_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_usage_runtime.py",
+            "source_to_usage_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_usage_runtime.py",
+            "source_to_provenance_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_usage_runtime.py",
+            "source_to_governance_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_governance_audit.py"
+          },
+          "confluence_document_v1": {
+            "success_deep_carrier": "packages/uns-stream/src/uns_stream/tests/test_uns_confluence_source.py",
+            "abnormal_or_failure_deep_carrier": "packages/uns-stream/src/uns_stream/tests/test_uns_confluence_source.py",
+            "source_contract_id_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_usage_runtime.py",
+            "source_to_usage_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_usage_runtime.py",
+            "source_to_provenance_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_usage_runtime.py",
+            "source_to_governance_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_governance_audit.py"
+          },
+          "kafka_partition_offset_v1": {
+            "success_deep_carrier": "packages/it-stream/src/it_stream/tests/test_kafka_source.py",
+            "abnormal_or_failure_deep_carrier": "packages/it-stream/src/it_stream/tests/test_kafka_source.py",
+            "source_contract_id_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_usage_runtime.py",
+            "source_to_usage_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_usage_runtime.py",
+            "source_to_provenance_carriers": [
+              "packages/it-stream/src/it_stream/tests/test_kafka_source.py",
+              "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_usage_runtime.py"
+            ],
+            "source_to_governance_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_governance_audit.py"
+          }
+        },
+        "shared_usage_provenance": [
+          "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_usage_runtime.py"
+        ],
+        "shared_governance": [
+          "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_governance_audit.py"
+        ],
+        "shared_replay_context": [
+          "packages/zephyr-ingest/src/zephyr_ingest/tests/test_replay_delivery.py"
+        ]
+      },
+      "grouped_command_name": "source_usage_governance_provenance_deep"
+    },
+    "fanout_partial_failure_shared_summary_governance_usage": {
+      "included_anchors": [
+        "fanout",
+        "filesystem"
+      ],
+      "carrier_sets": {
+        "fanout": {
+          "all_ok_aggregate_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_fanout.py::test_fanout_all_ok",
+          "partial_failure_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_fanout.py::test_fanout_any_fail",
+          "shared_failure_summary_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_fanout.py::test_fanout_surfaces_shared_failure_summary_when_failed_children_agree",
+          "child_and_aggregate_visibility_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_fanout.py",
+          "usage_provenance_governance_visibility_carriers": [
+            "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_usage_runtime.py",
+            "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_governance_audit.py"
+          ],
+          "surface_type": "destination_composition_orchestration",
+          "single_sink_connector": false
+        },
+        "filesystem_control": {
+          "filesystem": {
+            "control_carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_filesystem.py",
+            "role": "low_cost_output_control_anchor",
+            "note": "retained as a low-cost control anchor for output visibility and isolation discipline, not as a new deep-closure family"
+          }
+        },
+        "shared_usage_provenance": [
+          "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_usage_runtime.py"
+        ],
+        "shared_governance": [
+          "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_governance_audit.py"
+        ]
+      },
+      "grouped_command_name": "fanout_composition_deep",
+      "fanout_truth": {
+        "surface_type": "destination_composition_orchestration",
+        "single_sink_connector": false
+      }
+    }
+  }
+}

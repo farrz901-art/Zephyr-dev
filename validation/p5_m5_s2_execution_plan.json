@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M5-S2 representative deep validation",
+  "status": "representative_deep_layer_only",
+  "strategy": "representative_deep_not_all_pairs",
+  "included_representative_anchors": {
+    "delivery_failure": [
+      "webhook",
+      "kafka",
+      "opensearch"
+    ],
+    "queue_governance": [
+      "spool_queue",
+      "sqlite_queue"
+    ],
+    "source_deep": [
+      "google_drive_document_v1",
+      "confluence_document_v1",
+      "kafka_partition_offset_v1"
+    ],
+    "composition": [
+      "fanout"
+    ],
+    "low_cost_control": [
+      "filesystem"
+    ]
+  },
+  "execution_size": {
+    "delivery_replay_verify_deep_units": 9,
+    "queue_governance_deep_units": 10,
+    "source_deep_units": 9,
+    "fanout_deep_units": 3,
+    "representative_deep_units_total_rough": 31,
+    "filesystem_control_anchor_included": true,
+    "note": "filesystem is included as a low-cost control anchor without creating an additional deep-closure family"
+  },
+  "exact_deep_carrier_artifact": "validation/p5_m5_s2_exact_deep_carriers.json",
+  "deep_cleanup_rules_artifact": "validation/p5_m5_s2_cleanup_rules.json",
+  "deep_closures_artifact": "validation/p5_m5_s2_deep_closures.json",
+  "grouped_execution_commands": [
+    {
+      "name": "delivery_failure_replay_verify_deep",
+      "closure": "failure_replay_verify_governance_receipt",
+      "scope": "webhook + kafka + opensearch failure anchors with shared replay/verify/governance/usage",
+      "command": "uv run --locked --no-sync pytest -n 0 packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_webhook.py packages/zephyr-ingest/src/zephyr_ingest/tests/test_kafka_destination.py packages/zephyr-ingest/src/zephyr_ingest/tests/test_opensearch_destination.py packages/zephyr-ingest/src/zephyr_ingest/tests/test_replay_delivery.py packages/zephyr-ingest/src/zephyr_ingest/tests/test_replay_kafka_sink.py packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_recovery_operator.py packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_governance_audit.py packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_usage_runtime.py"
+    },
+    {
+      "name": "queue_requeue_inspect_verify_deep",
+      "closure": "poison_orphan_requeue_inspect_verify",
+      "scope": "spool_queue + sqlite_queue governance deep chain with explicit support-level differences",
+      "command": "uv run --locked --no-sync pytest -n 0 packages/zephyr-ingest/src/zephyr_ingest/tests/test_spool_queue.py::test_requeue_poison_task_moves_to_pending_and_preserves_governance packages/zephyr-ingest/src/zephyr_ingest/tests/test_spool_queue.py::test_recover_stale_inflight_moves_task_back_to_pending packages/zephyr-ingest/src/zephyr_ingest/tests/test_spool_queue.py::test_recover_stale_inflight_transitions_to_poison_at_orphan_threshold packages/zephyr-ingest/src/zephyr_ingest/tests/test_spool_queue.py::test_requeue_inflight_task_moves_to_pending_and_preserves_governance packages/zephyr-ingest/src/zephyr_ingest/tests/test_spool_queue.py::test_inspect_queue_bucket_list_surfaces_governance_and_identity_metadata packages/zephyr-ingest/src/zephyr_ingest/tests/test_spool_queue.py::test_inspect_queue_is_read_only packages/zephyr-ingest/src/zephyr_ingest/tests/test_queue_backend.py::test_sqlite_queue_participates_in_shared_inspection_and_requeue_subset packages/zephyr-ingest/src/zephyr_ingest/tests/test_queue_backend.py::test_sqlite_queue_backend_work_source_handles_lock_contention_and_stale_inflight packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_recovery_operator.py packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_governance_audit.py"
+    },
+    {
+      "name": "source_usage_governance_provenance_deep",
+      "closure": "source_contract_id_usage_governance_provenance",
+      "scope": "google_drive + confluence + kafka source deep anchors with shared usage/governance visibility",
+      "command": "uv run --locked --no-sync pytest -n 0 packages/uns-stream/src/uns_stream/tests/test_uns_google_drive_source.py packages/uns-stream/src/uns_stream/tests/test_uns_confluence_source.py packages/it-stream/src/it_stream/tests/test_kafka_source.py packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_usage_runtime.py packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_governance_audit.py packages/zephyr-ingest/src/zephyr_ingest/tests/test_replay_delivery.py"
+    },
+    {
+      "name": "fanout_composition_deep",
+      "closure": "fanout_partial_failure_shared_summary_governance_usage",
+      "scope": "fanout partial failure + shared summary + governance/usage visibility with filesystem control anchor",
+      "command": "uv run --locked --no-sync pytest -n 0 packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_fanout.py::test_fanout_all_ok packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_fanout.py::test_fanout_any_fail packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_fanout.py::test_fanout_surfaces_shared_failure_summary_when_failed_children_agree packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_filesystem.py packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_usage_runtime.py packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_governance_audit.py"
+    },
+    {
+      "name": "s2_artifact_drift",
+      "closure": "artifact_and_report_consistency",
+      "scope": "S2 artifact/helper drift protection",
+      "command": "uv run --locked --no-sync pytest -n 0 packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_m5_s2.py"
+    }
+  ],
+  "shared_support_is_explicit": true,
+  "deferred_to_s3": [
+    "repeatability execution",
+    "soak execution",
+    "cleanup repetition proof"
+  ],
+  "out_of_scope": [
+    "flat all-pairs deep validation",
+    "distributed runtime",
+    "cloud or Kubernetes packaging",
+    "billing pricing entitlement",
+    "RBAC approval workflow",
+    "enterprise connector implementation"
+  ],
+  "fanout_truth": {
+    "surface_type": "destination_composition_orchestration",
+    "single_sink_connector": false
+  }
+}
