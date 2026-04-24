@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M5-S4 scoring rules",
+  "thresholds": {
+    "pass": {
+      "minimum_percent": 90,
+      "requires_all_mandatory_correct": true
+    },
+    "partial": {
+      "minimum_percent": 70,
+      "maximum_percent": 89,
+      "requires_most_mandatory_correct": true
+    },
+    "fail": {
+      "below_percent": 70,
+      "or_any_key_mandatory_unanswerable": true
+    }
+  },
+  "mandatory_logic": "Identity, state, receipt, linkage, read-only-or-not, and composition-or-not questions are mandatory for their family.",
+  "helper_report_only_allowed": true,
+  "raw_artifact_inspection_allowed": true,
+  "source_code_reading_allowed": false,
+  "judgeable_without_author_explanation": true,
+  "family_mandatory_focus": {
+    "delivery": [
+      "failure_type",
+      "replay_happened",
+      "verify_happened",
+      "governance_receipt_location",
+      "usage_provenance_source_alignment",
+      "destination_identity"
+    ],
+    "queue_governance": [
+      "bucket_or_state",
+      "poison_or_orphan",
+      "inspect_read_only",
+      "spool_sqlite_audit_difference",
+      "operator_next_action",
+      "governance_receipt_location",
+      "provenance_explicit"
+    ],
+    "source_deep": [
+      "source_contract_id",
+      "usage_provenance_governance_alignment",
+      "progress_isolated",
+      "abnormal_or_failure_type",
+      "source_id_misread_risk",
+      "governance_visibility"
+    ],
+    "fanout": [
+      "is_composition",
+      "mode_differences",
+      "child_aggregate_outputs",
+      "usage_governance_visibility",
+      "scope_mixing_risk"
+    ]
+  }
+}

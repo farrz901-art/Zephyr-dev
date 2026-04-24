@@ -1,0 +1,320 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M5-S4 cold operator questions",
+  "source_code_allowed": false,
+  "question_family_count": 4,
+  "total_questions": 28,
+  "families": {
+    "delivery": {
+      "question_count": 7,
+      "questions": [
+        {
+          "question_id": "delivery_failure_type",
+          "text": "What failure type happened?",
+          "mandatory": true,
+          "answerable_from": [
+            "delivery_receipt.json",
+            "run_meta.json",
+            "p5_recovery_operator_report"
+          ],
+          "requires_source_code": false
+        },
+        {
+          "question_id": "delivery_replay_happened",
+          "text": "Did replay happen?",
+          "mandatory": true,
+          "answerable_from": [
+            "_governance/actions/<action_id>.json",
+            "p5_recovery_operator_report"
+          ],
+          "requires_source_code": false
+        },
+        {
+          "question_id": "delivery_verify_happened",
+          "text": "Did verify happen?",
+          "mandatory": true,
+          "answerable_from": [
+            "_governance/actions/<action_id>.json",
+            "p5_recovery_operator_report"
+          ],
+          "requires_source_code": false
+        },
+        {
+          "question_id": "delivery_governance_receipt_location",
+          "text": "Where is the governance receipt?",
+          "mandatory": true,
+          "answerable_from": [
+            "_governance/actions/<action_id>.json",
+            "p5_governance_audit_report"
+          ],
+          "requires_source_code": false
+        },
+        {
+          "question_id": "delivery_usage_provenance_source_alignment",
+          "text": "Are usage, provenance, and source linkage aligned?",
+          "mandatory": true,
+          "answerable_from": [
+            "usage_record.json",
+            "run_meta.json",
+            "p5_usage_report"
+          ],
+          "requires_source_code": false
+        },
+        {
+          "question_id": "delivery_destination_identity",
+          "text": "What destination was involved?",
+          "mandatory": true,
+          "answerable_from": [
+            "delivery_receipt.json",
+            "_governance/actions/<action_id>.json"
+          ],
+          "requires_source_code": false
+        },
+        {
+          "question_id": "delivery_evidence_sufficient",
+          "text": "Is current evidence sufficient?",
+          "mandatory": false,
+          "answerable_from": [
+            "p5_recovery_operator_report",
+            "p5_governance_audit_report"
+          ],
+          "requires_source_code": false
+        }
+      ]
+    },
+    "queue_governance": {
+      "question_count": 8,
+      "questions": [
+        {
+          "question_id": "queue_bucket_or_state",
+          "text": "What bucket or state is the task in?",
+          "mandatory": true,
+          "answerable_from": [
+            "queue inspect result",
+            "spool bucket files",
+            "queue.sqlite3"
+          ],
+          "requires_source_code": false
+        },
+        {
+          "question_id": "queue_poison_or_orphan",
+          "text": "Is it poison or orphan/stale inflight?",
+          "mandatory": true,
+          "answerable_from": [
+            "queue inspect result",
+            "p5_recovery_operator_report"
+          ],
+          "requires_source_code": false
+        },
+        {
+          "question_id": "queue_inspect_read_only",
+          "text": "Is inspect read-only?",
+          "mandatory": true,
+          "answerable_from": [
+            "queue inspect result",
+            "p5_recovery_operator_report"
+          ],
+          "requires_source_code": false
+        },
+        {
+          "question_id": "queue_spool_sqlite_audit_difference",
+          "text": "What is the spool vs sqlite audit-support difference?",
+          "mandatory": true,
+          "answerable_from": [
+            "_governance/actions/<action_id>.json",
+            "p5_governance_audit_report"
+          ],
+          "requires_source_code": false
+        },
+        {
+          "question_id": "queue_operator_next_action",
+          "text": "Should the operator requeue, verify, or only audit?",
+          "mandatory": true,
+          "answerable_from": [
+            "p5_recovery_operator_report",
+            "queue inspect result"
+          ],
+          "requires_source_code": false
+        },
+        {
+          "question_id": "queue_governance_receipt_location",
+          "text": "Where is the governance receipt?",
+          "mandatory": true,
+          "answerable_from": [
+            "_governance/actions/<action_id>.json",
+            "p5_governance_audit_report"
+          ],
+          "requires_source_code": false
+        },
+        {
+          "question_id": "queue_provenance_explicit",
+          "text": "Is provenance explicit?",
+          "mandatory": true,
+          "answerable_from": [
+            "run_meta.json",
+            "_governance/actions/<action_id>.json"
+          ],
+          "requires_source_code": false
+        },
+        {
+          "question_id": "queue_evidence_sufficient",
+          "text": "Is current evidence sufficient?",
+          "mandatory": false,
+          "answerable_from": [
+            "p5_recovery_operator_report",
+            "p5_governance_audit_report"
+          ],
+          "requires_source_code": false
+        }
+      ]
+    },
+    "source_deep": {
+      "question_count": 7,
+      "questions": [
+        {
+          "question_id": "source_contract_id",
+          "text": "What is the source contract id?",
+          "mandatory": true,
+          "answerable_from": [
+            "usage_record.json",
+            "p5_source_contract_report",
+            "p5_usage_report"
+          ],
+          "requires_source_code": false
+        },
+        {
+          "question_id": "source_usage_provenance_governance_alignment",
+          "text": "Are usage, provenance, and governance aligned?",
+          "mandatory": true,
+          "answerable_from": [
+            "usage_record.json",
+            "run_meta.json",
+            "_governance/actions/<action_id>.json"
+          ],
+          "requires_source_code": false
+        },
+        {
+          "question_id": "source_progress_isolated",
+          "text": "Is checkpoint or progress isolated?",
+          "mandatory": true,
+          "answerable_from": [
+            "run_meta.json",
+            "p5_usage_report",
+            "p5_source_contract_report"
+          ],
+          "requires_source_code": false
+        },
+        {
+          "question_id": "source_abnormal_or_failure_type",
+          "text": "What source abnormal or failure type happened?",
+          "mandatory": true,
+          "answerable_from": [
+            "run_meta.json",
+            "p5_usage_report",
+            "p5_source_contract_report"
+          ],
+          "requires_source_code": false
+        },
+        {
+          "question_id": "source_evidence_sufficient",
+          "text": "Is current evidence sufficient?",
+          "mandatory": false,
+          "answerable_from": [
+            "p5_usage_report",
+            "p5_governance_audit_report"
+          ],
+          "requires_source_code": false
+        },
+        {
+          "question_id": "source_id_misread_risk",
+          "text": "Is there source-id misread risk?",
+          "mandatory": true,
+          "answerable_from": [
+            "p5_source_contract_report",
+            "usage_record.json"
+          ],
+          "requires_source_code": false
+        },
+        {
+          "question_id": "source_governance_visibility",
+          "text": "Where is governance visibility?",
+          "mandatory": true,
+          "answerable_from": [
+            "_governance/actions/<action_id>.json",
+            "p5_governance_audit_report"
+          ],
+          "requires_source_code": false
+        }
+      ]
+    },
+    "fanout": {
+      "question_count": 6,
+      "questions": [
+        {
+          "question_id": "fanout_is_composition",
+          "text": "Is this composition or orchestration?",
+          "mandatory": true,
+          "answerable_from": [
+            "batch_report.json",
+            "shared summary",
+            "child outputs"
+          ],
+          "requires_source_code": false
+        },
+        {
+          "question_id": "fanout_mode_differences",
+          "text": "How do all-ok, partial-failure, and shared-summary differ?",
+          "mandatory": true,
+          "answerable_from": [
+            "batch_report.json",
+            "shared summary",
+            "p5_usage_report"
+          ],
+          "requires_source_code": false
+        },
+        {
+          "question_id": "fanout_child_aggregate_outputs",
+          "text": "Where are child and aggregate outputs?",
+          "mandatory": true,
+          "answerable_from": [
+            "child outputs",
+            "aggregate outputs",
+            "batch_report.json"
+          ],
+          "requires_source_code": false
+        },
+        {
+          "question_id": "fanout_usage_governance_visibility",
+          "text": "Where is usage and governance visibility?",
+          "mandatory": true,
+          "answerable_from": [
+            "usage_record.json",
+            "_governance/actions/<action_id>.json"
+          ],
+          "requires_source_code": false
+        },
+        {
+          "question_id": "fanout_scope_mixing_risk",
+          "text": "Is there scope-mixing risk?",
+          "mandatory": true,
+          "answerable_from": [
+            "batch_report.json",
+            "child outputs",
+            "aggregate outputs"
+          ],
+          "requires_source_code": false
+        },
+        {
+          "question_id": "fanout_evidence_sufficient",
+          "text": "Is current evidence sufficient?",
+          "mandatory": false,
+          "answerable_from": [
+            "batch_report.json",
+            "p5_governance_audit_report"
+          ],
+          "requires_source_code": false
+        }
+      ]
+    }
+  }
+}

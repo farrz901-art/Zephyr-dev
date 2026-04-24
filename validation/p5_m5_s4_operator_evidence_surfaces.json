@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M5-S4 operator evidence surfaces",
+  "allowed_evidence_kinds": [
+    "helper_report_cli",
+    "governance_receipt",
+    "usage_record",
+    "run_meta",
+    "delivery_receipt",
+    "queue_inspect_result",
+    "queue_backend_storage",
+    "source_contract_report",
+    "batch_report",
+    "shared_summary",
+    "child_output",
+    "aggregate_output",
+    "raw_artifact_file"
+  ],
+  "source_code_allowed": false,
+  "author_explanation_required": false,
+  "families": {
+    "delivery": {
+      "helper_report_clis": [
+        "tools/p5_recovery_operator_report.py",
+        "tools/p5_governance_audit_report.py",
+        "tools/p5_usage_report.py"
+      ],
+      "raw_artifacts": [
+        "delivery_receipt.json",
+        "run_meta.json",
+        "usage_record.json",
+        "_governance/actions/<action_id>.json"
+      ]
+    },
+    "queue_governance": {
+      "helper_report_clis": [
+        "tools/p5_recovery_operator_report.py",
+        "tools/p5_governance_audit_report.py"
+      ],
+      "raw_artifacts": [
+        "queue inspect result",
+        "spool queue bucket files",
+        "queue.sqlite3",
+        "_governance/actions/<action_id>.json",
+        "replay/requeue/verify result surfaces"
+      ]
+    },
+    "source_deep": {
+      "helper_report_clis": [
+        "tools/p5_source_contract_report.py",
+        "tools/p5_usage_report.py",
+        "tools/p5_governance_audit_report.py"
+      ],
+      "raw_artifacts": [
+        "usage_record.json",
+        "run_meta.json",
+        "_governance/actions/<action_id>.json",
+        "source contract report output"
+      ]
+    },
+    "fanout": {
+      "helper_report_clis": [
+        "tools/p5_usage_report.py",
+        "tools/p5_governance_audit_report.py"
+      ],
+      "raw_artifacts": [
+        "batch_report.json",
+        "shared summary",
+        "child outputs",
+        "aggregate outputs",
+        "usage_record.json",
+        "_governance/actions/<action_id>.json"
+      ],
+      "composition_truth": {
+        "surface_type": "destination_composition_orchestration",
+        "single_sink_connector": false
+      }
+    }
+  },
+  "prohibited_sources": [
+    "source code",
+    "author memory",
+    "hidden internal paths not named in artifacts"
+  ]
+}

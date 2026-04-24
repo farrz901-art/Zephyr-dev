@@ -1,0 +1,136 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M5-S4 cold operator scenarios",
+  "status": "cold_operator_proof_only",
+  "scope_boundaries": {
+    "repeats_s3_stability_work": false,
+    "starts_s5_release_hardening": false,
+    "adds_new_retained_anchors": false,
+    "distributed_or_cloud_scope": false
+  },
+  "package_size": {
+    "total_scenarios": 8,
+    "total_fixed_questions": 28,
+    "helper_report_surface_reuse_count": 14,
+    "rough_total_execution_units": 22
+  },
+  "families": [
+    "delivery",
+    "queue_governance",
+    "source_deep",
+    "fanout"
+  ],
+  "scenarios": [
+    {
+      "scenario_id": "delivery_replay_verify_receipt",
+      "family_id": "delivery",
+      "name": "Replay failed delivery and confirm governance receipt",
+      "exact_carriers": [
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_replay_delivery.py",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_recovery_operator.py",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_governance_audit.py"
+      ],
+      "what_happened": "A retained delivery failure is replayed, verify is surfaced, and the resulting governance receipt becomes the operator-readable closure record.",
+      "why_operator_relevant": "This is the common retained failure -> replay -> verify -> receipt judgment path.",
+      "difficulty": "medium",
+      "judgeable_without_source_code": true
+    },
+    {
+      "scenario_id": "queue_requeue_provenance_explicit",
+      "family_id": "queue_governance",
+      "name": "Inspect poison task, requeue it, then verify provenance stays explicit",
+      "exact_carriers": [
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_recovery_operator.py::test_p5_recovery_requeue_keeps_requeue_provenance_distinct"
+      ],
+      "what_happened": "A poison-path operator action is inspected and requeued, while requeue provenance remains separate from prior queue or delivery provenance.",
+      "why_operator_relevant": "It proves a non-author can tell when state changed, why it changed, and where that action was recorded.",
+      "difficulty": "medium",
+      "judgeable_without_source_code": true
+    },
+    {
+      "scenario_id": "queue_summary_first_look",
+      "family_id": "queue_governance",
+      "name": "Summarize queue poison + DLQ + provenance histories from operator view",
+      "exact_carriers": [
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_recovery_operator.py::test_p5_recovery_summary_combines_queue_delivery_and_provenance"
+      ],
+      "what_happened": "Queue poison state, delivery failure history, and provenance facts are summarized into one first-look operator reading.",
+      "why_operator_relevant": "This is the closest retained scenario to an operator runbook first-pass summary.",
+      "difficulty": "easy",
+      "judgeable_without_source_code": true
+    },
+    {
+      "scenario_id": "source_usage_governance_alignment",
+      "family_id": "source_deep",
+      "name": "Read source-linked usage/governance truth for retained source",
+      "exact_carriers": [
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_usage_runtime.py",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_governance_audit.py"
+      ],
+      "what_happened": "Usage, provenance, and governance surfaces are read together to confirm the retained source contract id remains aligned across operator-visible artifacts.",
+      "why_operator_relevant": "It answers which source contract id was used and whether usage/provenance/governance still agree without author explanation.",
+      "difficulty": "medium",
+      "judgeable_without_source_code": true
+    },
+    {
+      "scenario_id": "source_base_not_pro_confusion",
+      "family_id": "source_deep",
+      "name": "Google Drive / Confluence source remains operator-readable without naive Pro confusion",
+      "exact_carriers": [
+        "packages/uns-stream/src/uns_stream/tests/test_uns_google_drive_source.py",
+        "packages/uns-stream/src/uns_stream/tests/test_uns_confluence_source.py",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_usage_runtime.py"
+      ],
+      "what_happened": "Retained Google Drive and Confluence source evidence is read together with usage linkage so the operator can see these retained paths stay Base and are not misread as Pro or Extra.",
+      "why_operator_relevant": "It prevents product/domain confusion when reading retained source evidence.",
+      "difficulty": "medium",
+      "judgeable_without_source_code": true
+    },
+    {
+      "scenario_id": "fanout_partial_failure_shared_summary",
+      "family_id": "fanout",
+      "name": "Fanout partial failure with shared summary",
+      "exact_carriers": [
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_fanout.py::test_fanout_any_fail",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_fanout.py::test_fanout_surfaces_shared_failure_summary_when_failed_children_agree"
+      ],
+      "what_happened": "A composition run has failed children, surfaces partial failure, and emits a shared failure summary that must be interpreted as aggregate composition truth.",
+      "why_operator_relevant": "An operator must distinguish aggregate fanout state from child sink state.",
+      "difficulty": "medium",
+      "judgeable_without_source_code": true
+    },
+    {
+      "scenario_id": "fanout_all_ok_composition",
+      "family_id": "fanout",
+      "name": "Fanout all-ok aggregate remains composition, not sink",
+      "exact_carriers": [
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_fanout.py::test_fanout_all_ok"
+      ],
+      "what_happened": "A fully successful fanout run emits aggregate success while staying a composition surface rather than becoming a sink-owned result.",
+      "why_operator_relevant": "It teaches the retained interpretation boundary between aggregate and child outputs.",
+      "difficulty": "easy",
+      "judgeable_without_source_code": true
+    },
+    {
+      "scenario_id": "delivery_replayed_webhook_receipt_read",
+      "family_id": "delivery",
+      "name": "Read governance receipt for replayed webhook delivery",
+      "exact_carriers": [
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_governance_audit.py::test_replay_delivery_writes_governance_action_receipt_with_run_linkage"
+      ],
+      "what_happened": "A replayed webhook delivery produces a governance receipt whose fields answer task, run, destination, recovery kind, and result without source-code reading.",
+      "why_operator_relevant": "It is the direct retained receipt-reading scenario for replayed delivery judgment.",
+      "difficulty": "easy",
+      "judgeable_without_source_code": true
+    }
+  ],
+  "out_of_scope": [
+    "distributed runtime",
+    "cloud or Kubernetes packaging",
+    "billing pricing entitlement",
+    "RBAC approval workflow",
+    "enterprise connector implementation",
+    "S3 repeatability reruns",
+    "S5 release-consumable hardening"
+  ]
+}
