@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M5-S3 stability signals",
+  "signals": {
+    "artifact_path_stability": {
+      "meaning": "reruns keep case-scoped output paths stable in shape without reusing prior scope",
+      "validated_by": [
+        "delivery family reruns",
+        "fanout reruns",
+        "cleanup repetition rules"
+      ]
+    },
+    "usage_linkage_stability": {
+      "meaning": "usage linkage fields remain stable across reruns",
+      "validated_by": [
+        "source deep family",
+        "delivery family",
+        "fanout family"
+      ]
+    },
+    "provenance_linkage_stability": {
+      "meaning": "provenance linkage remains stable across reruns",
+      "validated_by": [
+        "source deep family",
+        "delivery family"
+      ]
+    },
+    "governance_receipt_stability": {
+      "meaning": "governance receipt path and core fields stay stable across reruns",
+      "validated_by": [
+        "delivery family",
+        "queue family",
+        "fanout family",
+        "artifact checks"
+      ]
+    },
+    "queue_state_stability": {
+      "meaning": "queue state and inspect semantics do not drift across reruns",
+      "validated_by": [
+        "queue family"
+      ]
+    },
+    "source_contract_id_stability": {
+      "meaning": "source contract ids remain stable across reruns for selected source anchors",
+      "validated_by": [
+        "source deep family"
+      ]
+    },
+    "fanout_aggregate_shared_summary_stability": {
+      "meaning": "fanout aggregate/shared-summary behavior remains stable across reruns",
+      "validated_by": [
+        "fanout family"
+      ]
+    },
+    "helper_report_artifact_check_stability": {
+      "meaning": "artifact helpers keep reporting the same S3 truth across reruns",
+      "validated_by": [
+        "s3 artifact tests",
+        "helper --check-artifacts"
+      ]
+    }
+  },
+  "false_stability_controls": [
+    "fresh basetemp and cache scope per rerun",
+    "fresh out_root and receipt scope per rerun",
+    "fresh replay.db per rerun",
+    "fresh spool/sqlite roots per rerun",
+    "fresh topic/run/checkpoint identity per rerun",
+    "fresh child/aggregate output scope per rerun"
+  ],
+  "not_claimed": [
+    "distributed runtime stability",
+    "cloud or Kubernetes load test stability",
+    "new anchor discovery",
+    "large-scale concurrency load testing"
+  ]
+}
