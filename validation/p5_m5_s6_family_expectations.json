@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M5-S6 family expectations",
+  "family_count": 5,
+  "families": [
+    {
+      "family_id": "delivery",
+      "expected_behavior": "Retained destination delivery remains bounded under same-host execution, with replay/verify/governance visibility and rough local latency bands.",
+      "acceptable_bounded_patterns": [
+        "bounded receipt and usage growth per case",
+        "failure_kind and retryability stay within shared delivery vocabulary",
+        "rough latency stays in local-band rather than headline throughput claim"
+      ],
+      "unacceptable_drift": [
+        "unclear receipt growth",
+        "delivery-origin linkage drift",
+        "silent widening into load-test semantics"
+      ],
+      "why_family_matters": "Delivery is the retained operator-facing boundary between work execution and destination-side failure/replay handling."
+    },
+    {
+      "family_id": "queue_governance",
+      "expected_behavior": "Queue state transitions remain inspectable and bounded, with spool/sqlite differences explicit and provenance/governance growth staying case-scoped.",
+      "acceptable_bounded_patterns": [
+        "bounded queue bucket growth",
+        "inspect stays read-only",
+        "requeue/provenance linkage remains explicit"
+      ],
+      "unacceptable_drift": [
+        "queue root pollution",
+        "hidden state transitions",
+        "receipt or provenance ambiguity"
+      ],
+      "why_family_matters": "Queue/governance defines the retained same-host recovery envelope and operator trust surface."
+    },
+    {
+      "family_id": "source_deep",
+      "expected_behavior": "Retained source contract, usage, provenance, governance, and checkpoint isolation remain aligned under bounded local execution.",
+      "acceptable_bounded_patterns": [
+        "bounded usage and governance growth per source case",
+        "source contract ids remain canonical",
+        "checkpoint/progress stays isolated to case scope"
+      ],
+      "unacceptable_drift": [
+        "source-id misread",
+        "checkpoint reuse across cases",
+        "governance linkage no longer explaining source behavior"
+      ],
+      "why_family_matters": "Source-deep behavior is the retained proof that source identity and progress semantics remain local, bounded, and inspectable."
+    },
+    {
+      "family_id": "fanout",
+      "expected_behavior": "Fanout remains a composition/orchestration surface with bounded child and aggregate output growth plus stable shared-summary behavior.",
+      "acceptable_bounded_patterns": [
+        "bounded child and aggregate artifact growth",
+        "shared summary remains stable when failed children agree",
+        "usage visibility preserves batch/fanout distinction"
+      ],
+      "unacceptable_drift": [
+        "fanout treated as sink connector",
+        "child/aggregate scope mixing",
+        "shared-summary collapse or ambiguity"
+      ],
+      "why_family_matters": "Fanout is the retained composition envelope and must stay operationally clear without flattening into sink semantics."
+    },
+    {
+      "family_id": "filesystem_control",
+      "expected_behavior": "Filesystem remains the lowest-cost control anchor for bounded artifact growth, output shape, and cleanup-overhead interpretation.",
+      "acceptable_bounded_patterns": [
+        "bounded output count growth",
+        "case-scoped out_root stability",
+        "rough latency remains low-cost and local"
+      ],
+      "unacceptable_drift": [
+        "artifact reuse across cases",
+        "unexpected path inflation",
+        "cleanup dependence on hidden manual actions"
+      ],
+      "why_family_matters": "Filesystem provides the control profile for interpreting whether other family growth is genuinely bounded or merely hidden by environment noise."
+    }
+  ]
+}

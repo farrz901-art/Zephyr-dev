@@ -1,0 +1,110 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M5-S6 operational signals",
+  "signal_count": 8,
+  "signals": [
+    {
+      "signal_id": "elapsed_time_latency_band",
+      "exact_sources": [
+        "validation/p5_benchmark_scenario_registry.json",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_webhook.py::test_webhook_retries_timeout_failures_and_marks_retryable",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_filesystem.py::test_filesystem_destination_writes_success_artifacts"
+      ],
+      "machine_readable_evidence_status": "existing_plus_derived_helper_check",
+      "helper_or_artifact_provider": "tools/p5_benchmark_report.py",
+      "acceptable_drift_band": "rough_same_host_latency_band_only_not_statistical",
+      "failure_condition": "unexpected order-of-magnitude latency jump or uncontrolled timing variance without retained failure explanation"
+    },
+    {
+      "signal_id": "artifact_count_growth",
+      "exact_sources": [
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_filesystem.py::test_filesystem_destination_writes_run_meta",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_filesystem.py::test_filesystem_destination_writes_success_artifacts",
+        "validation/p5_m5_s5_release_bundle_inventory.json"
+      ],
+      "machine_readable_evidence_status": "derived_via_artifact_outputs_and_bundle_inventory",
+      "helper_or_artifact_provider": "tools/p5_m5_s5_report.py",
+      "acceptable_drift_band": "bounded_case_scoped_artifact_growth_only",
+      "failure_condition": "artifact outputs grow outside case scope or require hidden cleanup to stay bounded"
+    },
+    {
+      "signal_id": "queue_state_growth",
+      "exact_sources": [
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_spool_queue.py::test_requeue_poison_task_moves_to_pending_and_preserves_governance",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_queue_backend.py::test_sqlite_queue_participates_in_shared_inspection_and_requeue_subset",
+        "validation/p5_recovery_scenario_matrix.json"
+      ],
+      "machine_readable_evidence_status": "existing",
+      "helper_or_artifact_provider": "tools/p5_recovery_operator_report.py",
+      "acceptable_drift_band": "bounded_bucket_and_state_growth_with_case_isolation",
+      "failure_condition": "queue state accumulates across cases or inspectable state drifts away from retained pending/inflight/poison/requeue expectations"
+    },
+    {
+      "signal_id": "governance_receipt_growth",
+      "exact_sources": [
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_governance_audit.py::test_replay_delivery_writes_governance_action_receipt_with_run_linkage",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_governance_audit.py::test_governance_action_receipt_helper_supports_read_only_inspect_and_usage_linkage",
+        "validation/p5_manual_action_audit_manifest.json"
+      ],
+      "machine_readable_evidence_status": "existing",
+      "helper_or_artifact_provider": "tools/p5_governance_audit_report.py",
+      "acceptable_drift_band": "bounded_receipt_count_growth_with_stable_fields",
+      "failure_condition": "receipt growth becomes unclear, inconsistent by family, or depends on hidden paths rather than canonical _governance/actions receipts"
+    },
+    {
+      "signal_id": "usage_record_growth",
+      "exact_sources": [
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_usage_runtime.py::test_usage_record_runtime_shape_keeps_recovery_paths_distinct",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_usage_runtime.py::test_batch_usage_record_preserves_batch_success_failure_symmetry",
+        "validation/p5_usage_fact_manifest.json"
+      ],
+      "machine_readable_evidence_status": "existing",
+      "helper_or_artifact_provider": "tools/p5_usage_report.py",
+      "acceptable_drift_band": "bounded_usage_artifact_growth_with_family-linked_runtime_fields",
+      "failure_condition": "usage records stop reflecting retained source/recovery/fanout distinctions or grow outside bounded runtime output expectations"
+    },
+    {
+      "signal_id": "fanout_child_aggregate_output_growth",
+      "exact_sources": [
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_fanout.py::test_fanout_all_ok",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_fanout.py::test_fanout_any_fail",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_fanout.py::test_fanout_surfaces_shared_failure_summary_when_failed_children_agree"
+      ],
+      "machine_readable_evidence_status": "derived_via_runtime_artifacts_and_usage_check",
+      "helper_or_artifact_provider": "tools/p5_usage_report.py",
+      "acceptable_drift_band": "bounded_child_and_aggregate_output_growth_with_shared_summary_stability",
+      "failure_condition": "fanout outputs mix scope, collapse into sink semantics, or lose shared-summary consistency across bounded runs"
+    },
+    {
+      "signal_id": "helper_report_artifact_check_stability",
+      "exact_sources": [
+        "tools/p5_benchmark_report.py --check-artifacts",
+        "tools/p5_bounded_concurrency_report.py --check-artifacts",
+        "tools/p5_governance_audit_report.py --check-artifacts",
+        "tools/p5_source_contract_report.py --check-artifacts",
+        "tools/p5_m5_s5_report.py --check-artifacts"
+      ],
+      "machine_readable_evidence_status": "existing",
+      "helper_or_artifact_provider": "tools/p5_m5_s6_report.py",
+      "acceptable_drift_band": "all referenced helper artifact checks remain green",
+      "failure_condition": "any referenced helper truth drifts or requires source-code inspection to recover"
+    },
+    {
+      "signal_id": "cleanup_overhead",
+      "exact_sources": [
+        "validation/p5_m5_s3_cleanup_repetition_rules.json",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_recovery_operator.py::test_p5_recovery_requeue_keeps_requeue_provenance_distinct",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_filesystem.py::test_filesystem_destination_writes_run_meta"
+      ],
+      "machine_readable_evidence_status": "existing_plus_derived_helper_check",
+      "helper_or_artifact_provider": "tools/p5_m5_s3_report.py",
+      "acceptable_drift_band": "cleanup stays bounded_case_scoped_and_local",
+      "failure_condition": "cleanup depends on hidden manual intervention or leaves dirty-state pollution that invalidates bounded-envelope interpretation"
+    }
+  ],
+  "not_claimed": [
+    "fleet-wide SLI instrumentation",
+    "distributed autoscaling signal package",
+    "cloud load metrics"
+  ]
+}

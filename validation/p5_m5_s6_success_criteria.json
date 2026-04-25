@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M5-S6 success criteria",
+  "required_family_coverage": [
+    "delivery",
+    "queue_governance",
+    "source_deep",
+    "fanout",
+    "filesystem_control"
+  ],
+  "required_load_class_coverage": [
+    "A",
+    "B",
+    "C"
+  ],
+  "required_signal_coverage": [
+    "elapsed_time_latency_band",
+    "artifact_count_growth",
+    "queue_state_growth",
+    "governance_receipt_growth",
+    "usage_record_growth",
+    "fanout_child_aggregate_output_growth",
+    "helper_report_artifact_check_stability",
+    "cleanup_overhead"
+  ],
+  "success_requires": [
+    "required families covered",
+    "required load classes covered",
+    "required signals collected",
+    "helper/report checks remain green",
+    "no dirty-state dependence",
+    "no drift beyond accepted bounded band",
+    "no phase-boundary violation"
+  ],
+  "fail_includes": [
+    "helper/report truth drift",
+    "unclear or unbounded artifact growth",
+    "unclear or unbounded governance receipt growth",
+    "queue or provenance linkage drift",
+    "source linkage drift",
+    "cross-run scope pollution",
+    "silent widening into load testing",
+    "installer or cloud scope inference"
+  ],
+  "helper_report_green_required": true,
+  "no_dirty_state_dependence_required": true,
+  "no_phase_boundary_violation_required": true,
+  "platform_side_corroboration": {
+    "allowed": true,
+    "role": "secondary_not_primary"
+  },
+  "source_code_reading_required": false
+}

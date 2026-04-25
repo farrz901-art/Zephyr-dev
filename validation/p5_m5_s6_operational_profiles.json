@@ -1,0 +1,111 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M5-S6 operational profiles",
+  "status": "bounded_same_host_operational_envelope_only",
+  "profile_count": 5,
+  "profiles": [
+    {
+      "family_id": "delivery",
+      "profile_name": "bounded_delivery_replay_verify_envelope",
+      "exact_carriers": [
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_webhook.py::test_webhook_retries_timeout_failures_and_marks_retryable",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_kafka_destination.py::test_kafka_destination_timeout_exception_maps_to_timeout_failure_kind",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_opensearch_destination.py::test_opensearch_destination_maps_rate_limits_into_shared_failure_semantics",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_replay_delivery.py::test_replay_delivery_moves_dlq_to_done",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_replay_kafka_sink.py::test_replay_to_kafka_sink",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_governance_audit.py::test_replay_delivery_writes_governance_action_receipt_with_run_linkage",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_usage_runtime.py::test_usage_record_runtime_shape_keeps_recovery_paths_distinct"
+      ],
+      "why_representative": "Combines retained destination failure semantics, replay, governance receipt, and usage recovery distinction under one bounded same-host profile.",
+      "signals_exposed": [
+        "elapsed_time_latency_band",
+        "governance_receipt_growth",
+        "usage_record_growth",
+        "helper_report_artifact_check_stability"
+      ],
+      "major_measurement_risk": "delivery backends differ in local timing variance, so envelope judgment must stay rough-band and same-host only.",
+      "judgeable_without_source_code": true
+    },
+    {
+      "family_id": "queue_governance",
+      "profile_name": "bounded_queue_state_transition_envelope",
+      "exact_carriers": [
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_spool_queue.py::test_requeue_poison_task_moves_to_pending_and_preserves_governance",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_queue_backend.py::test_sqlite_queue_participates_in_shared_inspection_and_requeue_subset",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_recovery_operator.py::test_p5_recovery_requeue_keeps_requeue_provenance_distinct",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_recovery_operator.py::test_p5_recovery_summary_combines_queue_delivery_and_provenance"
+      ],
+      "why_representative": "Covers spool/sqlite queue state transitions, requeue, inspect, provenance, and governance visibility without widening into distributed queue claims.",
+      "signals_exposed": [
+        "queue_state_growth",
+        "governance_receipt_growth",
+        "helper_report_artifact_check_stability",
+        "cleanup_overhead"
+      ],
+      "major_measurement_risk": "queue roots or receipt scopes can create false signal growth if case isolation is not preserved.",
+      "judgeable_without_source_code": true
+    },
+    {
+      "family_id": "source_deep",
+      "profile_name": "bounded_source_contract_usage_provenance_envelope",
+      "exact_carriers": [
+        "packages/uns-stream/src/uns_stream/tests/test_uns_google_drive_source.py::test_process_file_fetches_google_drive_document_and_preserves_provenance",
+        "packages/uns-stream/src/uns_stream/tests/test_uns_confluence_source.py::test_process_file_fetches_confluence_document_and_preserves_provenance",
+        "packages/it-stream/src/it_stream/tests/test_kafka_source.py::test_kafka_source_builds_cursor_checkpoints_and_resume_provenance",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_usage_runtime.py::test_usage_record_runtime_shape_keeps_uns_base_not_naive_pro",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_usage_runtime.py::test_usage_record_runtime_shape_keeps_it_raw_unit_bounded",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_governance_audit.py::test_governance_action_receipt_helper_supports_read_only_inspect_and_usage_linkage"
+      ],
+      "why_representative": "Combines retained uns and it source behavior with usage/provenance/governance linkage and checkpoint isolation under bounded local execution.",
+      "signals_exposed": [
+        "elapsed_time_latency_band",
+        "usage_record_growth",
+        "governance_receipt_growth",
+        "cleanup_overhead"
+      ],
+      "major_measurement_risk": "source-local progress or remote selection residue can masquerade as stable behavior if checkpoint/case identity isolation drifts.",
+      "judgeable_without_source_code": true
+    },
+    {
+      "family_id": "fanout",
+      "profile_name": "bounded_fanout_composition_envelope",
+      "exact_carriers": [
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_fanout.py::test_fanout_all_ok",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_fanout.py::test_fanout_any_fail",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_fanout.py::test_fanout_surfaces_shared_failure_summary_when_failed_children_agree",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_usage_runtime.py::test_batch_usage_record_preserves_batch_success_failure_symmetry"
+      ],
+      "why_representative": "Captures child/aggregate output growth, partial-failure shared summary, and composition visibility without flattening fanout into a sink.",
+      "signals_exposed": [
+        "fanout_child_aggregate_output_growth",
+        "usage_record_growth",
+        "helper_report_artifact_check_stability",
+        "cleanup_overhead"
+      ],
+      "major_measurement_risk": "child-output and aggregate-output scope mixing can create false growth or false shared-summary stability.",
+      "judgeable_without_source_code": true
+    },
+    {
+      "family_id": "filesystem_control",
+      "profile_name": "bounded_filesystem_control_envelope",
+      "exact_carriers": [
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_filesystem.py::test_filesystem_destination_writes_run_meta",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_filesystem.py::test_filesystem_destination_writes_success_artifacts"
+      ],
+      "why_representative": "Provides the lowest-cost retained control anchor for artifact growth, output shape, and case-scoped path stability.",
+      "signals_exposed": [
+        "artifact_count_growth",
+        "elapsed_time_latency_band",
+        "cleanup_overhead"
+      ],
+      "major_measurement_risk": "filesystem output reuse can hide dirty-state pollution if out_root scoping is not refreshed per case.",
+      "judgeable_without_source_code": true
+    }
+  ],
+  "not_claimed": [
+    "distributed runtime operational envelope",
+    "cloud or Kubernetes load envelope",
+    "installer implementation",
+    "new retained anchors"
+  ]
+}

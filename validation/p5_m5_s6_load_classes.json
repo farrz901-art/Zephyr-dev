@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M5-S6 load classes",
+  "scope_kind": "bounded_same_host_only",
+  "classes": [
+    {
+      "class_id": "A",
+      "name": "single representative run",
+      "intent": "minimal bounded single-case profile",
+      "intended_scale": "one case-scoped representative run per selected family",
+      "family_applicability": [
+        "delivery",
+        "queue_governance",
+        "source_deep",
+        "fanout",
+        "filesystem_control"
+      ],
+      "too_large_for_phase": [
+        "multi-host execution",
+        "distributed queue pressure",
+        "parallel fleet-scale fanout"
+      ]
+    },
+    {
+      "class_id": "B",
+      "name": "short repeated batch",
+      "intent": "small bounded repeat batch for selected family profiles",
+      "intended_scale": "2 short case-scoped batch runs with fresh basetemp/out_root",
+      "family_applicability": [
+        "delivery",
+        "queue_governance",
+        "source_deep",
+        "fanout"
+      ],
+      "too_large_for_phase": [
+        "long soak loops",
+        "sustained throughput pressure",
+        "background worker fleet burn-in"
+      ]
+    },
+    {
+      "class_id": "C",
+      "name": "bounded soak burst",
+      "intent": "short same-host burst for selected low-cost representative families",
+      "intended_scale": "3 brief same-host bursts using low-cost profiles only, still bounded and case-isolated",
+      "family_applicability": [
+        "fanout",
+        "filesystem_control"
+      ],
+      "too_large_for_phase": [
+        "true load testing",
+        "distributed saturation",
+        "cloud autoscaling or installation packaging validation"
+      ]
+    }
+  ],
+  "not_claimed": [
+    "real load testing",
+    "distributed runtime scale",
+    "cloud or Kubernetes capacity envelope"
+  ]
+}
