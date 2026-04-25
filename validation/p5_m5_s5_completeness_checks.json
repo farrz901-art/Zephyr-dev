@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M5-S5 completeness checks",
+  "required_inventory_groups": [
+    "runtime_bounded_benchmark",
+    "recovery_governance_manual_action",
+    "usage_source_contract_provenance",
+    "capability_domain_product_cut",
+    "m4_m5_stage_truths",
+    "helper_report_canonical_entrypoints"
+  ],
+  "checks": [
+    {
+      "name": "inventory_group_coverage",
+      "kind": "inventory_completeness",
+      "required": true,
+      "expectation": "all required inventory groups exist"
+    },
+    {
+      "name": "manifest_pointer_completeness",
+      "kind": "manifest_layout_completeness",
+      "required": true,
+      "expectation": "inventory/layout/handoff/completeness pointers are all present"
+    },
+    {
+      "name": "required_canonical_paths_exist",
+      "kind": "canonical_path_existence",
+      "required": true,
+      "expectation": "every required artifact and helper path exists"
+    },
+    {
+      "name": "required_optional_derived_split_is_explicit",
+      "kind": "classification_correctness",
+      "required": true,
+      "expectation": "required/optional/derived split is explicit in manifest and layout"
+    },
+    {
+      "name": "helper_report_mapping_consistent",
+      "kind": "helper_path_consistency",
+      "required": true,
+      "expectation": "manifest helper mapping matches inventory helper entrypoints"
+    },
+    {
+      "name": "out_of_scope_clarity_explicit",
+      "kind": "out_of_scope_clarity",
+      "required": true,
+      "expectation": "installer/cloud/commercial non-claims stay explicit"
+    },
+    {
+      "name": "no_source_code_reading_dependency",
+      "kind": "consumption_boundary",
+      "required": true,
+      "expectation": "outer layers can discover bundle truth without source-code reading"
+    },
+    {
+      "name": "runtime_env_authority_not_replaced",
+      "kind": "runtime_env_boundary",
+      "required": true,
+      "expectation": "external p45/env stays authoritative and is not silently replaced"
+    }
+  ],
+  "required_helper_paths": [
+    "tools/p5_runtime_boundary_report.py",
+    "tools/p5_benchmark_report.py",
+    "tools/p5_bounded_concurrency_report.py",
+    "tools/p5_capability_domain_report.py",
+    "tools/p5_product_cut_report.py",
+    "tools/p5_recovery_operator_report.py",
+    "tools/p5_governance_audit_report.py",
+    "tools/p5_usage_report.py",
+    "tools/p5_source_contract_report.py",
+    "tools/p5_m4_closeout_report.py",
+    "tools/p5_m5_validation_report.py",
+    "tools/p5_m5_s1_report.py",
+    "tools/p5_m5_s2_report.py",
+    "tools/p5_m5_s3_report.py",
+    "tools/p5_m5_s4_report.py",
+    "tools/p5_m5_s5_report.py"
+  ],
+  "forbidden_consumption_patterns": [
+    "discovering bundle contents by reading helper source code",
+    "inventing hidden artifact paths outside inventory and manifest",
+    "treating release-consumable bundle as deployment or cloud package",
+    "replacing external runtime env truth with a private temporary env"
+  ]
+}

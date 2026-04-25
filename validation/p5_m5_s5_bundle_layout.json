@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M5-S5 bundle layout",
+  "layout_groups": [
+    {
+      "group_id": "machine_readable_truth",
+      "root": "validation",
+      "classification": "required",
+      "contains": [
+        "inventory",
+        "manifest",
+        "layout",
+        "handoff_contract",
+        "completeness_checks",
+        "canonical_machine_readable_truth_surfaces"
+      ],
+      "ownership_expectation": "SSOT-backed validation artifacts",
+      "completeness_checkable": true
+    },
+    {
+      "group_id": "human_readable_reports",
+      "root": "validation",
+      "classification": "derived",
+      "contains": [
+        "release bundle report",
+        "group explanatory reports"
+      ],
+      "ownership_expectation": "derived reports from machine-readable truth",
+      "completeness_checkable": true
+    },
+    {
+      "group_id": "canonical_helper_entrypoints",
+      "root": "tools",
+      "classification": "required",
+      "contains": [
+        "family helper/report entrypoints",
+        "bundle discovery helper"
+      ],
+      "ownership_expectation": "stable outer-layer entrypoints referenced by manifest",
+      "completeness_checkable": true
+    },
+    {
+      "group_id": "runtime_plane_non_bundle_boundary",
+      "root": "external_runtime_home",
+      "classification": "optional",
+      "contains": [
+        "authoritative p45/env",
+        "real compose/runtime env files"
+      ],
+      "ownership_expectation": "runtime-plane truth is referenced, not copied into bundle",
+      "completeness_checkable": false
+    }
+  ],
+  "machine_vs_human_split": {
+    "machine_readable_root": "validation",
+    "human_readable_root": "validation",
+    "helper_entrypoint_root": "tools"
+  },
+  "what_belongs_together": {
+    "inventory_manifest_layout_handoff_completeness": "These five S5 artifacts define bundle discovery, content, structure, and drift checks.",
+    "family_truth_surfaces": "Earlier P5 truth packages remain canonical family inputs consumed by the S5 bundle.",
+    "helper_entrypoints": "Helper/report scripts remain stable discovery surfaces rather than hidden author tools."
+  },
+  "not_in_layout": [
+    "installer payload structure",
+    "deployment manifests",
+    "cloud or Kubernetes packaging layout",
+    "private temporary env replacement for p45/env"
+  ]
+}

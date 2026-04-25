@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M5-S5 handoff contract",
+  "outer_layer_discovery": {
+    "primary_helper_entrypoint": "tools/p5_m5_s5_report.py",
+    "canonical_inventory_path": "validation/p5_m5_s5_release_bundle_inventory.json",
+    "canonical_manifest_path": "validation/p5_m5_s5_release_manifest.json",
+    "canonical_layout_path": "validation/p5_m5_s5_bundle_layout.json",
+    "canonical_handoff_path": "validation/p5_m5_s5_handoff_contract.json",
+    "canonical_completeness_path": "validation/p5_m5_s5_completeness_checks.json",
+    "discovery_order": [
+      "resolve primary helper or canonical inventory path",
+      "read release manifest",
+      "read bundle inventory",
+      "resolve needed truth group or helper mapping",
+      "run completeness checks before consumption"
+    ]
+  },
+  "truth_group_lookup": {
+    "runtime_bounded_benchmark": [
+      "validation/p5_runtime_boundary_matrix.json",
+      "validation/p5_benchmark_scenario_registry.json",
+      "validation/p5_bounded_concurrency_matrix.json"
+    ],
+    "recovery_governance_manual_action": [
+      "validation/p5_recovery_scenario_matrix.json",
+      "validation/p5_governance_action_matrix.json",
+      "validation/p5_manual_action_audit_manifest.json",
+      "validation/p5_governance_usage_linkage.json"
+    ],
+    "usage_source_contract_provenance": [
+      "validation/p5_usage_fact_manifest.json",
+      "validation/p5_source_contract_matrix.json",
+      "validation/p5_usage_runtime_contract.json",
+      "validation/p5_source_linkage_v2.json"
+    ],
+    "capability_domain_product_cut": [
+      "validation/p5_capability_domain_matrix.json",
+      "validation/p5_product_cut_manifest.json"
+    ],
+    "m4_m5_stage_truths": [
+      "validation/p5_m4_closeout_truth_matrix.json",
+      "validation/p5_m5_validation_matrix.json",
+      "validation/p5_m5_s1_execution_plan.json",
+      "validation/p5_m5_s2_execution_plan.json",
+      "validation/p5_m5_s3_execution_plan.json",
+      "validation/p5_m5_s4_operator_scenarios.json"
+    ]
+  },
+  "completeness_verification": {
+    "helper_cli_check": "tools/p5_m5_s5_report.py --check-artifacts",
+    "machine_readable_check_spec": "validation/p5_m5_s5_completeness_checks.json"
+  },
+  "must_not_infer": [
+    "installer implementation is complete",
+    "deployment packaging is complete",
+    "distributed runtime or cloud readiness",
+    "billing or entitlement meaning from technical truth surfaces",
+    "RBAC or approval workflow semantics",
+    "fanout is a sink connector",
+    "source code reading is a required discovery step"
+  ],
+  "source_code_reading_allowed": false,
+  "runtime_env_authority": "p45/env under the external runtime-home remains the authoritative retained runtime environment surface and is not replaced by this repo bundle."
+}
