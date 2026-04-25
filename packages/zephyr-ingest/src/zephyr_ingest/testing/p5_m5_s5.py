@@ -99,6 +99,10 @@ P5_M5_S5_COMPLETENESS_CHECKS_PATH: Final[Path] = (
 )
 
 
+def _serialize_repo_relative_path(path: Path) -> str:
+    return path.relative_to(repo_root()).as_posix()
+
+
 def _artifact_entry(
     *,
     surface_id: str,
@@ -111,7 +115,7 @@ def _artifact_entry(
 ) -> dict[str, object]:
     return {
         "surface_id": surface_id,
-        "canonical_path": str(canonical_path.relative_to(repo_root())),
+        "canonical_path": _serialize_repo_relative_path(canonical_path),
         "readability": readability,
         "classification": classification,
         "future_consumers": list(future_consumers),

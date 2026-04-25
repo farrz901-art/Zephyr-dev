@@ -14,7 +14,7 @@
       "surfaces": [
         {
           "surface_id": "runtime_boundary_matrix",
-          "canonical_path": "validation\\p5_runtime_boundary_matrix.json",
+          "canonical_path": "validation/p5_runtime_boundary_matrix.json",
           "readability": "machine_readable",
           "classification": "required",
           "future_consumers": [
@@ -27,7 +27,7 @@
         },
         {
           "surface_id": "runtime_boundary_report",
-          "canonical_path": "validation\\P5_M2_RUNTIME_BOUNDARY.md",
+          "canonical_path": "validation/P5_M2_RUNTIME_BOUNDARY.md",
           "readability": "human_readable",
           "classification": "derived",
           "future_consumers": [
@@ -40,7 +40,7 @@
         },
         {
           "surface_id": "benchmark_registry",
-          "canonical_path": "validation\\p5_benchmark_scenario_registry.json",
+          "canonical_path": "validation/p5_benchmark_scenario_registry.json",
           "readability": "machine_readable",
           "classification": "required",
           "future_consumers": [
@@ -53,7 +53,7 @@
         },
         {
           "surface_id": "benchmark_report",
-          "canonical_path": "validation\\P5_M4_BENCHMARK_BASELINE.md",
+          "canonical_path": "validation/P5_M4_BENCHMARK_BASELINE.md",
           "readability": "human_readable",
           "classification": "derived",
           "future_consumers": [
@@ -66,7 +66,7 @@
         },
         {
           "surface_id": "bounded_concurrency_matrix",
-          "canonical_path": "validation\\p5_bounded_concurrency_matrix.json",
+          "canonical_path": "validation/p5_bounded_concurrency_matrix.json",
           "readability": "machine_readable",
           "classification": "required",
           "future_consumers": [
@@ -79,7 +79,7 @@
         },
         {
           "surface_id": "bounded_concurrency_report",
-          "canonical_path": "validation\\P5_M4_S8_BOUNDED_CONCURRENCY.md",
+          "canonical_path": "validation/P5_M4_S8_BOUNDED_CONCURRENCY.md",
           "readability": "human_readable",
           "classification": "derived",
           "future_consumers": [
@@ -97,7 +97,7 @@
       "surfaces": [
         {
           "surface_id": "recovery_matrix",
-          "canonical_path": "validation\\p5_recovery_scenario_matrix.json",
+          "canonical_path": "validation/p5_recovery_scenario_matrix.json",
           "readability": "machine_readable",
           "classification": "required",
           "future_consumers": [
@@ -110,7 +110,7 @@
         },
         {
           "surface_id": "recovery_runbook",
-          "canonical_path": "validation\\P5_M3_RECOVERY_OPERATOR_RUNBOOK.md",
+          "canonical_path": "validation/P5_M3_RECOVERY_OPERATOR_RUNBOOK.md",
           "readability": "human_readable",
           "classification": "derived",
           "future_consumers": [
@@ -122,7 +122,7 @@
         },
         {
           "surface_id": "governance_action_matrix",
-          "canonical_path": "validation\\p5_governance_action_matrix.json",
+          "canonical_path": "validation/p5_governance_action_matrix.json",
           "readability": "machine_readable",
           "classification": "required",
           "future_consumers": [
@@ -135,7 +135,7 @@
         },
         {
           "surface_id": "manual_action_audit_manifest",
-          "canonical_path": "validation\\p5_manual_action_audit_manifest.json",
+          "canonical_path": "validation/p5_manual_action_audit_manifest.json",
           "readability": "machine_readable",
           "classification": "required",
           "future_consumers": [
@@ -148,7 +148,7 @@
         },
         {
           "surface_id": "governance_usage_linkage",
-          "canonical_path": "validation\\p5_governance_usage_linkage.json",
+          "canonical_path": "validation/p5_governance_usage_linkage.json",
           "readability": "machine_readable",
           "classification": "required",
           "future_consumers": [
@@ -161,7 +161,7 @@
         },
         {
           "surface_id": "source_spec_parity",
-          "canonical_path": "validation\\p5_source_spec_parity.json",
+          "canonical_path": "validation/p5_source_spec_parity.json",
           "readability": "machine_readable",
           "classification": "required",
           "future_consumers": [
@@ -174,7 +174,7 @@
         },
         {
           "surface_id": "verify_recovery_result_contract",
-          "canonical_path": "validation\\p5_verify_recovery_result_contract.json",
+          "canonical_path": "validation/p5_verify_recovery_result_contract.json",
           "readability": "machine_readable",
           "classification": "required",
           "future_consumers": [
@@ -187,7 +187,7 @@
         },
         {
           "surface_id": "inspect_receipt_contract",
-          "canonical_path": "validation\\p5_inspect_receipt_contract.json",
+          "canonical_path": "validation/p5_inspect_receipt_contract.json",
           "readability": "machine_readable",
           "classification": "required",
           "future_consumers": [
@@ -200,7 +200,7 @@
         },
         {
           "surface_id": "governance_vocabulary_matrix",
-          "canonical_path": "validation\\p5_governance_vocabulary_matrix.json",
+          "canonical_path": "validation/p5_governance_vocabulary_matrix.json",
           "readability": "machine_readable",
           "classification": "required",
           "future_consumers": [
@@ -213,7 +213,7 @@
         },
         {
           "surface_id": "governance_audit_report",
-          "canonical_path": "validation\\P5_M4_S13_GOVERNANCE_AUDIT.md",
+          "canonical_path": "validation/P5_M4_S13_GOVERNANCE_AUDIT.md",
           "readability": "human_readable",
           "classification": "derived",
           "future_consumers": [
@@ -231,7 +231,7 @@
       "surfaces": [
         {
           "surface_id": "usage_fact_manifest",
-          "canonical_path": "validation\\p5_usage_fact_manifest.json",
+          "canonical_path": "validation/p5_usage_fact_manifest.json",
           "readability": "machine_readable",
           "classification": "required",
           "future_consumers": [
@@ -244,7 +244,7 @@
         },
         {
           "surface_id": "usage_linkage_contract",
-          "canonical_path": "validation\\p5_usage_linkage_contract.json",
+          "canonical_path": "validation/p5_usage_linkage_contract.json",
           "readability": "machine_readable",
           "classification": "required",
           "future_consumers": [
@@ -257,7 +257,7 @@
         },
         {
           "surface_id": "source_contract_matrix",
-          "canonical_path": "validation\\p5_source_contract_matrix.json",
+          "canonical_path": "validation/p5_source_contract_matrix.json",
           "readability": "machine_readable",
           "classification": "required",
           "future_consumers": [
@@ -270,7 +270,7 @@
         },
         {
           "surface_id": "usage_runtime_contract",
-          "canonical_path": "validation\\p5_usage_runtime_contract.json",
+          "canonical_path": "validation/p5_usage_runtime_contract.json",
           "readability": "machine_readable",
           "classification": "required",
           "future_consumers": [
@@ -283,7 +283,7 @@
         },
         {
           "surface_id": "source_usage_linkage",
-          "canonical_path": "validation\\p5_source_usage_linkage.json",
+          "canonical_path": "validation/p5_source_usage_linkage.json",
           "readability": "machine_readable",
           "classification": "required",
           "future_consumers": [
@@ -296,7 +296,7 @@
         },
         {
           "surface_id": "source_linkage_v2",
-          "canonical_path": "validation\\p5_source_linkage_v2.json",
+          "canonical_path": "validation/p5_source_linkage_v2.json",
           "readability": "machine_readable",
           "classification": "required",
           "future_consumers": [
@@ -309,7 +309,7 @@
         },
         {
           "surface_id": "usage_fact_report",
-          "canonical_path": "validation\\P5_M4_S11_USAGE_FACTS.md",
+          "canonical_path": "validation/P5_M4_S11_USAGE_FACTS.md",
           "readability": "human_readable",
           "classification": "derived",
           "future_consumers": [
@@ -321,7 +321,7 @@
         },
         {
           "surface_id": "source_contract_report",
-          "canonical_path": "validation\\P5_M4_S12_SOURCE_CONTRACTS.md",
+          "canonical_path": "validation/P5_M4_S12_SOURCE_CONTRACTS.md",
           "readability": "human_readable",
           "classification": "derived",
           "future_consumers": [
@@ -334,7 +334,7 @@
         },
         {
           "surface_id": "usage_runtime_report",
-          "canonical_path": "validation\\P5_M4_S12_USAGE_RUNTIME.md",
+          "canonical_path": "validation/P5_M4_S12_USAGE_RUNTIME.md",
           "readability": "human_readable",
           "classification": "derived",
           "future_consumers": [
@@ -352,7 +352,7 @@
       "surfaces": [
         {
           "surface_id": "capability_domain_matrix",
-          "canonical_path": "validation\\p5_capability_domain_matrix.json",
+          "canonical_path": "validation/p5_capability_domain_matrix.json",
           "readability": "machine_readable",
           "classification": "required",
           "future_consumers": [
@@ -365,7 +365,7 @@
         },
         {
           "surface_id": "dependency_boundary_manifest",
-          "canonical_path": "validation\\p5_dependency_boundary_manifest.json",
+          "canonical_path": "validation/p5_dependency_boundary_manifest.json",
           "readability": "machine_readable",
           "classification": "required",
           "future_consumers": [
@@ -378,7 +378,7 @@
         },
         {
           "surface_id": "build_cut_manifest",
-          "canonical_path": "validation\\p5_build_cut_manifest.json",
+          "canonical_path": "validation/p5_build_cut_manifest.json",
           "readability": "machine_readable",
           "classification": "required",
           "future_consumers": [
@@ -391,7 +391,7 @@
         },
         {
           "surface_id": "product_cut_manifest",
-          "canonical_path": "validation\\p5_product_cut_manifest.json",
+          "canonical_path": "validation/p5_product_cut_manifest.json",
           "readability": "machine_readable",
           "classification": "required",
           "future_consumers": [
@@ -404,7 +404,7 @@
         },
         {
           "surface_id": "dependency_slice_manifest",
-          "canonical_path": "validation\\p5_dependency_slice_manifest.json",
+          "canonical_path": "validation/p5_dependency_slice_manifest.json",
           "readability": "machine_readable",
           "classification": "required",
           "future_consumers": [
@@ -416,7 +416,7 @@
         },
         {
           "surface_id": "destination_surface_classification",
-          "canonical_path": "validation\\p5_destination_surface_classification.json",
+          "canonical_path": "validation/p5_destination_surface_classification.json",
           "readability": "machine_readable",
           "classification": "required",
           "future_consumers": [
@@ -429,7 +429,7 @@
         },
         {
           "surface_id": "packaging_output_manifest",
-          "canonical_path": "validation\\p5_packaging_output_manifest.json",
+          "canonical_path": "validation/p5_packaging_output_manifest.json",
           "readability": "machine_readable",
           "classification": "required",
           "future_consumers": [
@@ -442,7 +442,7 @@
         },
         {
           "surface_id": "capability_domain_report",
-          "canonical_path": "validation\\P5_M4_S9_CAPABILITY_DOMAINS.md",
+          "canonical_path": "validation/P5_M4_S9_CAPABILITY_DOMAINS.md",
           "readability": "human_readable",
           "classification": "derived",
           "future_consumers": [
@@ -455,7 +455,7 @@
         },
         {
           "surface_id": "packaging_skeleton_report",
-          "canonical_path": "validation\\P5_M4_S10_PACKAGING_SKELETON.md",
+          "canonical_path": "validation/P5_M4_S10_PACKAGING_SKELETON.md",
           "readability": "human_readable",
           "classification": "derived",
           "future_consumers": [
@@ -473,7 +473,7 @@
       "surfaces": [
         {
           "surface_id": "m4_closeout_truth_matrix",
-          "canonical_path": "validation\\p5_m4_closeout_truth_matrix.json",
+          "canonical_path": "validation/p5_m4_closeout_truth_matrix.json",
           "readability": "machine_readable",
           "classification": "required",
           "future_consumers": [
@@ -486,7 +486,7 @@
         },
         {
           "surface_id": "m4_residual_risk",
-          "canonical_path": "validation\\p5_m4_residual_risk.json",
+          "canonical_path": "validation/p5_m4_residual_risk.json",
           "readability": "machine_readable",
           "classification": "required",
           "future_consumers": [
@@ -499,7 +499,7 @@
         },
         {
           "surface_id": "m5_validation_matrix",
-          "canonical_path": "validation\\p5_m5_validation_matrix.json",
+          "canonical_path": "validation/p5_m5_validation_matrix.json",
           "readability": "machine_readable",
           "classification": "required",
           "future_consumers": [
@@ -512,7 +512,7 @@
         },
         {
           "surface_id": "m5_retained_surface_inventory",
-          "canonical_path": "validation\\p5_m5_retained_surface_inventory.json",
+          "canonical_path": "validation/p5_m5_retained_surface_inventory.json",
           "readability": "machine_readable",
           "classification": "required",
           "future_consumers": [
@@ -525,7 +525,7 @@
         },
         {
           "surface_id": "m5_deep_anchor_selection",
-          "canonical_path": "validation\\p5_m5_deep_anchor_selection.json",
+          "canonical_path": "validation/p5_m5_deep_anchor_selection.json",
           "readability": "machine_readable",
           "classification": "required",
           "future_consumers": [
@@ -537,7 +537,7 @@
         },
         {
           "surface_id": "m5_s1_execution_plan",
-          "canonical_path": "validation\\p5_m5_s1_execution_plan.json",
+          "canonical_path": "validation/p5_m5_s1_execution_plan.json",
           "readability": "machine_readable",
           "classification": "required",
           "future_consumers": [
@@ -549,7 +549,7 @@
         },
         {
           "surface_id": "m5_s2_execution_plan",
-          "canonical_path": "validation\\p5_m5_s2_execution_plan.json",
+          "canonical_path": "validation/p5_m5_s2_execution_plan.json",
           "readability": "machine_readable",
           "classification": "required",
           "future_consumers": [
@@ -561,7 +561,7 @@
         },
         {
           "surface_id": "m5_s3_execution_plan",
-          "canonical_path": "validation\\p5_m5_s3_execution_plan.json",
+          "canonical_path": "validation/p5_m5_s3_execution_plan.json",
           "readability": "machine_readable",
           "classification": "required",
           "future_consumers": [
@@ -573,7 +573,7 @@
         },
         {
           "surface_id": "m5_s4_operator_scenarios",
-          "canonical_path": "validation\\p5_m5_s4_operator_scenarios.json",
+          "canonical_path": "validation/p5_m5_s4_operator_scenarios.json",
           "readability": "machine_readable",
           "classification": "required",
           "future_consumers": [
@@ -586,7 +586,7 @@
         },
         {
           "surface_id": "m5_s4_operator_questions",
-          "canonical_path": "validation\\p5_m5_s4_operator_questions.json",
+          "canonical_path": "validation/p5_m5_s4_operator_questions.json",
           "readability": "machine_readable",
           "classification": "required",
           "future_consumers": [
@@ -598,7 +598,7 @@
         },
         {
           "surface_id": "m5_s4_operator_evidence_surfaces",
-          "canonical_path": "validation\\p5_m5_s4_operator_evidence_surfaces.json",
+          "canonical_path": "validation/p5_m5_s4_operator_evidence_surfaces.json",
           "readability": "machine_readable",
           "classification": "required",
           "future_consumers": [
@@ -611,7 +611,7 @@
         },
         {
           "surface_id": "m5_s4_scoring_rules",
-          "canonical_path": "validation\\p5_m5_s4_scoring_rules.json",
+          "canonical_path": "validation/p5_m5_s4_scoring_rules.json",
           "readability": "machine_readable",
           "classification": "required",
           "future_consumers": [
