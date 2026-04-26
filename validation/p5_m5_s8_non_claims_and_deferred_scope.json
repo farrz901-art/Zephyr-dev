@@ -1,0 +1,98 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M5-S8 non-claims and deferred scope",
+  "non_claim_count": 13,
+  "non_claims": [
+    {
+      "non_claim_id": "distributed_runtime",
+      "why_not_claimed_in_m5": "M5 stayed bounded/local/artifact-backed and never proved distributed ownership.",
+      "likely_later_home": "P6 cloud/deployment line",
+      "risk_if_accidentally_claimed": "Creates false fleet/runtime expectations unsupported by retained evidence.",
+      "wording_guardrail": "Do not claim distributed worker or scheduler ownership."
+    },
+    {
+      "non_claim_id": "cloud_k8s_helm_deployment",
+      "why_not_claimed_in_m5": "M5 never implemented or proved deployment packaging.",
+      "likely_later_home": "P6 cloud/deployment line",
+      "risk_if_accidentally_claimed": "Users may assume deployment packaging or cluster readiness exists.",
+      "wording_guardrail": "Do not describe M5 artifacts as cloud, Kubernetes, or Helm bundles."
+    },
+    {
+      "non_claim_id": "deployment_packaging",
+      "why_not_claimed_in_m5": "S5 was a reference bundle, not deployment packaging.",
+      "likely_later_home": "P6 cloud/deployment line",
+      "risk_if_accidentally_claimed": "Turns reference truth into a fake deployment deliverable.",
+      "wording_guardrail": "Use release-consumable reference bundle, never deployment package."
+    },
+    {
+      "non_claim_id": "installer_implementation",
+      "why_not_claimed_in_m5": "No installer was built or validated in M5.",
+      "likely_later_home": "P6 productization",
+      "risk_if_accidentally_claimed": "Would overstate onboarding and user readiness.",
+      "wording_guardrail": "Do not imply install flow or setup automation is done."
+    },
+    {
+      "non_claim_id": "large_scale_concurrency_load_testing",
+      "why_not_claimed_in_m5": "S6 proved only bounded same-host operational envelope.",
+      "likely_later_home": "post-P6",
+      "risk_if_accidentally_claimed": "Conflates bounded envelope with real load qualification.",
+      "wording_guardrail": "Do not describe bounded same-host classes as load testing."
+    },
+    {
+      "non_claim_id": "production_multi_tenant_slo_sla",
+      "why_not_claimed_in_m5": "M5 froze technical truth packages, not product SLA policy.",
+      "likely_later_home": "post-P6",
+      "risk_if_accidentally_claimed": "Creates unsupported contractual performance expectations.",
+      "wording_guardrail": "Do not turn operational signals into SLO/SLA claims."
+    },
+    {
+      "non_claim_id": "billing_pricing_entitlement",
+      "why_not_claimed_in_m5": "Capability and usage truths remain technical, non-commercial.",
+      "likely_later_home": "P6 productization",
+      "risk_if_accidentally_claimed": "Misreads raw technical usage as monetization or entitlement.",
+      "wording_guardrail": "Base/Pro/Extra are technical capability domains, not pricing or entitlement."
+    },
+    {
+      "non_claim_id": "rbac_approval_workflow",
+      "why_not_claimed_in_m5": "Governance stayed audit/manual-action truth, not approval workflow.",
+      "likely_later_home": "P6 productization",
+      "risk_if_accidentally_claimed": "Suggests authorization controls that do not exist.",
+      "wording_guardrail": "Do not equate governance receipts with RBAC or approval workflow."
+    },
+    {
+      "non_claim_id": "enterprise_connectors",
+      "why_not_claimed_in_m5": "Retained connectors remain non-enterprise only.",
+      "likely_later_home": "P6 enterprise connector line",
+      "risk_if_accidentally_claimed": "Overstates connector support boundary and product maturity.",
+      "wording_guardrail": "Do not describe retained connectors as enterprise-managed."
+    },
+    {
+      "non_claim_id": "commercial_gateway",
+      "why_not_claimed_in_m5": "M5 never introduced commercial platform or gateway surfaces.",
+      "likely_later_home": "post-P6",
+      "risk_if_accidentally_claimed": "Turns technical validation into unsupported commercial platform claim.",
+      "wording_guardrail": "Do not add commercial gateway language to technical closeout artifacts."
+    },
+    {
+      "non_claim_id": "full_all_pairs_equal_depth_proof",
+      "why_not_claimed_in_m5": "M5 stayed representative and bounded by design across S1-S7.",
+      "likely_later_home": "post-P6",
+      "risk_if_accidentally_claimed": "Erases the deliberate representative-only validation boundary.",
+      "wording_guardrail": "Do not describe M5 as exhaustive all-pairs equal-depth proof."
+    },
+    {
+      "non_claim_id": "p6_product_shell",
+      "why_not_claimed_in_m5": "S8 only prepares final user-style validation and closeout.",
+      "likely_later_home": "P6 productization",
+      "risk_if_accidentally_claimed": "Confuses closeout prep with a finished product shell.",
+      "wording_guardrail": "Do not imply product shell UX or packaging is complete."
+    },
+    {
+      "non_claim_id": "runtime_env_replacement",
+      "why_not_claimed_in_m5": "External p45/env remains authoritative runtime truth.",
+      "likely_later_home": "post-P6",
+      "risk_if_accidentally_claimed": "Encourages replacing real runtime env/config with repo-only truth.",
+      "wording_guardrail": "Do not replace or shadow the authoritative external p45/env surface."
+    }
+  ]
+}

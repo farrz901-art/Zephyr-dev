@@ -1,0 +1,97 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M5-S8 closeout checks",
+  "check_count": 10,
+  "checks": [
+    {
+      "check_id": "all_required_m5_artifacts_exist",
+      "description": "All required M5 artifacts from S0 through S8 exist.",
+      "exact_evidence_surface": "tools/p5_m5_s8_report.py --check-artifacts",
+      "machine_checkable_today": true,
+      "severity": "error",
+      "current_status": "pass",
+      "failure_action": "restore or regenerate missing stage artifacts before closeout"
+    },
+    {
+      "check_id": "all_required_helper_checks_green",
+      "description": "Required helper/report checks remain green across core and M5 surfaces.",
+      "exact_evidence_surface": "tools/p5_m5_s8_report.py --check-artifacts plus selected prior helper checks",
+      "machine_checkable_today": true,
+      "severity": "error",
+      "current_status": "pass",
+      "failure_action": "fix helper/artifact drift before declaring M5 closeout"
+    },
+    {
+      "check_id": "all_stage_truth_statuses_complete",
+      "description": "Stage truth index marks S0-S7 complete and bounded.",
+      "exact_evidence_surface": "validation/p5_m5_s8_stage_truth_index.json",
+      "machine_checkable_today": true,
+      "severity": "error",
+      "current_status": "pass",
+      "failure_action": "resolve incomplete stage state before M5 closeout"
+    },
+    {
+      "check_id": "cross_stage_consistency_checks_pass",
+      "description": "Cross-stage consistency checks all pass.",
+      "exact_evidence_surface": "validation/p5_m5_s8_cross_stage_consistency.json",
+      "machine_checkable_today": true,
+      "severity": "error",
+      "current_status": "pass",
+      "failure_action": "reconcile cross-stage drift before closeout"
+    },
+    {
+      "check_id": "all_non_claims_remain_non_claims",
+      "description": "Non-claims and deferred scope stay explicit and unchanged.",
+      "exact_evidence_surface": "validation/p5_m5_s8_non_claims_and_deferred_scope.json",
+      "machine_checkable_today": true,
+      "severity": "error",
+      "current_status": "pass",
+      "failure_action": "remove overclaiming language and restore guardrails"
+    },
+    {
+      "check_id": "p5_final_user_validation_prep_exists",
+      "description": "User validation prep package exists without starting execution.",
+      "exact_evidence_surface": "validation/p5_m5_s8_user_validation_plan.json",
+      "machine_checkable_today": true,
+      "severity": "error",
+      "current_status": "pass",
+      "failure_action": "finish user validation prep package before closeout"
+    },
+    {
+      "check_id": "source_code_reading_not_required",
+      "description": "Final closeout truth is consumable without source-code reading.",
+      "exact_evidence_surface": "validation/p5_m5_s8_stage_truth_index.json",
+      "machine_checkable_today": true,
+      "severity": "error",
+      "current_status": "pass",
+      "failure_action": "remove source-code dependency from closeout package"
+    },
+    {
+      "check_id": "platform_side_corroboration_secondary",
+      "description": "Platform-side checking remains secondary corroboration.",
+      "exact_evidence_surface": "validation/p5_m5_s8_closeout_checks.json",
+      "machine_checkable_today": true,
+      "severity": "error",
+      "current_status": "pass",
+      "failure_action": "restore artifact/helper truth as primary closeout evidence"
+    },
+    {
+      "check_id": "no_runtime_home_replacement",
+      "description": "External runtime-home and p45/env are not replaced by repo truth.",
+      "exact_evidence_surface": "validation/p5_m5_s8_non_claims_and_deferred_scope.json",
+      "machine_checkable_today": true,
+      "severity": "error",
+      "current_status": "pass",
+      "failure_action": "remove any runtime-home replacement implication"
+    },
+    {
+      "check_id": "no_installer_cloud_p6_commercial_drift",
+      "description": "No installer/cloud/P6/commercial scope drift is introduced in closeout.",
+      "exact_evidence_surface": "validation/p5_m5_s8_non_claims_and_deferred_scope.json",
+      "machine_checkable_today": true,
+      "severity": "error",
+      "current_status": "pass",
+      "failure_action": "pull drifted scope back behind explicit non-claims"
+    }
+  ]
+}

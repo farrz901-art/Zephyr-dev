@@ -1,0 +1,218 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M5-S8 final readiness closeout",
+  "stage_count": 8,
+  "stages": [
+    {
+      "stage_id": "S0",
+      "stage_purpose": "validation / matrix freeze",
+      "primary_machine_readable_artifacts": [
+        "validation/p5_m5_validation_matrix.json",
+        "validation/p5_m5_retained_surface_inventory.json",
+        "validation/p5_m5_deep_anchor_selection.json"
+      ],
+      "primary_human_readable_report": "validation/P5_M5_VALIDATION_CHARTER.md",
+      "helper_report_entrypoint": "tools/p5_m5_validation_report.py",
+      "status": "complete",
+      "what_it_proves": [
+        "retained validation frame and matrix boundaries",
+        "retained surface inventory freeze",
+        "deep-anchor selection freeze"
+      ],
+      "what_it_does_not_prove": [
+        "execution depth",
+        "stability",
+        "cold-operator proof",
+        "release bundle",
+        "user workflow completion"
+      ],
+      "source_code_reading_required": false,
+      "overclaim_risk": "S0 can be over-read as execution proof even though it only freezes validation boundaries."
+    },
+    {
+      "stage_id": "S1",
+      "stage_purpose": "baseline matrix execution",
+      "primary_machine_readable_artifacts": [
+        "validation/p5_m5_s1_execution_plan.json",
+        "validation/p5_m5_s1_exact_carriers.json",
+        "validation/p5_m5_s1_cleanup_rules.json"
+      ],
+      "primary_human_readable_report": "validation/P5_M5_S1_BASELINE_MATRIX.md",
+      "helper_report_entrypoint": "tools/p5_m5_s1_report.py",
+      "status": "complete",
+      "what_it_proves": [
+        "retained baseline coverage layer",
+        "exact baseline carriers",
+        "cleanup/isolation discipline for baseline execution"
+      ],
+      "what_it_does_not_prove": [
+        "representative deep closure",
+        "repeatability",
+        "cold-operator proof",
+        "release bundle",
+        "final workflow chain"
+      ],
+      "source_code_reading_required": false,
+      "overclaim_risk": "S1 can be overclaimed as deep validation when it only proves retained baseline coverage."
+    },
+    {
+      "stage_id": "S2",
+      "stage_purpose": "representative deep closures",
+      "primary_machine_readable_artifacts": [
+        "validation/p5_m5_s2_execution_plan.json",
+        "validation/p5_m5_s2_exact_deep_carriers.json",
+        "validation/p5_m5_s2_cleanup_rules.json",
+        "validation/p5_m5_s2_deep_closures.json"
+      ],
+      "primary_human_readable_report": "validation/P5_M5_S2_DEEP_MATRIX.md",
+      "helper_report_entrypoint": "tools/p5_m5_s2_report.py",
+      "status": "complete",
+      "what_it_proves": [
+        "representative failure/recovery/source/fanout deep closure truth",
+        "explicit grouped deep-closure execution",
+        "representative deep cleanup/isolation truth"
+      ],
+      "what_it_does_not_prove": [
+        "repeatability",
+        "cleanup repetition",
+        "bounded soak",
+        "cold-operator proof",
+        "release handoff",
+        "final workflow chain"
+      ],
+      "source_code_reading_required": false,
+      "overclaim_risk": "S2 can be over-read as all-pairs deep proof when it is intentionally representative only."
+    },
+    {
+      "stage_id": "S3",
+      "stage_purpose": "repeatability / cleanup / bounded soak stability",
+      "primary_machine_readable_artifacts": [
+        "validation/p5_m5_s3_execution_plan.json",
+        "validation/p5_m5_s3_repeatability_carriers.json",
+        "validation/p5_m5_s3_cleanup_repetition_rules.json",
+        "validation/p5_m5_s3_stability_signals.json"
+      ],
+      "primary_human_readable_report": "validation/P5_M5_S3_STABILITY_MATRIX.md",
+      "helper_report_entrypoint": "tools/p5_m5_s3_report.py",
+      "status": "complete",
+      "what_it_proves": [
+        "repeated deep closure stability",
+        "cleanup/rerun truth",
+        "bounded same-host soak truth"
+      ],
+      "what_it_does_not_prove": [
+        "cold-operator proof",
+        "release bundle",
+        "workflow user-readiness",
+        "cloud/load/distributed behavior"
+      ],
+      "source_code_reading_required": false,
+      "overclaim_risk": "S3 can be misread as load testing even though it only proves bounded same-host stability."
+    },
+    {
+      "stage_id": "S4",
+      "stage_purpose": "cold-operator proof",
+      "primary_machine_readable_artifacts": [
+        "validation/p5_m5_s4_operator_scenarios.json",
+        "validation/p5_m5_s4_operator_questions.json",
+        "validation/p5_m5_s4_operator_evidence_surfaces.json",
+        "validation/p5_m5_s4_scoring_rules.json"
+      ],
+      "primary_human_readable_report": "validation/P5_M5_S4_COLD_OPERATOR.md",
+      "helper_report_entrypoint": "tools/p5_m5_s4_report.py",
+      "status": "complete",
+      "what_it_proves": [
+        "non-author operator can judge retained scenarios using helper/report/artifacts",
+        "source-code reading is not required for operator interpretation",
+        "operator scoring/pass criteria are explicit"
+      ],
+      "what_it_does_not_prove": [
+        "release bundle",
+        "installer implementation",
+        "cloud/deployment readiness",
+        "real workflow user journey"
+      ],
+      "source_code_reading_required": false,
+      "overclaim_risk": "S4 can be overclaimed as product-user readiness when it only proves cold-operator interpretation."
+    },
+    {
+      "stage_id": "S5",
+      "stage_purpose": "release-consumable reference bundle",
+      "primary_machine_readable_artifacts": [
+        "validation/p5_m5_s5_release_bundle_inventory.json",
+        "validation/p5_m5_s5_release_manifest.json",
+        "validation/p5_m5_s5_handoff_contract.json",
+        "validation/p5_m5_s5_completeness_checks.json"
+      ],
+      "primary_human_readable_report": "validation/P5_M5_S5_RELEASE_BUNDLE.md",
+      "helper_report_entrypoint": "tools/p5_m5_s5_report.py",
+      "status": "complete",
+      "what_it_proves": [
+        "future product/installer/release layers can discover canonical truth surfaces",
+        "bundle inventory, manifest, layout, handoff, and completeness are frozen",
+        "outer layers do not need source-code reading to discover truth surfaces"
+      ],
+      "what_it_does_not_prove": [
+        "installer implementation",
+        "deployment packaging",
+        "cloud bundle",
+        "runtime env replacement"
+      ],
+      "source_code_reading_required": false,
+      "overclaim_risk": "S5 can be misread as installer or deployment work when it is only a reference bundle."
+    },
+    {
+      "stage_id": "S6",
+      "stage_purpose": "bounded same-host operational envelope",
+      "primary_machine_readable_artifacts": [
+        "validation/p5_m5_s6_operational_profiles.json",
+        "validation/p5_m5_s6_load_classes.json",
+        "validation/p5_m5_s6_operational_signals.json",
+        "validation/p5_m5_s6_family_expectations.json",
+        "validation/p5_m5_s6_success_criteria.json"
+      ],
+      "primary_human_readable_report": "validation/P5_M5_S6_OPERATIONAL_ENVELOPE.md",
+      "helper_report_entrypoint": "tools/p5_m5_s6_report.py",
+      "status": "complete",
+      "what_it_proves": [
+        "retained/local/bounded operational profile truth",
+        "bounded load-class and signal truth",
+        "family-level expectations and success/fail criteria for same-host operation"
+      ],
+      "what_it_does_not_prove": [
+        "cloud or distributed envelope",
+        "large-scale load testing",
+        "installer/deployment envelope"
+      ],
+      "source_code_reading_required": false,
+      "overclaim_risk": "S6 can be over-read as performance qualification when it only freezes a bounded same-host operational envelope."
+    },
+    {
+      "stage_id": "S7",
+      "stage_purpose": "real workflow chains",
+      "primary_machine_readable_artifacts": [
+        "validation/p5_m5_s7_workflow_scenarios.json",
+        "validation/p5_m5_s7_workflow_evidence_map.json",
+        "validation/p5_m5_s7_workflow_success_criteria.json",
+        "validation/p5_m5_s7_workflow_failure_matrix.json",
+        "validation/p5_m5_s7_workflow_views.json"
+      ],
+      "primary_human_readable_report": "validation/P5_M5_S7_REAL_WORKFLOWS.md",
+      "helper_report_entrypoint": "tools/p5_m5_s7_report.py",
+      "status": "complete",
+      "what_it_proves": [
+        "4 representative source/run/delivery/usage/provenance/governance/operator/release workflow chains",
+        "workflow evidence chains are explicit and machine-readable",
+        "workflow truth is consumable without source-code reading"
+      ],
+      "what_it_does_not_prove": [
+        "all-pairs workflow proof",
+        "cloud/distributed workflows",
+        "installer",
+        "P6 product shell"
+      ],
+      "source_code_reading_required": false,
+      "overclaim_risk": "S7 can be overclaimed as exhaustive workflow proof when it is intentionally representative."
+    }
+  ]
+}

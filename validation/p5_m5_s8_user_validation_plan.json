@@ -1,0 +1,116 @@
+{
+  "schema_version": 1,
+  "phase": "P5 final user-style validation prep",
+  "execution_status": "prep_only_not_executed",
+  "source_code_reading_required": false,
+  "platform_side_visual_checking_role": "secondary_corroboration_only",
+  "tasks": [
+    {
+      "task_id": "p5_user_uns_task_01",
+      "user_task": "Run a retained UNS document flow and confirm artifacts appear.",
+      "source": "google_drive_document_v1 or confluence_document_v1",
+      "expected_output": "filesystem delivery artifacts plus run_meta.json and usage_record.json",
+      "user_visible_success_signal": "user can see output artifacts land in the bounded output path",
+      "operator_visible_evidence": [
+        "tools/p5_usage_report.py",
+        "tools/p5_source_contract_report.py",
+        "tools/p5_governance_audit_report.py"
+      ],
+      "artifact_visible_evidence": [
+        "validation/p5_m5_s7_workflow_evidence_map.json",
+        "validation/p5_source_usage_linkage.json",
+        "usage_record.json",
+        "run_meta.json"
+      ],
+      "failure_observation_checklist": [
+        "source provenance missing",
+        "usage record missing or unlinked",
+        "output artifact missing",
+        "unexpected Pro/Extra confusion"
+      ]
+    },
+    {
+      "task_id": "p5_user_it_task_01",
+      "user_task": "Run a retained IT source flow and confirm bounded cursor-linked output.",
+      "source": "kafka_partition_offset_v1 or http_json_cursor_v1",
+      "expected_output": "bounded output artifacts with IT usage/source linkage",
+      "user_visible_success_signal": "user can tell a structured source completed and output landed",
+      "operator_visible_evidence": [
+        "tools/p5_usage_report.py",
+        "tools/p5_source_contract_report.py"
+      ],
+      "artifact_visible_evidence": [
+        "validation/p5_m5_s7_workflow_views.json",
+        "validation/p5_usage_runtime_contract.json",
+        "usage_record.json"
+      ],
+      "failure_observation_checklist": [
+        "cursor/checkpoint identity unclear",
+        "usage raw unit widened unexpectedly",
+        "output landed but source linkage missing"
+      ]
+    },
+    {
+      "task_id": "p5_user_failure_recovery_task_01",
+      "user_task": "Trigger or select a retained failure and follow its bounded recovery path.",
+      "induced_or_selected_failure": "retryable retained delivery failure",
+      "expected_recovery_path": "failure classification -> replay or requeue -> verify/governance receipt",
+      "user_visible_success_failure_signal": "user can tell whether failure stayed visible and whether recovery completed",
+      "operator_visible_evidence": [
+        "tools/p5_recovery_operator_report.py",
+        "tools/p5_governance_audit_report.py",
+        "tools/p5_usage_report.py"
+      ],
+      "artifact_visible_evidence": [
+        "validation/p5_m5_s7_workflow_failure_matrix.json",
+        "validation/p5_governance_action_matrix.json",
+        "delivery_receipt.json",
+        "_governance/actions/<action_id>.json"
+      ],
+      "failure_observation_checklist": [
+        "failure swallowed",
+        "replay/requeue status unclear",
+        "receipt missing",
+        "usage/provenance linkage incoherent after recovery"
+      ]
+    },
+    {
+      "task_id": "p5_user_fanout_task_01",
+      "user_task": "Run a retained fanout path and inspect child plus aggregate outputs.",
+      "destinations": "retained multi-sink composition path with filesystem-visible child output",
+      "expected_aggregate_child_outputs": "aggregate/shared-summary plus child outputs with all-ok vs partial-failure separation",
+      "user_visible_success_failure_signal": "user can tell whether fanout fully succeeded or partially failed",
+      "operator_visible_evidence": [
+        "tools/p5_usage_report.py",
+        "tools/p5_governance_audit_report.py"
+      ],
+      "artifact_visible_evidence": [
+        "validation/p5_m5_s7_workflow_views.json",
+        "validation/p5_m5_s7_workflow_success_criteria.json",
+        "batch_report.json"
+      ],
+      "scope_mixing_checklist": [
+        "child and aggregate outputs separated",
+        "shared summary visible when failed children agree",
+        "fanout not interpreted as sink connector"
+      ]
+    },
+    {
+      "task_id": "p5_user_release_handoff_task_01",
+      "user_task": "Discover the retained truth package through helper/report and bundle surfaces.",
+      "expected_bundle_helper_report_discovery": "user can discover S5/S6/S7/S8 truth surfaces from canonical helper/report entrypoints",
+      "what_user_can_verify_without_source_code": [
+        "stage truth index",
+        "closeout checks",
+        "non-claims",
+        "user validation prep package"
+      ],
+      "failure_observation_checklist": [
+        "helper path missing",
+        "truth surface only discoverable from source code",
+        "bundle implies installer or deployment readiness"
+      ]
+    }
+  ],
+  "feedback_classification_rule": "User feedback must be classified into P5 blocker, M5 closeout fix, P5 final user validation feedback, P6 product-shell-later issue, or out-of-scope cloud/commercial request."
+}

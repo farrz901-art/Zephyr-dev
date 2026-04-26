@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "phase": "P5 final user validation feedback template",
+  "source_code_reading_required": false,
+  "fields": [
+    "task_id",
+    "user_action",
+    "expected_result",
+    "actual_result",
+    "user_facing_issue",
+    "operator_facing_issue",
+    "artifact_facing_issue",
+    "usage_provenance_governance_issue",
+    "source_destination_issue",
+    "failure_recovery_issue",
+    "severity",
+    "blocks_p5_closeout",
+    "likely_owner",
+    "evidence_path_screenshot_or_command_output",
+    "triage_note",
+    "belongs_in_p5_closeout_or_p6_product_shell"
+  ],
+  "severity_enum": [
+    "blocker",
+    "major",
+    "minor",
+    "note"
+  ],
+  "likely_owner_enum": [
+    "core_runtime",
+    "source",
+    "destination",
+    "governance",
+    "usage_provenance",
+    "operator_docs_helper",
+    "release_bundle",
+    "product_shell_later"
+  ],
+  "classification_guidance": {
+    "real_p5_blocker": "Blocks M5 closeout or final user-style validation from starting.",
+    "m5_closeout_fix": "Should be fixed before M5 closeout is accepted.",
+    "p5_final_user_validation_feedback": "Valid feedback from the final user-style pass that does not reopen M5 stage scope.",
+    "p6_product_shell_later_issue": "Belongs to later product shell or packaging work rather than M5 closeout.",
+    "out_of_scope_cloud_or_commercial_request": "Requests cloud/deployment/commercial scope not claimed in P5/M5."
+  }
+}

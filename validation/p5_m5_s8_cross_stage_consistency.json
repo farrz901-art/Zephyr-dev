@@ -1,0 +1,110 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M5-S8 cross-stage consistency",
+  "check_count": 6,
+  "checks": [
+    {
+      "check_id": "s1_s7_retained_surface_alignment",
+      "related_stages": [
+        "S1",
+        "S7"
+      ],
+      "expected_relation": "S7 workflows continue using retained baseline surfaces, do not add new anchors, and stay workflow-proof-sized rather than matrix-sized.",
+      "exact_evidence_surfaces": [
+        "validation/p5_m5_s1_exact_carriers.json",
+        "validation/p5_m5_s1_execution_plan.json",
+        "validation/p5_m5_s7_workflow_scenarios.json",
+        "validation/p5_m5_s7_workflow_evidence_map.json"
+      ],
+      "machine_checkable_status": "pass",
+      "failure_meaning": "S7 has drifted away from retained baseline scope or silently widened into broader matrix execution."
+    },
+    {
+      "check_id": "s2_s7_deep_closure_alignment",
+      "related_stages": [
+        "S2",
+        "S7"
+      ],
+      "expected_relation": "S7 failure/recovery and fanout workflows reuse the same representative deep closure vocabulary as S2: replay/requeue/verify/governance and fanout composition.",
+      "exact_evidence_surfaces": [
+        "validation/p5_m5_s2_deep_closures.json",
+        "validation/p5_m5_s2_exact_deep_carriers.json",
+        "validation/p5_m5_s7_workflow_success_criteria.json",
+        "validation/p5_m5_s7_workflow_failure_matrix.json"
+      ],
+      "machine_checkable_status": "pass",
+      "failure_meaning": "Workflow proof terms have diverged from representative deep closure truth or fanout has drifted toward sink semantics."
+    },
+    {
+      "check_id": "s3_s6_s7_cleanup_and_secondary_truth",
+      "related_stages": [
+        "S3",
+        "S6",
+        "S7"
+      ],
+      "expected_relation": "S6 and S7 continue to honor S3 cleanup/stability truth, avoid dirty-state dependence, and keep platform-side corroboration secondary.",
+      "exact_evidence_surfaces": [
+        "validation/p5_m5_s3_cleanup_repetition_rules.json",
+        "validation/p5_m5_s3_stability_signals.json",
+        "validation/p5_m5_s6_success_criteria.json",
+        "validation/p5_m5_s7_workflow_success_criteria.json"
+      ],
+      "machine_checkable_status": "pass",
+      "failure_meaning": "Later-stage truth now depends on dirty state or treats platform-side checks as primary evidence."
+    },
+    {
+      "check_id": "s4_s7_non_author_interpretation_alignment",
+      "related_stages": [
+        "S4",
+        "S7"
+      ],
+      "expected_relation": "Cold-operator evidence surfaces remain sufficient to explain S7 workflows without source-code reading.",
+      "exact_evidence_surfaces": [
+        "validation/p5_m5_s4_operator_evidence_surfaces.json",
+        "validation/p5_m5_s4_operator_questions.json",
+        "validation/p5_m5_s4_scoring_rules.json",
+        "validation/p5_m5_s7_workflow_views.json",
+        "validation/p5_m5_s7_workflow_evidence_map.json"
+      ],
+      "machine_checkable_status": "pass",
+      "failure_meaning": "S7 workflows now need source-code reading or author interpretation to be understood by non-authors."
+    },
+    {
+      "check_id": "s5_s6_s7_bundle_discovery_alignment",
+      "related_stages": [
+        "S5",
+        "S6",
+        "S7"
+      ],
+      "expected_relation": "S5 release-consumable bundle remains able to discover S6/S7 truth surfaces through canonical helper/report mapping without implying installer or cloud readiness.",
+      "exact_evidence_surfaces": [
+        "validation/p5_m5_s5_release_bundle_inventory.json",
+        "validation/p5_m5_s5_release_manifest.json",
+        "validation/p5_m5_s5_handoff_contract.json",
+        "validation/p5_m5_s6_operational_profiles.json",
+        "validation/p5_m5_s7_workflow_scenarios.json"
+      ],
+      "machine_checkable_status": "pass",
+      "failure_meaning": "Later-stage truth is no longer discoverable through the canonical bundle or has drifted toward installer/deployment implication."
+    },
+    {
+      "check_id": "technical_domain_usage_governance_product_cut_alignment",
+      "related_stages": [
+        "core",
+        "S5",
+        "S6",
+        "S7"
+      ],
+      "expected_relation": "Capability domains remain technical, usage remains raw technical fact, governance remains audit/manual-action truth, source contract ids remain technical source truth, and product-cut remains technical readiness.",
+      "exact_evidence_surfaces": [
+        "validation/p5_capability_domain_matrix.json",
+        "validation/p5_usage_runtime_contract.json",
+        "validation/p5_governance_action_matrix.json",
+        "validation/p5_source_contract_matrix.json",
+        "validation/p5_product_cut_manifest.json"
+      ],
+      "machine_checkable_status": "pass",
+      "failure_meaning": "Technical truth surfaces are being misread or overclaimed as pricing, entitlement, RBAC, or commercial readiness."
+    }
+  ]
+}
