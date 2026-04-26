@@ -1,0 +1,443 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M5-S7 workflow evidence map",
+  "scenario_count": 4,
+  "scenarios": [
+    {
+      "scenario_id": "s7_uns_happy_01",
+      "evidence_chain": {
+        "source_evidence": [
+          {
+            "surface": "google_drive_source_provenance",
+            "carrier": "packages/uns-stream/src/uns_stream/tests/test_uns_google_drive_source.py::test_process_file_fetches_google_drive_document_and_preserves_provenance",
+            "carrier_granularity": "exact_test_id",
+            "explanation": "Shows retained Google Drive acquisition enters UNS with preserved provenance facts."
+          },
+          {
+            "surface": "confluence_source_provenance",
+            "carrier": "packages/uns-stream/src/uns_stream/tests/test_uns_confluence_source.py::test_process_file_fetches_confluence_document_and_preserves_provenance",
+            "carrier_granularity": "exact_test_id",
+            "explanation": "Shows retained Confluence acquisition enters UNS with preserved provenance facts."
+          },
+          {
+            "surface": "source_contract_linkage",
+            "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_source_contracts.py::test_p5_source_usage_linkage_covers_sources_and_keeps_extra_non_default",
+            "carrier_granularity": "exact_test_id",
+            "explanation": "Binds retained source ids to canonical usage linkage without requiring source-code reading."
+          }
+        ],
+        "task_run_evidence": [
+          {
+            "surface": "task_run_artifacts",
+            "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_usage_runtime.py::test_runner_emits_usage_record_json_beside_run_meta_and_delivery_receipt",
+            "carrier_granularity": "exact_test_id",
+            "explanation": "Confirms run_meta, delivery_receipt, and usage_record are emitted together for the bounded workflow run."
+          }
+        ],
+        "delivery_output_evidence": [
+          {
+            "surface": "filesystem_run_meta",
+            "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_filesystem.py::test_filesystem_destination_writes_run_meta",
+            "carrier_granularity": "exact_test_id",
+            "explanation": "Shows filesystem delivery writes canonical run metadata."
+          },
+          {
+            "surface": "filesystem_success_artifacts",
+            "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_filesystem.py::test_filesystem_destination_writes_success_artifacts",
+            "carrier_granularity": "exact_test_id",
+            "explanation": "Shows bounded output artifacts land in the retained sink."
+          }
+        ],
+        "usage_evidence": [
+          {
+            "surface": "usage_record_json",
+            "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_usage_runtime.py::test_runner_emits_usage_record_json_beside_run_meta_and_delivery_receipt",
+            "carrier_granularity": "exact_test_id",
+            "explanation": "Shows canonical usage_record.json exists beside run and delivery artifacts."
+          }
+        ],
+        "provenance_evidence": [
+          {
+            "surface": "source_provenance_fields",
+            "carrier": "packages/uns-stream/src/uns_stream/tests/test_uns_google_drive_source.py::test_process_file_fetches_google_drive_document_and_preserves_provenance",
+            "carrier_granularity": "exact_test_id",
+            "explanation": "Preserves source-linked provenance for retained UNS workflow."
+          },
+          {
+            "surface": "source_provenance_fields",
+            "carrier": "packages/uns-stream/src/uns_stream/tests/test_uns_confluence_source.py::test_process_file_fetches_confluence_document_and_preserves_provenance",
+            "carrier_granularity": "exact_test_id",
+            "explanation": "Preserves knowledge-space provenance for retained UNS workflow."
+          }
+        ],
+        "governance_recovery_evidence": [
+          {
+            "surface": "governance_usage_linkage_helper",
+            "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_governance_audit.py::test_governance_action_receipt_helper_supports_read_only_inspect_and_usage_linkage",
+            "carrier_granularity": "exact_test_id",
+            "explanation": "Shows governance receipt helper can explain usage linkage without requiring recovery-specific widening."
+          }
+        ],
+        "operator_helper_evidence": [
+          {
+            "surface": "usage_report_helper",
+            "artifact": "tools/p5_usage_report.py"
+          },
+          {
+            "surface": "source_contract_report_helper",
+            "artifact": "tools/p5_source_contract_report.py"
+          },
+          {
+            "surface": "governance_audit_report_helper",
+            "artifact": "tools/p5_governance_audit_report.py"
+          },
+          {
+            "surface": "workflow_package_helper",
+            "artifact": "tools/p5_m5_s7_report.py"
+          }
+        ],
+        "release_handoff_evidence": [
+          {
+            "surface": "release_manifest",
+            "artifact": "validation/p5_m5_s5_release_manifest.json"
+          },
+          {
+            "surface": "handoff_contract",
+            "artifact": "validation/p5_m5_s5_handoff_contract.json"
+          },
+          {
+            "surface": "release_bundle_helper",
+            "artifact": "tools/p5_m5_s5_report.py --check-artifacts"
+          }
+        ],
+        "missing_link": "none"
+      }
+    },
+    {
+      "scenario_id": "s7_it_happy_01",
+      "evidence_chain": {
+        "source_evidence": [
+          {
+            "surface": "kafka_source_checkpoint_provenance",
+            "carrier": "packages/it-stream/src/it_stream/tests/test_kafka_source.py::test_kafka_source_builds_cursor_checkpoints_and_resume_provenance",
+            "carrier_granularity": "exact_test_id",
+            "explanation": "Shows retained IT source builds bounded checkpoint and resume provenance facts."
+          },
+          {
+            "surface": "source_contract_linkage",
+            "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_source_contracts.py::test_p5_source_usage_linkage_covers_sources_and_keeps_extra_non_default",
+            "carrier_granularity": "exact_test_id",
+            "explanation": "Shows retained source ids remain canonical across the usage linkage package."
+          }
+        ],
+        "task_run_evidence": [
+          {
+            "surface": "task_run_artifacts",
+            "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_usage_runtime.py::test_runner_emits_usage_record_json_beside_run_meta_and_delivery_receipt",
+            "carrier_granularity": "exact_test_id",
+            "explanation": "Shows bounded workflow execution emits canonical runtime artifacts for task/run interpretation."
+          }
+        ],
+        "delivery_output_evidence": [
+          {
+            "surface": "filesystem_run_meta",
+            "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_filesystem.py::test_filesystem_destination_writes_run_meta",
+            "carrier_granularity": "exact_test_id",
+            "explanation": "Shows retained bounded delivery metadata is written."
+          },
+          {
+            "surface": "filesystem_success_artifacts",
+            "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_filesystem.py::test_filesystem_destination_writes_success_artifacts",
+            "carrier_granularity": "exact_test_id",
+            "explanation": "Shows bounded output landing without needing broader sink claims."
+          }
+        ],
+        "usage_evidence": [
+          {
+            "surface": "it_usage_runtime_shape",
+            "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_usage_runtime.py::test_usage_record_runtime_shape_keeps_it_raw_unit_bounded",
+            "carrier_granularity": "exact_test_id",
+            "explanation": "Shows IT raw-unit and source-contract semantics stay bounded and technical."
+          },
+          {
+            "surface": "usage_record_json",
+            "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_usage_runtime.py::test_runner_emits_usage_record_json_beside_run_meta_and_delivery_receipt",
+            "carrier_granularity": "exact_test_id",
+            "explanation": "Shows workflow emits usage_record.json beside run and delivery evidence."
+          }
+        ],
+        "provenance_evidence": [
+          {
+            "surface": "checkpoint_resume_provenance",
+            "carrier": "packages/it-stream/src/it_stream/tests/test_kafka_source.py::test_kafka_source_builds_cursor_checkpoints_and_resume_provenance",
+            "carrier_granularity": "exact_test_id",
+            "explanation": "Shows resume-relevant checkpoint provenance remains explicit."
+          }
+        ],
+        "governance_recovery_evidence": [
+          {
+            "surface": "governance_usage_linkage_helper",
+            "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_governance_audit.py::test_governance_action_receipt_helper_supports_read_only_inspect_and_usage_linkage",
+            "carrier_granularity": "exact_test_id",
+            "explanation": "Shows governance-side helper surfaces can interpret retained usage linkage."
+          }
+        ],
+        "operator_helper_evidence": [
+          {
+            "surface": "usage_report_helper",
+            "artifact": "tools/p5_usage_report.py"
+          },
+          {
+            "surface": "source_contract_report_helper",
+            "artifact": "tools/p5_source_contract_report.py"
+          },
+          {
+            "surface": "governance_audit_report_helper",
+            "artifact": "tools/p5_governance_audit_report.py"
+          },
+          {
+            "surface": "workflow_package_helper",
+            "artifact": "tools/p5_m5_s7_report.py"
+          }
+        ],
+        "release_handoff_evidence": [
+          {
+            "surface": "release_manifest",
+            "artifact": "validation/p5_m5_s5_release_manifest.json"
+          },
+          {
+            "surface": "handoff_contract",
+            "artifact": "validation/p5_m5_s5_handoff_contract.json"
+          },
+          {
+            "surface": "release_bundle_helper",
+            "artifact": "tools/p5_m5_s5_report.py --check-artifacts"
+          }
+        ],
+        "missing_link": "none"
+      }
+    },
+    {
+      "scenario_id": "s7_failure_01",
+      "evidence_chain": {
+        "source_evidence": [
+          {
+            "surface": "source_context_for_failure_linkage",
+            "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_source_contracts.py::test_p5_source_usage_linkage_covers_sources_and_keeps_extra_non_default",
+            "carrier_granularity": "exact_test_id",
+            "explanation": "Keeps retained source identity explicit while failure is interpreted through shared usage/governance surfaces."
+          }
+        ],
+        "task_run_evidence": [
+          {
+            "surface": "replay_task_run_linkage",
+            "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_replay_delivery.py::test_replay_delivery_preserves_resume_checkpoint_provenance_while_marking_replay",
+            "carrier_granularity": "exact_test_id",
+            "explanation": "Shows replay preserves resume-oriented task/run provenance while marking delivery_origin=replay."
+          },
+          {
+            "surface": "queue_recovery_summary",
+            "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_recovery_operator.py::test_p5_recovery_summary_combines_queue_delivery_and_provenance",
+            "carrier_granularity": "exact_test_id",
+            "explanation": "Shows recovery summary combines queue, delivery, and provenance facts in one retained surface."
+          }
+        ],
+        "delivery_output_evidence": [
+          {
+            "surface": "webhook_failure_classification",
+            "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_webhook.py::test_webhook_retries_timeout_failures_and_marks_retryable",
+            "carrier_granularity": "exact_test_id",
+            "explanation": "Shows retryable timeout classification is explicit for webhook."
+          },
+          {
+            "surface": "kafka_failure_classification",
+            "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_kafka_destination.py::test_kafka_destination_timeout_exception_maps_to_timeout_failure_kind",
+            "carrier_granularity": "exact_test_id",
+            "explanation": "Shows timeout failure_kind is explicit for Kafka destination."
+          },
+          {
+            "surface": "opensearch_failure_classification",
+            "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_opensearch_destination.py::test_opensearch_destination_maps_rate_limits_into_shared_failure_semantics",
+            "carrier_granularity": "exact_test_id",
+            "explanation": "Shows rate-limit failure_kind remains inside shared delivery semantics."
+          },
+          {
+            "surface": "replay_delivery_done_transition",
+            "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_replay_delivery.py::test_replay_delivery_moves_dlq_to_done",
+            "carrier_granularity": "exact_test_id",
+            "explanation": "Shows failed delivery can move from DLQ to done through replay."
+          }
+        ],
+        "usage_evidence": [
+          {
+            "surface": "usage_failure_shape",
+            "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_usage_runtime.py::test_usage_record_runtime_shape_covers_failure_and_delivery_failure",
+            "carrier_granularity": "exact_test_id",
+            "explanation": "Shows run failure and delivery failure remain distinct in usage evidence."
+          }
+        ],
+        "provenance_evidence": [
+          {
+            "surface": "requeue_provenance_distinction",
+            "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_recovery_operator.py::test_p5_recovery_requeue_keeps_requeue_provenance_distinct",
+            "carrier_granularity": "exact_test_id",
+            "explanation": "Shows requeue provenance is explicit rather than collapsed into generic recovery."
+          },
+          {
+            "surface": "replay_resume_provenance",
+            "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_replay_delivery.py::test_replay_delivery_preserves_resume_checkpoint_provenance_while_marking_replay",
+            "carrier_granularity": "exact_test_id",
+            "explanation": "Shows replay marks delivery replay while preserving resume checkpoint identity."
+          }
+        ],
+        "governance_recovery_evidence": [
+          {
+            "surface": "replay_governance_receipt",
+            "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_governance_audit.py::test_replay_delivery_writes_governance_action_receipt_with_run_linkage",
+            "carrier_granularity": "exact_test_id",
+            "explanation": "Shows governance receipt records replay action, run linkage, and destination summary."
+          },
+          {
+            "surface": "recovery_operator_summary",
+            "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_recovery_operator.py::test_p5_recovery_summary_combines_queue_delivery_and_provenance",
+            "carrier_granularity": "exact_test_id",
+            "explanation": "Shows operator-facing recovery summary can explain queue, delivery, and provenance together."
+          }
+        ],
+        "operator_helper_evidence": [
+          {
+            "surface": "recovery_operator_report_helper",
+            "artifact": "tools/p5_recovery_operator_report.py"
+          },
+          {
+            "surface": "governance_audit_report_helper",
+            "artifact": "tools/p5_governance_audit_report.py"
+          },
+          {
+            "surface": "usage_report_helper",
+            "artifact": "tools/p5_usage_report.py"
+          },
+          {
+            "surface": "workflow_package_helper",
+            "artifact": "tools/p5_m5_s7_report.py"
+          }
+        ],
+        "release_handoff_evidence": [
+          {
+            "surface": "release_manifest",
+            "artifact": "validation/p5_m5_s5_release_manifest.json"
+          },
+          {
+            "surface": "handoff_contract",
+            "artifact": "validation/p5_m5_s5_handoff_contract.json"
+          },
+          {
+            "surface": "release_bundle_helper",
+            "artifact": "tools/p5_m5_s5_report.py --check-artifacts"
+          }
+        ],
+        "missing_link": "none"
+      }
+    },
+    {
+      "scenario_id": "s7_fanout_01",
+      "evidence_chain": {
+        "source_evidence": [
+          {
+            "surface": "retained_source_context",
+            "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_source_contracts.py::test_p5_source_usage_linkage_covers_sources_and_keeps_extra_non_default",
+            "carrier_granularity": "exact_test_id",
+            "explanation": "Provides bounded retained source context without widening fanout into new source validation."
+          }
+        ],
+        "task_run_evidence": [
+          {
+            "surface": "batch_usage_runtime_shape",
+            "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_usage_runtime.py::test_batch_usage_record_preserves_batch_success_failure_symmetry",
+            "carrier_granularity": "exact_test_id",
+            "explanation": "Shows batch-level workflow interpretation remains distinct for partial or successful fanout runs."
+          }
+        ],
+        "delivery_output_evidence": [
+          {
+            "surface": "fanout_all_ok",
+            "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_fanout.py::test_fanout_all_ok",
+            "carrier_granularity": "exact_test_id",
+            "explanation": "Shows all-ok aggregate interpretation for composition workflow."
+          },
+          {
+            "surface": "fanout_partial_failure",
+            "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_fanout.py::test_fanout_any_fail",
+            "carrier_granularity": "exact_test_id",
+            "explanation": "Shows partial failure remains visible rather than swallowed."
+          },
+          {
+            "surface": "fanout_shared_summary",
+            "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_fanout.py::test_fanout_surfaces_shared_failure_summary_when_failed_children_agree",
+            "carrier_granularity": "exact_test_id",
+            "explanation": "Shows shared summary remains interpretable when failed children agree."
+          },
+          {
+            "surface": "child_output_artifacts",
+            "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_filesystem.py::test_filesystem_destination_writes_success_artifacts",
+            "carrier_granularity": "exact_test_id",
+            "explanation": "Provides bounded child-output evidence from retained filesystem sink behavior."
+          }
+        ],
+        "usage_evidence": [
+          {
+            "surface": "batch_usage_record",
+            "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_usage_runtime.py::test_batch_usage_record_preserves_batch_success_failure_symmetry",
+            "carrier_granularity": "exact_test_id",
+            "explanation": "Shows fanout usage remains visible with batch success/failure symmetry."
+          }
+        ],
+        "provenance_evidence": [
+          {
+            "surface": "shared_summary_provenance_context",
+            "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_fanout.py::test_fanout_surfaces_shared_failure_summary_when_failed_children_agree",
+            "carrier_granularity": "exact_test_id",
+            "explanation": "Shows aggregate/shared-summary interpretation remains aligned with child failure agreement."
+          }
+        ],
+        "governance_recovery_evidence": [
+          {
+            "surface": "governance_usage_linkage_helper",
+            "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_governance_audit.py::test_governance_action_receipt_helper_supports_read_only_inspect_and_usage_linkage",
+            "carrier_granularity": "exact_test_id",
+            "explanation": "Shows operator-facing governance helper can still interpret usage linkage for retained workflow evidence."
+          }
+        ],
+        "operator_helper_evidence": [
+          {
+            "surface": "usage_report_helper",
+            "artifact": "tools/p5_usage_report.py"
+          },
+          {
+            "surface": "governance_audit_report_helper",
+            "artifact": "tools/p5_governance_audit_report.py"
+          },
+          {
+            "surface": "workflow_package_helper",
+            "artifact": "tools/p5_m5_s7_report.py"
+          }
+        ],
+        "release_handoff_evidence": [
+          {
+            "surface": "release_manifest",
+            "artifact": "validation/p5_m5_s5_release_manifest.json"
+          },
+          {
+            "surface": "handoff_contract",
+            "artifact": "validation/p5_m5_s5_handoff_contract.json"
+          },
+          {
+            "surface": "release_bundle_helper",
+            "artifact": "tools/p5_m5_s5_report.py --check-artifacts"
+          }
+        ],
+        "missing_link": "none"
+      }
+    }
+  ]
+}

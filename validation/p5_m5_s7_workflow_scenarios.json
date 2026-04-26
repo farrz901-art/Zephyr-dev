@@ -1,0 +1,264 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M5-S7 real workflow scenarios",
+  "status": "real_workflow_chain_proof_only",
+  "scenario_count": 4,
+  "scenarios": [
+    {
+      "scenario_id": "s7_uns_happy_01",
+      "name": "UNS happy workflow",
+      "family": "UNS happy",
+      "source_candidates": [
+        "google_drive_document_v1",
+        "confluence_document_v1"
+      ],
+      "processing_path": "uns-stream retained non-extra ingestion / normalization / delivery chain",
+      "destination_candidates": [
+        "filesystem",
+        "s3"
+      ],
+      "representative_reason": "Proves retained UNS document workflow can acquire source content, emit task/run identity, link usage/provenance, and land bounded output artifacts.",
+      "carriers": [
+        {
+          "carrier": "packages/uns-stream/src/uns_stream/tests/test_uns_google_drive_source.py::test_process_file_fetches_google_drive_document_and_preserves_provenance",
+          "role": "workflow_proof",
+          "carrier_granularity": "exact_test_id",
+          "bounded_claim": "representative workflow chain proof only"
+        },
+        {
+          "carrier": "packages/uns-stream/src/uns_stream/tests/test_uns_confluence_source.py::test_process_file_fetches_confluence_document_and_preserves_provenance",
+          "role": "workflow_proof",
+          "carrier_granularity": "exact_test_id",
+          "bounded_claim": "representative workflow chain proof only"
+        },
+        {
+          "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_filesystem.py::test_filesystem_destination_writes_run_meta",
+          "role": "workflow_proof",
+          "carrier_granularity": "exact_test_id",
+          "bounded_claim": "representative workflow chain proof only"
+        },
+        {
+          "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_filesystem.py::test_filesystem_destination_writes_success_artifacts",
+          "role": "workflow_proof",
+          "carrier_granularity": "exact_test_id",
+          "bounded_claim": "representative workflow chain proof only"
+        },
+        {
+          "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_usage_runtime.py::test_runner_emits_usage_record_json_beside_run_meta_and_delivery_receipt",
+          "role": "workflow_proof",
+          "carrier_granularity": "exact_test_id",
+          "bounded_claim": "representative workflow chain proof only"
+        },
+        {
+          "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_source_contracts.py::test_p5_source_usage_linkage_covers_sources_and_keeps_extra_non_default",
+          "role": "workflow_proof",
+          "carrier_granularity": "exact_test_id",
+          "bounded_claim": "representative workflow chain proof only"
+        },
+        {
+          "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_governance_audit.py::test_governance_action_receipt_helper_supports_read_only_inspect_and_usage_linkage",
+          "role": "workflow_proof",
+          "carrier_granularity": "exact_test_id",
+          "bounded_claim": "representative workflow chain proof only"
+        }
+      ],
+      "major_risk": "Source acquisition can look healthy while usage/governance linkage quietly drifts if helper/artifact surfaces are not checked together.",
+      "judgeable_without_source_code": true
+    },
+    {
+      "scenario_id": "s7_it_happy_01",
+      "name": "IT happy workflow",
+      "family": "IT happy",
+      "source_candidates": [
+        "kafka_partition_offset_v1",
+        "http_json_cursor_v1"
+      ],
+      "processing_path": "it-stream retained incremental / cursor / delivery chain",
+      "destination_candidates": [
+        "filesystem",
+        "kafka",
+        "sqlite"
+      ],
+      "representative_reason": "Proves retained IT workflow can preserve cursor identity, emit bounded usage/provenance semantics, and land delivery artifacts without widening into broader source-platform claims.",
+      "carriers": [
+        {
+          "carrier": "packages/it-stream/src/it_stream/tests/test_kafka_source.py::test_kafka_source_builds_cursor_checkpoints_and_resume_provenance",
+          "role": "workflow_proof",
+          "carrier_granularity": "exact_test_id",
+          "bounded_claim": "representative workflow chain proof only"
+        },
+        {
+          "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_filesystem.py::test_filesystem_destination_writes_run_meta",
+          "role": "workflow_proof",
+          "carrier_granularity": "exact_test_id",
+          "bounded_claim": "representative workflow chain proof only"
+        },
+        {
+          "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_filesystem.py::test_filesystem_destination_writes_success_artifacts",
+          "role": "workflow_proof",
+          "carrier_granularity": "exact_test_id",
+          "bounded_claim": "representative workflow chain proof only"
+        },
+        {
+          "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_usage_runtime.py::test_usage_record_runtime_shape_keeps_it_raw_unit_bounded",
+          "role": "workflow_proof",
+          "carrier_granularity": "exact_test_id",
+          "bounded_claim": "representative workflow chain proof only"
+        },
+        {
+          "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_usage_runtime.py::test_runner_emits_usage_record_json_beside_run_meta_and_delivery_receipt",
+          "role": "workflow_proof",
+          "carrier_granularity": "exact_test_id",
+          "bounded_claim": "representative workflow chain proof only"
+        },
+        {
+          "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_source_contracts.py::test_p5_source_usage_linkage_covers_sources_and_keeps_extra_non_default",
+          "role": "workflow_proof",
+          "carrier_granularity": "exact_test_id",
+          "bounded_claim": "representative workflow chain proof only"
+        },
+        {
+          "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_governance_audit.py::test_governance_action_receipt_helper_supports_read_only_inspect_and_usage_linkage",
+          "role": "workflow_proof",
+          "carrier_granularity": "exact_test_id",
+          "bounded_claim": "representative workflow chain proof only"
+        }
+      ],
+      "major_risk": "Checkpoint or cursor facts can become implicit unless source contract, usage runtime, and delivery evidence stay linked.",
+      "judgeable_without_source_code": true
+    },
+    {
+      "scenario_id": "s7_failure_01",
+      "name": "Failure / recovery workflow",
+      "family": "failure/recovery",
+      "source_candidates": [
+        "retained source context only"
+      ],
+      "processing_path": "failed delivery -> replay/requeue -> verify/governance receipt",
+      "destination_candidates": [
+        "webhook",
+        "kafka",
+        "opensearch"
+      ],
+      "representative_reason": "Proves Zephyr is not happy-path-only: failure is classified, visible, recoverable or inspectable, and linked to usage/provenance/governance.",
+      "carriers": [
+        {
+          "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_webhook.py::test_webhook_retries_timeout_failures_and_marks_retryable",
+          "role": "workflow_proof",
+          "carrier_granularity": "exact_test_id",
+          "bounded_claim": "representative workflow chain proof only"
+        },
+        {
+          "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_kafka_destination.py::test_kafka_destination_timeout_exception_maps_to_timeout_failure_kind",
+          "role": "workflow_proof",
+          "carrier_granularity": "exact_test_id",
+          "bounded_claim": "representative workflow chain proof only"
+        },
+        {
+          "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_opensearch_destination.py::test_opensearch_destination_maps_rate_limits_into_shared_failure_semantics",
+          "role": "workflow_proof",
+          "carrier_granularity": "exact_test_id",
+          "bounded_claim": "representative workflow chain proof only"
+        },
+        {
+          "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_replay_delivery.py::test_replay_delivery_moves_dlq_to_done",
+          "role": "workflow_proof",
+          "carrier_granularity": "exact_test_id",
+          "bounded_claim": "representative workflow chain proof only"
+        },
+        {
+          "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_replay_delivery.py::test_replay_delivery_preserves_resume_checkpoint_provenance_while_marking_replay",
+          "role": "workflow_proof",
+          "carrier_granularity": "exact_test_id",
+          "bounded_claim": "representative workflow chain proof only"
+        },
+        {
+          "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_recovery_operator.py::test_p5_recovery_requeue_keeps_requeue_provenance_distinct",
+          "role": "workflow_proof",
+          "carrier_granularity": "exact_test_id",
+          "bounded_claim": "representative workflow chain proof only"
+        },
+        {
+          "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_recovery_operator.py::test_p5_recovery_summary_combines_queue_delivery_and_provenance",
+          "role": "workflow_proof",
+          "carrier_granularity": "exact_test_id",
+          "bounded_claim": "representative workflow chain proof only"
+        },
+        {
+          "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_governance_audit.py::test_replay_delivery_writes_governance_action_receipt_with_run_linkage",
+          "role": "workflow_proof",
+          "carrier_granularity": "exact_test_id",
+          "bounded_claim": "representative workflow chain proof only"
+        },
+        {
+          "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_usage_runtime.py::test_usage_record_runtime_shape_covers_failure_and_delivery_failure",
+          "role": "workflow_proof",
+          "carrier_granularity": "exact_test_id",
+          "bounded_claim": "representative workflow chain proof only"
+        }
+      ],
+      "major_risk": "Failure can appear recovered while provenance or governance linkage is incomplete unless replay/requeue and usage evidence are frozen together.",
+      "judgeable_without_source_code": true
+    },
+    {
+      "scenario_id": "s7_fanout_01",
+      "name": "Fanout workflow",
+      "family": "fanout",
+      "source_candidates": [
+        "combined representative retained input context"
+      ],
+      "processing_path": "ingestion -> fanout -> child outputs / aggregate result / shared summary",
+      "destination_candidates": [
+        "multi-sink composition path"
+      ],
+      "representative_reason": "Proves fanout is a real composition/orchestration workflow with visible child outputs, aggregate output, and interpretable partial failure.",
+      "carriers": [
+        {
+          "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_fanout.py::test_fanout_all_ok",
+          "role": "workflow_proof",
+          "carrier_granularity": "exact_test_id",
+          "bounded_claim": "representative workflow chain proof only"
+        },
+        {
+          "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_fanout.py::test_fanout_any_fail",
+          "role": "workflow_proof",
+          "carrier_granularity": "exact_test_id",
+          "bounded_claim": "representative workflow chain proof only"
+        },
+        {
+          "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_fanout.py::test_fanout_surfaces_shared_failure_summary_when_failed_children_agree",
+          "role": "workflow_proof",
+          "carrier_granularity": "exact_test_id",
+          "bounded_claim": "representative workflow chain proof only"
+        },
+        {
+          "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_filesystem.py::test_filesystem_destination_writes_success_artifacts",
+          "role": "workflow_proof",
+          "carrier_granularity": "exact_test_id",
+          "bounded_claim": "representative workflow chain proof only"
+        },
+        {
+          "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_usage_runtime.py::test_batch_usage_record_preserves_batch_success_failure_symmetry",
+          "role": "workflow_proof",
+          "carrier_granularity": "exact_test_id",
+          "bounded_claim": "representative workflow chain proof only"
+        },
+        {
+          "carrier": "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_governance_audit.py::test_governance_action_receipt_helper_supports_read_only_inspect_and_usage_linkage",
+          "role": "workflow_proof",
+          "carrier_granularity": "exact_test_id",
+          "bounded_claim": "representative workflow chain proof only"
+        }
+      ],
+      "major_risk": "Child and aggregate scopes can mix or fanout can be misread as a sink unless shared-summary and batch-usage evidence stay explicit.",
+      "judgeable_without_source_code": true
+    }
+  ],
+  "intentional_file_level_carriers": [],
+  "not_claimed": [
+    "distributed runtime workflow proof",
+    "cloud or Kubernetes workflow proof",
+    "installer implementation",
+    "new retained anchors"
+  ]
+}

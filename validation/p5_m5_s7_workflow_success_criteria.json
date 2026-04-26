@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M5-S7 workflow success criteria",
+  "scenario_count": 4,
+  "platform_side_corroboration": {
+    "allowed": true,
+    "role": "secondary_not_primary"
+  },
+  "source_code_reading_required": false,
+  "scenarios": [
+    {
+      "scenario_id": "s7_uns_happy_01",
+      "common_success_criteria": [
+        "source truly entered or source identity is represented by exact source carrier",
+        "processing path truly executed or is represented by exact run/task carrier",
+        "delivery/output truly landed or failure/recovery behavior is represented by exact carrier",
+        "usage emitted",
+        "provenance linked",
+        "governance/recovery visible where relevant",
+        "helper/report remains readable",
+        "no dirty-state dependence",
+        "no phase-boundary violation"
+      ],
+      "scenario_specific_success_criteria": [
+        "retained UNS source provenance remains visible for Google Drive and Confluence",
+        "filesystem output artifacts land with canonical run_meta and receipt surfaces",
+        "source contract linkage remains technical and non-Pro/non-Extra by default"
+      ]
+    },
+    {
+      "scenario_id": "s7_it_happy_01",
+      "common_success_criteria": [
+        "source truly entered or source identity is represented by exact source carrier",
+        "processing path truly executed or is represented by exact run/task carrier",
+        "delivery/output truly landed or failure/recovery behavior is represented by exact carrier",
+        "usage emitted",
+        "provenance linked",
+        "governance/recovery visible where relevant",
+        "helper/report remains readable",
+        "no dirty-state dependence",
+        "no phase-boundary violation"
+      ],
+      "scenario_specific_success_criteria": [
+        "cursor/checkpoint identity remains explicit for retained IT source",
+        "IT raw unit remains bounded record_or_emitted_item rather than widened platform unit",
+        "bounded delivery artifacts land without needing broader sink claims"
+      ]
+    },
+    {
+      "scenario_id": "s7_failure_01",
+      "common_success_criteria": [
+        "source truly entered or source identity is represented by exact source carrier",
+        "processing path truly executed or is represented by exact run/task carrier",
+        "delivery/output truly landed or failure/recovery behavior is represented by exact carrier",
+        "usage emitted",
+        "provenance linked",
+        "governance/recovery visible where relevant",
+        "helper/report remains readable",
+        "no dirty-state dependence",
+        "no phase-boundary violation"
+      ],
+      "scenario_specific_success_criteria": [
+        "failure classification visible",
+        "failure not swallowed",
+        "replay/requeue/verify path visible",
+        "recovery/governance receipt visible",
+        "post-recovery usage/provenance linkage coherent",
+        "terminal / replayable / requeueable / inspect-only status explicit"
+      ]
+    },
+    {
+      "scenario_id": "s7_fanout_01",
+      "common_success_criteria": [
+        "source truly entered or source identity is represented by exact source carrier",
+        "processing path truly executed or is represented by exact run/task carrier",
+        "delivery/output truly landed or failure/recovery behavior is represented by exact carrier",
+        "usage emitted",
+        "provenance linked",
+        "governance/recovery visible where relevant",
+        "helper/report remains readable",
+        "no dirty-state dependence",
+        "no phase-boundary violation"
+      ],
+      "scenario_specific_success_criteria": [
+        "fanout remains composition/orchestration",
+        "child outputs visible",
+        "aggregate/shared-summary visible",
+        "all-ok and partial-failure interpretations separated",
+        "no child/aggregate scope mixing"
+      ]
+    }
+  ]
+}

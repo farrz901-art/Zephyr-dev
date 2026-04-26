@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M5-S7 workflow failure matrix",
+  "scenario_count": 4,
+  "scenarios": [
+    {
+      "scenario_id": "s7_uns_happy_01",
+      "main_failure_mode": "source acquisition succeeds but usage/provenance linkage drifts",
+      "evidence_of_failure": [
+        "usage_record.json no longer matches retained source contract linkage",
+        "helper/report surfaces stop explaining source-linked workflow evidence"
+      ],
+      "recovery_possibility": "inspect_only",
+      "status_classification": "inspect_only",
+      "proving_artifacts": [
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_usage_runtime.py::test_runner_emits_usage_record_json_beside_run_meta_and_delivery_receipt",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_source_contracts.py::test_p5_source_usage_linkage_covers_sources_and_keeps_extra_non_default",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_governance_audit.py::test_governance_action_receipt_helper_supports_read_only_inspect_and_usage_linkage"
+      ],
+      "biggest_ambiguity": "Happy-path delivery can hide linkage drift unless source, usage, and governance evidence are read together."
+    },
+    {
+      "scenario_id": "s7_it_happy_01",
+      "main_failure_mode": "checkpoint/cursor semantics drift while delivery still looks healthy",
+      "evidence_of_failure": [
+        "usage runtime no longer reports bounded IT raw-unit semantics",
+        "source contract linkage stops matching retained cursor identity"
+      ],
+      "recovery_possibility": "inspect_only",
+      "status_classification": "inspect_only",
+      "proving_artifacts": [
+        "packages/it-stream/src/it_stream/tests/test_kafka_source.py::test_kafka_source_builds_cursor_checkpoints_and_resume_provenance",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_usage_runtime.py::test_usage_record_runtime_shape_keeps_it_raw_unit_bounded",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_source_contracts.py::test_p5_source_usage_linkage_covers_sources_and_keeps_extra_non_default"
+      ],
+      "biggest_ambiguity": "Bounded filesystem delivery can look normal even if cursor semantics have quietly widened or blurred."
+    },
+    {
+      "scenario_id": "s7_failure_01",
+      "main_failure_mode": "delivery failure is classified but replay/requeue linkage becomes incoherent",
+      "evidence_of_failure": [
+        "failure_kind visible without usable replay/requeue provenance",
+        "governance receipt exists but no longer explains run/task linkage"
+      ],
+      "recovery_possibility": "replayable_or_requeueable_depending_on_failure_surface",
+      "status_classification": "replayable_requeueable_or_inspect_only_explicit",
+      "proving_artifacts": [
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_webhook.py::test_webhook_retries_timeout_failures_and_marks_retryable",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_kafka_destination.py::test_kafka_destination_timeout_exception_maps_to_timeout_failure_kind",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_opensearch_destination.py::test_opensearch_destination_maps_rate_limits_into_shared_failure_semantics",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_replay_delivery.py::test_replay_delivery_moves_dlq_to_done",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_replay_delivery.py::test_replay_delivery_preserves_resume_checkpoint_provenance_while_marking_replay",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_recovery_operator.py::test_p5_recovery_requeue_keeps_requeue_provenance_distinct",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_recovery_operator.py::test_p5_recovery_summary_combines_queue_delivery_and_provenance",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_governance_audit.py::test_replay_delivery_writes_governance_action_receipt_with_run_linkage",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_usage_runtime.py::test_usage_record_runtime_shape_covers_failure_and_delivery_failure"
+      ],
+      "biggest_ambiguity": "Different retained sinks use different failure surfaces, so S7 must stay representative and not imply exhaustive sink failure proof."
+    },
+    {
+      "scenario_id": "s7_fanout_01",
+      "main_failure_mode": "aggregate result stays visible while child/summary scope mixes",
+      "evidence_of_failure": [
+        "partial failure becomes indistinguishable from all-ok aggregate result",
+        "shared summary or child outputs stop matching batch usage interpretation"
+      ],
+      "recovery_possibility": "inspect_only",
+      "status_classification": "inspect_only",
+      "proving_artifacts": [
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_fanout.py::test_fanout_all_ok",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_fanout.py::test_fanout_any_fail",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_fanout.py::test_fanout_surfaces_shared_failure_summary_when_failed_children_agree",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_destination_filesystem.py::test_filesystem_destination_writes_success_artifacts",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_usage_runtime.py::test_batch_usage_record_preserves_batch_success_failure_symmetry",
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p5_governance_audit.py::test_governance_action_receipt_helper_supports_read_only_inspect_and_usage_linkage"
+      ],
+      "biggest_ambiguity": "Fanout can be misread as a sink if child and aggregate artifacts are not kept explicitly separate."
+    }
+  ]
+}

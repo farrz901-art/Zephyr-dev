@@ -1,0 +1,84 @@
+{
+  "schema_version": 1,
+  "phase": "P5-M5-S7 workflow views",
+  "scenario_count": 4,
+  "source_code_reading_required": false,
+  "scenarios": [
+    {
+      "scenario_id": "s7_uns_happy_01",
+      "user_facing_view": {
+        "what_user_can_tell_happened": "A retained UNS document source entered the workflow, produced output artifacts, and emitted usage/runtime evidence.",
+        "biggest_ambiguity": "Which retained UNS source variant supplied the clearest evidence may still require reading helper surfaces rather than raw output alone."
+      },
+      "operator_facing_view": {
+        "what_operator_can_inspect": "Source contract linkage, usage record, governance helper linkage, run_meta, and filesystem output surfaces.",
+        "biggest_ambiguity": "Happy workflow governance visibility is lighter than recovery workflow governance visibility."
+      },
+      "artifact_facing_view": {
+        "canonical_machine_readable_evidence": [
+          "validation/p5_source_usage_linkage.json",
+          "validation/p5_usage_runtime_contract.json",
+          "validation/p5_m5_s7_workflow_evidence_map.json"
+        ],
+        "biggest_ambiguity": "Exact acquisition path detail stays source-local and is intentionally not flattened into one universal artifact."
+      }
+    },
+    {
+      "scenario_id": "s7_it_happy_01",
+      "user_facing_view": {
+        "what_user_can_tell_happened": "A retained IT source entered with bounded cursor identity, emitted usage evidence, and landed delivery artifacts.",
+        "biggest_ambiguity": "The retained IT workflow is representative rather than exhaustive across all supported IT sources."
+      },
+      "operator_facing_view": {
+        "what_operator_can_inspect": "Checkpoint-oriented source evidence, usage runtime facts, source contract linkage, and bounded delivery artifacts.",
+        "biggest_ambiguity": "Cursor semantics remain stream-local, so S7 proves bounded workflow truth rather than a generic source-runtime platform."
+      },
+      "artifact_facing_view": {
+        "canonical_machine_readable_evidence": [
+          "validation/p5_source_contract_matrix.json",
+          "validation/p5_usage_runtime_contract.json",
+          "validation/p5_m5_s7_workflow_evidence_map.json"
+        ],
+        "biggest_ambiguity": "Destination output proof is bounded and low-cost, not a broader sink performance claim."
+      }
+    },
+    {
+      "scenario_id": "s7_failure_01",
+      "user_facing_view": {
+        "what_user_can_tell_happened": "A retained workflow can fail visibly, be replayed or requeued where appropriate, and leave coherent recovery evidence.",
+        "biggest_ambiguity": "Different retained sinks surface different failure shapes, so the proof is representative rather than sink-exhaustive."
+      },
+      "operator_facing_view": {
+        "what_operator_can_inspect": "Failure classification, replay/requeue summary, governance receipts, usage failure facts, and recovery helper/report surfaces.",
+        "biggest_ambiguity": "Terminal vs replayable vs requeueable remains bounded to the explicit retained evidence, not a universal failure platform."
+      },
+      "artifact_facing_view": {
+        "canonical_machine_readable_evidence": [
+          "validation/p5_governance_action_matrix.json",
+          "validation/p5_governance_usage_linkage.json",
+          "validation/p5_m5_s7_workflow_failure_matrix.json"
+        ],
+        "biggest_ambiguity": "Some failure explanation still spans multiple canonical artifacts by design, even though S7 now freezes that chain explicitly."
+      }
+    },
+    {
+      "scenario_id": "s7_fanout_01",
+      "user_facing_view": {
+        "what_user_can_tell_happened": "Fanout can succeed fully or partially fail while still exposing child outputs, aggregate result, and shared summary.",
+        "biggest_ambiguity": "Without the frozen workflow package, fanout can be misread as a single sink outcome instead of composition."
+      },
+      "operator_facing_view": {
+        "what_operator_can_inspect": "Child output surfaces, aggregate/shared-summary evidence, batch usage record, and governance helper linkage.",
+        "biggest_ambiguity": "Operator still needs the explicit S7 framing to avoid collapsing child and aggregate scopes."
+      },
+      "artifact_facing_view": {
+        "canonical_machine_readable_evidence": [
+          "validation/p5_m5_s7_workflow_evidence_map.json",
+          "validation/p5_m5_s7_workflow_success_criteria.json",
+          "validation/p5_m5_s7_workflow_failure_matrix.json"
+        ],
+        "biggest_ambiguity": "The retained bundle proves workflow interpretation, not a destination matrix or performance profile."
+      }
+    }
+  ]
+}
