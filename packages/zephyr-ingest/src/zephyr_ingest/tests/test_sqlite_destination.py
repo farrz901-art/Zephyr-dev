@@ -77,10 +77,17 @@ def test_sqlite_destination_writes_shared_delivery_payload_and_normalized_receip
     assert row[2] == meta.run_id
     assert row[3] == 1
     payload = json.loads(row[4])
-    assert set(payload) == {"schema_version", "sha256", "run_meta", "artifacts"}
+    assert {"schema_version", "sha256", "run_meta", "artifacts"}.issubset(payload)
     assert payload["schema_version"] == 1
     assert payload["sha256"] == "abc123"
     assert payload["run_meta"]["run_id"] == meta.run_id
+    assert payload["content_evidence"]["evidence_kind"] in {
+        "artifact_reference_only_v1",
+        "elements_count_only_v1",
+        "normalized_text_preview_v1",
+        "normalized_text_and_records_preview_v1",
+        "records_preview_v1",
+    }
     assert set(payload["artifacts"]) == {
         "out_dir",
         "run_meta_path",
@@ -118,6 +125,7 @@ def test_sqlite_destination_preserves_idempotent_upsert_for_same_identity(tmp_pa
     out_dir = Path(payload["artifacts"]["out_dir"])
     assert out_dir.name == "abc123"
     assert out_dir.parent.name == "out-b"
+    assert {"schema_version", "sha256", "run_meta", "artifacts"}.issubset(payload)
     assert set(payload["artifacts"]) == {
         "out_dir",
         "run_meta_path",

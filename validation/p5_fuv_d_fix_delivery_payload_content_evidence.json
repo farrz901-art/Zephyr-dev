@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "phase": "P5 final user validation D fix",
+  "status": "delivery_content_visibility_and_s3_readiness_fix",
+  "delivery_payload_contract": {
+    "schema_version": 1,
+    "backward_compatible": true,
+    "existing_required_fields": [
+      "schema_version",
+      "sha256",
+      "run_meta",
+      "artifacts"
+    ],
+    "additive_optional_fields": [
+      "content_evidence"
+    ]
+  },
+  "content_evidence": {
+    "field_name": "content_evidence",
+    "normalized_preview_max_chars": 16384,
+    "records_preview_max_records": 10,
+    "required_visible_fields": [
+      "evidence_kind",
+      "normalized_text_preview",
+      "normalized_text_len",
+      "normalized_text_sha256",
+      "normalized_text_truncated",
+      "records_preview",
+      "records_count",
+      "records_truncated",
+      "elements_count"
+    ],
+    "safe_missing_artifact_behavior": [
+      "missing normalized.txt does not crash payload building",
+      "missing records.jsonl for non-IT does not fail delivery payload building",
+      "invalid or missing records preview is surfaced through status fields instead of crashing unrelated delivery paths"
+    ],
+    "destination_visibility_targets": [
+      "filesystem",
+      "webhook",
+      "kafka",
+      "s3",
+      "opensearch"
+    ]
+  },
+  "fanout_readability": {
+    "top_level_destination": "fanout",
+    "children_required": true,
+    "child_summary_required": true,
+    "single_sink_connector": false
+  },
+  "s3_readiness": {
+    "dependency_surface": "packages/zephyr-ingest[s3]",
+    "bucket_helper": "tools/p45_s3_bootstrap.py",
+    "runtime_home_authoritative": true,
+    "secrets_printed": false
+  },
+  "non_claims": [
+    "P6 product shell",
+    "installer implementation",
+    "deployment packaging",
+    "distributed runtime",
+    "cloud or Kubernetes readiness",
+    "commercial or entitlement semantics"
+  ]
+}

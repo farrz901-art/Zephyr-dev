@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "phase": "P5 final user validation D fix success criteria",
+  "scope": "local bounded delivery user-validation blocker fix only",
+  "criteria": [
+    {
+      "criterion_id": "delivery_payload_content_evidence",
+      "success": [
+        "delivery payload keeps schema_version=1 and existing artifacts paths",
+        "bounded normalized text evidence becomes visible when normalized.txt exists",
+        "bounded IT records evidence becomes visible when records.jsonl exists",
+        "missing optional evidence files do not crash unrelated delivery flows"
+      ]
+    },
+    {
+      "criterion_id": "destination_marker_visibility",
+      "success": [
+        "webhook, kafka, opensearch, and s3 payload paths carry content_evidence",
+        "marker-bearing normalized or IT record content can be found from destination payload surfaces",
+        "sha256/idempotency semantics remain intact"
+      ]
+    },
+    {
+      "criterion_id": "s3_durability_and_readiness",
+      "success": [
+        "boto3 is reachable through durable repo dependency declaration",
+        "bucket readiness can be checked from external runtime-home configuration",
+        "explicit ensure mode can create the configured bucket without leaking secrets"
+      ]
+    },
+    {
+      "criterion_id": "fanout_readability",
+      "success": [
+        "top-level fanout receipt remains semantically valid",
+        "child destinations are explicitly visible",
+        "child summaries remain visible for user/operator interpretation"
+      ]
+    }
+  ],
+  "live_revalidation_claimed": false,
+  "non_claims": [
+    "no live cloud or distributed validation",
+    "no installer implementation",
+    "no P6 product shell work"
+  ]
+}

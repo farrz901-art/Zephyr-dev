@@ -46,9 +46,16 @@ def test_replay_to_sqlite_sink(tmp_path: Path) -> None:
     assert row[2] == "r1"
     assert row[3] == 1
     payload = json.loads(row[4])
-    assert set(payload) == {"schema_version", "sha256", "run_meta", "artifacts"}
+    assert {"schema_version", "sha256", "run_meta", "artifacts"}.issubset(payload)
     assert payload["schema_version"] == 1
     assert payload["run_meta"]["provenance"]["delivery_origin"] == "replay"
+    assert payload["content_evidence"]["evidence_kind"] in {
+        "artifact_reference_only_v1",
+        "elements_count_only_v1",
+        "normalized_text_preview_v1",
+        "normalized_text_and_records_preview_v1",
+        "records_preview_v1",
+    }
     assert set(payload["artifacts"]) == {
         "out_dir",
         "run_meta_path",

@@ -21,6 +21,9 @@ kafka = [
 weaviate = [
   "weaviate-client>=4.20.4,<5",
 ]
+s3 = [
+  "boto3>=1.34",
+]
 
 [project.scripts]
 zephyr-ingest = "zephyr_ingest.cli:main"

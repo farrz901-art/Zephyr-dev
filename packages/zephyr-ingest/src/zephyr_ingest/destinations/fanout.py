@@ -9,11 +9,21 @@ from zephyr_ingest.destinations.base import DeliveryReceipt, Destination
 
 
 def _aggregate_failed_child_details(*, receipts: tuple[DeliveryReceipt, ...]) -> dict[str, Any]:
+    child_receipts = [
+        {
+            "destination": receipt.destination,
+            "ok": receipt.ok,
+            "summary": receipt.shared_summary,
+            "details": receipt.details,
+        }
+        for receipt in receipts
+    ]
     details: dict[str, Any] = {
-        "receipts": [
-            {"destination": receipt.destination, "ok": receipt.ok, "details": receipt.details}
-            for receipt in receipts
-        ]
+        "receipts": child_receipts,
+        "children": child_receipts,
+        "child_count": len(receipts),
+        "ok_children": sum(1 for receipt in receipts if receipt.ok),
+        "failed_children": sum(1 for receipt in receipts if not receipt.ok),
     }
     if not receipts:
         return details

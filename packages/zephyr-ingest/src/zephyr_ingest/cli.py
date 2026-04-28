@@ -1927,7 +1927,7 @@ def _make_s3_writer_or_exit(
         )
     except ImportError as e:
         logging.error("S3 client not installed: %s", e)
-        logging.error("Install with: uv pip install boto3")
+        logging.error("Install with: uv sync --all-packages --all-groups --all-extras")
         raise SystemExit(1) from e
 
 

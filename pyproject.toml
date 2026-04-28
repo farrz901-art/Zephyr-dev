@@ -4,7 +4,10 @@ version = "0.1.0"
 description = "Zephyr Intelligent Data Extraction Pipeline"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "boto3>=1.42.97",
+    "psycopg>=3.3.3",
+]
 
 [dependency-groups]
 lint = [
@@ -51,6 +54,8 @@ strictListInference = true
 strictDictionaryInference = true
 strictSetInference = true
 exclude = [
+    ".tmp",
+    "**/.tmp",
     "packages/uns-stream/src/uns_stream/tests/fixtures",
     "**/node_modules",
     "**/__pycache__",
@@ -73,7 +78,7 @@ extraPaths = [
 #include = ["packages/*/src"]
 line-length = 100
 src = ["packages/uns-stream/src/uns_stream/tests/fixtures", "packages/uns-stream/src", "packages/it-stream/src", "packages/zephyr-core/src", "packages/zephyr-ingest/src", "packages/zephyr-api/src"]
-exclude = ["**/.venv", "**/dist", "**/build", "**/.mypy_cache", "**/.ruff_cache", "**/typings", "**/tools", "**/.tmp","**/.artifact_smoke","**/.pytest_tmp_artifacts","**/.pytest_tmp_artifacts2"]
+exclude = [".tmp", "**/.venv", "**/dist", "**/build", "**/.mypy_cache", "**/.ruff_cache", "**/typings", "**/tools", "**/.tmp","**/.artifact_smoke","**/.pytest_tmp_artifacts","**/.pytest_tmp_artifacts2"]
 #exclude = [
 #    "prepline_*/api",
 #]
