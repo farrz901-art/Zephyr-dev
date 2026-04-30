@@ -167,8 +167,12 @@ class OpenSearchDestination:
         meta: RunMetaV1,
         result: PartitionResult | None = None,
     ) -> DeliveryReceipt:
-        del result
-        payload = build_delivery_payload_v1(out_root=out_root, sha256=sha256, meta=meta)
+        payload = build_delivery_payload_v1(
+            out_root=out_root,
+            sha256=sha256,
+            meta=meta,
+            result=result,
+        )
         idempotency_key = normalize_delivery_idempotency_key(
             identity=DeliveryIdentityV1(sha256=sha256, run_id=meta.run_id)
         )

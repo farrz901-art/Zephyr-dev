@@ -27,6 +27,8 @@ class DeliveryContentEvidenceV1(TypedDict, total=False):
     records_truncated: bool
     records_status: str
     elements_count: int
+    structured_state_visibility: str
+    structured_log_visibility: str
 
 
 class DeliveryPayloadV1(TypedDict):

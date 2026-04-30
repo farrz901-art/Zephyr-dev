@@ -143,7 +143,12 @@ class WebhookDestination:
         #         "normalized_path": str((out_root / sha256 / "normalized.txt").resolve()),
         #     },
         # }
-        payload = build_delivery_payload_v1(out_root=out_root, sha256=sha256, meta=meta)
+        payload = build_delivery_payload_v1(
+            out_root=out_root,
+            sha256=sha256,
+            meta=meta,
+            result=result,
+        )
 
         # 2. 构造幂等键
         idempotency_key = normalize_delivery_idempotency_key(

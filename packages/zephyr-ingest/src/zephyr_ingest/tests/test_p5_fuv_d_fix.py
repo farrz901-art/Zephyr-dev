@@ -8,7 +8,15 @@ from typing import Any, cast
 from tools.p5_fuv_d_fix_report import main as p5_fuv_d_fix_report_main
 from tools.p45_s3_bootstrap import main as p45_s3_bootstrap_main
 
-from zephyr_core import RunContext, RunMetaV1
+from zephyr_core import (
+    DocumentMetadata,
+    EngineInfo,
+    PartitionResult,
+    PartitionStrategy,
+    RunContext,
+    RunMetaV1,
+    ZephyrElement,
+)
 from zephyr_core.contracts.v1.enums import RunOutcome
 from zephyr_core.contracts.v1.run_meta import EngineMetaV1
 from zephyr_core.contracts.v2.delivery_payload import DeliveryContentEvidenceV1, DeliveryPayloadV1
@@ -63,6 +71,33 @@ def _build_meta(*, engine_name: str = "unstructured") -> RunMetaV1:
         document=None,
         error=None,
         warnings=[],
+    )
+
+
+def _build_uns_result(*, marker: str) -> PartitionResult:
+    return PartitionResult(
+        document=DocumentMetadata(
+            filename="direct_uns.txt",
+            mime_type="text/plain",
+            sha256="abc123",
+            size_bytes=len(marker),
+            created_at_utc="2026-03-21T00:00:00Z",
+        ),
+        engine=EngineInfo(
+            name="unstructured",
+            backend="local",
+            version="0.1.0",
+            strategy=PartitionStrategy.AUTO,
+        ),
+        elements=[
+            ZephyrElement(
+                element_id="e1",
+                type="NarrativeText",
+                text=marker,
+                metadata={"flow_kind": "uns"},
+            )
+        ],
+        normalized_text=marker,
     )
 
 
@@ -301,14 +336,12 @@ def test_destinations_carry_content_evidence_marker_for_kafka_webhook_opensearch
     out_root = tmp_path / "out"
     sha = "abc123"
     marker = "visible-delivery-marker"
-    artifact_dir = out_root / sha
-    _write_text(artifact_dir / "normalized.txt", marker)
-    _write_text(artifact_dir / "elements.json", "[]")
     meta = _build_meta()
+    result = _build_uns_result(marker=marker)
 
     producer = FakeProducer(calls=[])
     kafka_dest = KafkaDestination(topic="zephyr", producer=producer)
-    kafka_receipt = kafka_dest(out_root=out_root, sha256=sha, meta=meta, result=None)
+    kafka_receipt = kafka_dest(out_root=out_root, sha256=sha, meta=meta, result=result)
     assert kafka_receipt.ok is True
     kafka_payload = json.loads(cast(bytes, producer.calls[0]["value"]).decode("utf-8"))
     assert kafka_payload["content_evidence"]["normalized_text_preview"] == marker
@@ -324,7 +357,7 @@ def test_destinations_carry_content_evidence_marker_for_kafka_webhook_opensearch
     webhook_dest = WebhookDestination(
         url="https://example.test/webhook",
     )
-    webhook_receipt = webhook_dest(out_root=out_root, sha256=sha, meta=meta, result=None)
+    webhook_receipt = webhook_dest(out_root=out_root, sha256=sha, meta=meta, result=result)
     assert webhook_receipt.ok is True
     assert (
         cast(
@@ -346,7 +379,12 @@ def test_destinations_carry_content_evidence_marker_for_kafka_webhook_opensearch
         url="https://search.example.test",
         index="zephyr-docs",
     )
-    opensearch_receipt = opensearch_dest(out_root=out_root, sha256=sha, meta=meta, result=None)
+    opensearch_receipt = opensearch_dest(
+        out_root=out_root,
+        sha256=sha,
+        meta=meta,
+        result=result,
+    )
     assert opensearch_receipt.ok is True
     assert (
         cast(
@@ -364,7 +402,7 @@ def test_destinations_carry_content_evidence_marker_for_kafka_webhook_opensearch
         secret_key="sk",
         client=s3_client,
     )
-    s3_receipt = s3_dest(out_root=out_root, sha256=sha, meta=meta, result=None)
+    s3_receipt = s3_dest(out_root=out_root, sha256=sha, meta=meta, result=result)
     assert s3_receipt.ok is True
     s3_payload = json.loads(cast(bytes, s3_client.calls[0]["Body"]).decode("utf-8"))
     assert s3_payload["content_evidence"]["normalized_text_preview"] == marker

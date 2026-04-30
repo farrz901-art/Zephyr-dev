@@ -6,7 +6,9 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "boto3>=1.42.97",
+    "clickhouse-connect>=0.15.1",
     "psycopg>=3.3.3",
+    "pymongo>=4.17.0",
 ]
 
 [dependency-groups]

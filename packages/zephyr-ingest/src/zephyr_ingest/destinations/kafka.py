@@ -155,6 +155,7 @@ class KafkaDestination:
             out_root=actual_out_root,
             sha256=sha256,
             meta=meta,
+            result=result,
         )
 
         # Idempotency key (same semantics as webhook)
