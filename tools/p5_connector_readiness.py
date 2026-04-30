@@ -241,7 +241,6 @@ CONNECTOR_READINESS_PROFILES: dict[str, ConnectorReadinessProfile] = {
         required_env=(),
         optional_env=(),
         probe_kind="sqlite",
-        notes=("Catalog marks destination.sqlite.v1 as missing_or_unregistered at this commit.",),
     ),
     "backend.uns_api.v1": ConnectorReadinessProfile(
         required_env=("ZEPHYR_UNS_API_KEY",),

@@ -20,6 +20,7 @@ from zephyr_ingest.config.snapshot_v1 import (
     MongoDBDestinationSnapshotV1,
     OpenSearchDestinationSnapshotV1,
     S3DestinationSnapshotV1,
+    SqliteDestinationSnapshotV1,
     WeaviateDestinationSnapshotV1,
     WebhookDestinationSnapshotV1,
 )
@@ -543,3 +544,31 @@ class LokiConfigV1:
         if self.rate_limit is not None:
             snapshot["rate_limit"] = self.rate_limit
         return snapshot
+
+
+@dataclass(frozen=True, slots=True)
+class SqliteConfigV1:
+    file_path: str
+    table_name: str = "zephyr_delivery_records"
+    timeout_s: float = 5.0
+    mode: str = "replace_upsert"
+
+    @staticmethod
+    def from_namespace(ns: argparse.Namespace) -> SqliteConfigV1 | None:
+        file_path = get_opt_str(ns, "sqlite_file_path")
+        if file_path is None:
+            return None
+        return SqliteConfigV1(
+            file_path=file_path,
+            table_name=get_req_str(ns, "sqlite_table_name"),
+            timeout_s=get_float(ns, "sqlite_timeout_s"),
+            mode=get_req_str(ns, "sqlite_mode"),
+        )
+
+    def to_snapshot_v1(self) -> SqliteDestinationSnapshotV1:
+        return {
+            "file_path": self.file_path,
+            "table_name": self.table_name,
+            "timeout_s": self.timeout_s,
+            "mode": self.mode,
+        }

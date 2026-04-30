@@ -44,6 +44,15 @@ def test_config_init_only_weaviate_limits_blocks(capsys: pytest.CaptureFixture[s
     assert "# [destinations.webhook]" not in out
 
 
+def test_config_init_only_sqlite_limits_blocks(capsys: pytest.CaptureFixture[str]) -> None:
+    rc = cli.main(["config", "init", "--only", "sqlite"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "# [destinations.sqlite]" in out
+    assert "# [destinations.kafka]" not in out
+    assert "# [destinations.webhook]" not in out
+
+
 def test_config_init_only_excludes_uns_api_hint(capsys: pytest.CaptureFixture[str]) -> None:
     rc = cli.main(["config", "init", "--only", "kafka"])
     assert rc == 0
@@ -89,6 +98,7 @@ def test_config_init_contains_spec_driven_fields() -> None:
     assert "# [destinations.clickhouse]" in toml
     assert "# [destinations.mongodb]" in toml
     assert "# [destinations.loki]" in toml
+    assert "# [destinations.sqlite]" in toml
 
 
 def test_config_init_includes_env_hints_for_secrets() -> None:

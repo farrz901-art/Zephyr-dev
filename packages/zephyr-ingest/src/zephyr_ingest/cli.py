@@ -14,6 +14,7 @@ from zephyr_core import RunContext
 from zephyr_core.contracts.v1.document_ref import DocumentRef
 from zephyr_core.contracts.v1.enums import PartitionStrategy
 from zephyr_core.versioning import PIPELINE_VERSION
+from zephyr_ingest import replay_delivery as replay_delivery_mod
 from zephyr_ingest._internal.weaviate_client import (
     WeaviateClientProtocol,
     WeaviateConnectParams,
@@ -50,6 +51,7 @@ from zephyr_ingest.config.models import (
     MongoDBConfigV1,
     OpenSearchConfigV1,
     S3ConfigV1,
+    SqliteConfigV1,
     WeaviateConfigV1,
     WebhookConfigV1,
 )
@@ -87,7 +89,6 @@ from zephyr_ingest.replay_delivery import (
     S3ReplaySink,
     WeaviateReplaySink,
     WebhookReplaySink,
-    replay_delivery_dlq,
 )
 from zephyr_ingest.runner import RetryConfig, RunnerConfig, run_documents
 from zephyr_ingest.sources.local_file import LocalFileSource
@@ -133,6 +134,7 @@ class RunCmd:
     clickhouse: ClickHouseConfigV1 | None
     mongodb: MongoDBConfigV1 | None
     loki: LokiConfigV1 | None
+    sqlite: SqliteConfigV1 | None
     config_sources: ConfigSourcesV1
 
 
@@ -148,6 +150,7 @@ class ReplayDeliveryCmd:
     clickhouse: ClickHouseConfigV1 | None
     mongodb: MongoDBConfigV1 | None
     loki: LokiConfigV1 | None
+    sqlite: SqliteConfigV1 | None
     limit: int | None
     dry_run: bool
     move_done: bool
@@ -279,6 +282,7 @@ def _add_runlike_args(*, p: argparse.ArgumentParser, paths_required: bool) -> No
         "destination.clickhouse.v1",
         "destination.mongodb.v1",
         "destination.loki.v1",
+        "destination.sqlite.v1",
     ]
     specs: list[ConnectorSpecV1] = []
     for spec_id in spec_ids:
@@ -365,6 +369,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "clickhouse",
             "mongodb",
             "loki",
+            "sqlite",
             "all",
         ],
         help=(
@@ -383,6 +388,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "destination.clickhouse.v1",
         "destination.mongodb.v1",
         "destination.loki.v1",
+        "destination.sqlite.v1",
     ]:
         s = get_spec(spec_id=spec_id)
         if s is None:
@@ -428,6 +434,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "clickhouse",
             "mongodb",
             "loki",
+            "sqlite",
             "uns-api",
         ],
         help="Limit output to selected blocks (repeatable). Default: all.",
@@ -1586,6 +1593,52 @@ def _parse_run_cmd(ns: argparse.Namespace, argv: Sequence[str]) -> RunCmd:
             "--mongodb-rate-limit", None if file_mongodb is None else file_mongodb.rate_limit
         )
 
+    # -------------------------
+    # destinations: sqlite
+    # Enable if file_path is provided either by CLI or FILE.
+    # -------------------------
+    sqlite_file_path_cli = get_opt_str(ns, "sqlite_file_path")
+    file_sqlite = None if dest_file is None else dest_file.sqlite
+    sqlite_file_path = _choose_opt_str(
+        flag="--sqlite-file-path",
+        cli_val=sqlite_file_path_cli,
+        file_val=None if file_sqlite is None else file_sqlite.file_path,
+    )
+    sqlite: SqliteConfigV1 | None = None
+    if sqlite_file_path is not None:
+        sqlite = SqliteConfigV1(
+            file_path=sqlite_file_path,
+            table_name=_choose_str(
+                flag="--sqlite-table-name",
+                cli_val=get_req_str(ns, "sqlite_table_name"),
+                file_val=None if file_sqlite is None else file_sqlite.table_name,
+            ),
+            timeout_s=_choose_float(
+                flag="--sqlite-timeout-s",
+                cli_val=get_float(ns, "sqlite_timeout_s"),
+                file_val=None if file_sqlite is None else file_sqlite.timeout_s,
+            ),
+            mode=_choose_str(
+                flag="--sqlite-mode",
+                cli_val=get_req_str(ns, "sqlite_mode"),
+                file_val=None if file_sqlite is None else file_sqlite.mode,
+            ),
+        )
+        sources["destinations.sqlite.file_path"] = (
+            "cli"
+            if "--sqlite-file-path" in present
+            else ("file" if file_sqlite is not None else "default")
+        )
+        sources["destinations.sqlite.table_name"] = _src(
+            "--sqlite-table-name", None if file_sqlite is None else file_sqlite.table_name
+        )
+        sources["destinations.sqlite.timeout_s"] = _src(
+            "--sqlite-timeout-s", None if file_sqlite is None else file_sqlite.timeout_s
+        )
+        sources["destinations.sqlite.mode"] = _src(
+            "--sqlite-mode", None if file_sqlite is None else file_sqlite.mode
+        )
+
     return RunCmd(
         paths=get_str_list(ns, "paths"),
         glob=get_req_str(ns, "glob"),
@@ -1621,6 +1674,7 @@ def _parse_run_cmd(ns: argparse.Namespace, argv: Sequence[str]) -> RunCmd:
         clickhouse=clickhouse,
         loki=loki,
         mongodb=mongodb,
+        sqlite=sqlite,
         config_sources=sources,
     )
 
@@ -1745,6 +1799,7 @@ def _parse_cmd(
         clickhouse = ClickHouseConfigV1.from_namespace(ns)
         loki = LokiConfigV1.from_namespace(ns)
         mongodb = MongoDBConfigV1.from_namespace(ns)
+        sqlite = SqliteConfigV1.from_namespace(ns)
         # Apply ENV overlay for secrets (CLI explicit still wins because overlay only fills missing)
         weaviate = overlay_weaviate_api_key(weaviate=weaviate)
         if dest in ("webhook", "all") and webhook is None:
@@ -1765,6 +1820,8 @@ def _parse_cmd(
             raise ConfigError("--loki-url is required when --dest includes loki")
         if dest in ("mongodb", "all") and mongodb is None:
             raise ConfigError("--mongodb-uri is required when --dest includes mongodb")
+        if dest in ("sqlite", "all") and sqlite is None:
+            raise ConfigError("--sqlite-file-path is required when --dest includes sqlite")
         return ReplayDeliveryCmd(
             out=get_req_str(ns, "out"),
             dest=dest,
@@ -1776,6 +1833,7 @@ def _parse_cmd(
             clickhouse=clickhouse,
             loki=loki,
             mongodb=mongodb,
+            sqlite=sqlite,
             limit=get_opt_int(ns, "limit"),
             dry_run=get_bool(ns, "dry_run"),
             move_done=get_bool(ns, "move_done"),
@@ -1985,6 +2043,17 @@ def _make_weaviate_collection_or_exit(
         raise SystemExit(1) from e
 
 
+def _replay_delivery_dlq_typed(*, out_root: Path, sink: object, cmd: ReplayDeliveryCmd) -> object:
+    replay_fn = getattr(replay_delivery_mod, "replay_delivery_dlq")
+    return replay_fn(
+        out_root=out_root,
+        sink=sink,
+        limit=cmd.limit,
+        dry_run=cmd.dry_run,
+        move_done=cmd.move_done,
+    )
+
+
 def _build_config_snapshot(*, cmd: RunCmd) -> ConfigSnapshotV1:
     destinations: DestinationsSnapshotV1 = {
         "filesystem": {"enabled": True},
@@ -2005,6 +2074,8 @@ def _build_config_snapshot(*, cmd: RunCmd) -> ConfigSnapshotV1:
         destinations["loki"] = cmd.loki.to_snapshot_v1()
     if cmd.mongodb is not None:
         destinations["mongodb"] = cmd.mongodb.to_snapshot_v1()
+    if cmd.sqlite is not None:
+        destinations["sqlite"] = cmd.sqlite.to_snapshot_v1()
 
     backend: BackendSnapshotV1
     if cmd.backend == "uns-api":
@@ -2189,6 +2260,17 @@ def _build_destinations(
                 collection_obj=mongodb_collection,
                 max_inflight=cmd.mongodb.max_inflight,
                 rate_limit=cmd.mongodb.rate_limit,
+            )
+        )
+
+    if cmd.sqlite is not None:
+        from zephyr_ingest.destinations.sqlite import SqliteDestination
+
+        dests.append(
+            SqliteDestination(
+                db_path=Path(cmd.sqlite.file_path),
+                table_name=cmd.sqlite.table_name,
+                timeout_s=cmd.sqlite.timeout_s,
             )
         )
 
@@ -2587,16 +2669,21 @@ def main(argv: Sequence[str] | None = None) -> int:
                     write_mode=cmd.mongodb.write_mode,
                 )
             )
+        if cmd.dest in ("sqlite", "all"):
+            assert cmd.sqlite is not None
+            from zephyr_ingest.replay_delivery import SqliteReplaySink
+
+            sinks.append(
+                SqliteReplaySink(
+                    db_path=Path(cmd.sqlite.file_path),
+                    table_name=cmd.sqlite.table_name,
+                    timeout_s=cmd.sqlite.timeout_s,
+                )
+            )
 
         try:
             sink = sinks[0] if len(sinks) == 1 else FanoutReplaySink(sinks=tuple(sinks))  # type: ignore[arg-type]
-            stats = replay_delivery_dlq(
-                out_root=Path(cmd.out),
-                sink=sink,  # type: ignore[arg-type]
-                limit=cmd.limit,
-                dry_run=cmd.dry_run,
-                move_done=cmd.move_done,
-            )
+            stats = _replay_delivery_dlq_typed(out_root=Path(cmd.out), sink=sink, cmd=cmd)
             logging.info("replay stats: %s", stats)
             return 0
         finally:

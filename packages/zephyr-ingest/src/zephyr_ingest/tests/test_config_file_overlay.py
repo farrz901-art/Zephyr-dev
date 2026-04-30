@@ -431,3 +431,67 @@ timeout_s = 3.5
 
     assert rc == 0
     assert called["ok"] is True
+
+
+def test_config_file_enables_sqlite_destination_and_preserves_snapshot_sources(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    (inbox / "a.txt").write_text("hello", encoding="utf-8")
+
+    cfg_path = tmp_path / "cfg.toml"
+    sqlite_path = tmp_path / "delivery.sqlite3"
+    _write_config(
+        cfg_path,
+        f"""
+[destinations.sqlite]
+file_path = "{sqlite_path.as_posix()}"
+table_name = "delivery_rows"
+timeout_s = 4.5
+mode = "replace_upsert"
+""".strip(),
+    )
+
+    called = {"ok": False}
+
+    def fake_run_documents(*, docs: Any, cfg: Any, ctx: Any, **kwargs: Any) -> Any:
+        del docs, cfg, ctx
+        called["ok"] = True
+
+        dest = kwargs.get("destination")
+        assert dest is not None
+        assert getattr(dest, "name") == "fanout"
+
+        snap = cast(ConfigSnapshotV1, kwargs.get("config_snapshot"))
+        sqlite_snapshot = snap["destinations"].get("sqlite")
+        assert sqlite_snapshot is not None
+        assert Path(cast(str, sqlite_snapshot["file_path"])) == sqlite_path
+        assert sqlite_snapshot["table_name"] == "delivery_rows"
+        assert sqlite_snapshot["timeout_s"] == 4.5
+        assert sqlite_snapshot["mode"] == "replace_upsert"
+
+        sources = snap.get("sources")
+        assert sources is not None
+        assert sources["destinations.sqlite.file_path"] == "file"
+        assert sources["destinations.sqlite.table_name"] == "file"
+        assert sources["destinations.sqlite.timeout_s"] == "file"
+        assert sources["destinations.sqlite.mode"] == "file"
+
+    monkeypatch.setattr(cli, "run_documents", fake_run_documents)
+
+    rc = cli.main(
+        [
+            "run",
+            "--path",
+            str(inbox),
+            "--out",
+            str(tmp_path / "out"),
+            "--config",
+            str(cfg_path),
+        ]
+    )
+
+    assert rc == 0
+    assert called["ok"] is True

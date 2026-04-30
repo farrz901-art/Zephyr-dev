@@ -695,3 +695,60 @@ def test_cli_run_loki_destination_flows_into_snapshot_and_fanout(
 
     assert rc == 0
     assert called["ok"] is True
+
+
+def test_cli_run_sqlite_destination_flows_into_snapshot_and_fanout(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    called = {"ok": False}
+    (tmp_path / "dummy.txt").touch()
+
+    def fake_run_documents(*, docs: Any, cfg: Any, ctx: Any, **kwargs: Any) -> Any:
+        del docs, cfg, ctx
+        called["ok"] = True
+
+        dest = kwargs.get("destination")
+        assert dest is not None
+        assert getattr(dest, "name") == "fanout"
+        children = getattr(dest, "destinations")
+        child_names = {getattr(child, "name") for child in children}
+        assert child_names == {"filesystem", "sqlite"}
+
+        snap = cast(ConfigSnapshotV1, kwargs.get("config_snapshot"))
+        sqlite_snapshot = snap["destinations"].get("sqlite")
+        assert sqlite_snapshot is not None
+        assert sqlite_snapshot["file_path"] == str(tmp_path / "delivery.db")
+        assert sqlite_snapshot["table_name"] == "delivery_rows"
+        assert sqlite_snapshot["timeout_s"] == 4.5
+        assert sqlite_snapshot["mode"] == "replace_upsert"
+
+        sources = snap.get("sources")
+        assert sources is not None
+        assert sources["destinations.sqlite.file_path"] == "cli"
+        assert sources["destinations.sqlite.table_name"] == "cli"
+        assert sources["destinations.sqlite.timeout_s"] == "cli"
+        assert sources["destinations.sqlite.mode"] == "cli"
+
+    monkeypatch.setattr(cli, "run_documents", fake_run_documents)
+
+    rc = cli.main(
+        [
+            "run",
+            "--path",
+            str(tmp_path / "dummy.txt"),
+            "--out",
+            str(tmp_path / "out"),
+            "--sqlite-file-path",
+            str(tmp_path / "delivery.db"),
+            "--sqlite-table-name",
+            "delivery_rows",
+            "--sqlite-timeout-s",
+            "4.5",
+            "--sqlite-mode",
+            "replace_upsert",
+        ]
+    )
+
+    assert rc == 0
+    assert called["ok"] is True

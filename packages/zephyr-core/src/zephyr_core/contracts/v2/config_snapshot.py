@@ -130,6 +130,13 @@ class LokiDestinationSnapshotV1(TypedDict):
     rate_limit: NotRequired[float | None]
 
 
+class SqliteDestinationSnapshotV1(TypedDict):
+    file_path: str
+    table_name: str
+    timeout_s: float
+    mode: str
+
+
 class DestinationsSnapshotV1(TypedDict):
     filesystem: FilesystemDestinationSnapshotV1
     webhook: NotRequired[WebhookDestinationSnapshotV1]
@@ -140,6 +147,7 @@ class DestinationsSnapshotV1(TypedDict):
     clickhouse: NotRequired[ClickHouseDestinationSnapshotV1]
     mongodb: NotRequired[MongoDBDestinationSnapshotV1]
     loki: NotRequired[LokiDestinationSnapshotV1]
+    sqlite: NotRequired[SqliteDestinationSnapshotV1]
 
 
 ConfigValueSource: TypeAlias = Literal["cli", "env", "file", "default"]

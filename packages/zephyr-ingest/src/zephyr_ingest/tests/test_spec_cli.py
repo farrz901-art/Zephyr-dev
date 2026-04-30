@@ -22,6 +22,7 @@ def test_spec_list(capsys: pytest.CaptureFixture[str]) -> None:
     assert "destination.clickhouse.v1" in ids
     assert "destination.mongodb.v1" in ids
     assert "destination.loki.v1" in ids
+    assert "destination.sqlite.v1" in ids
     assert "backend.uns_api.v1" in ids
 
 
@@ -97,3 +98,14 @@ def test_spec_show_toml_destination_loki(capsys: pytest.CaptureFixture[str]) -> 
     assert "url" in out
     assert "stream" in out
     assert "tenant_id" in out
+
+
+def test_spec_show_toml_destination_sqlite(capsys: pytest.CaptureFixture[str]) -> None:
+    rc = cli.main(["spec", "show", "--id", "destination.sqlite.v1", "--format", "toml"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "[destinations.sqlite]" in out
+    assert "file_path" in out
+    assert "table_name" in out
+    assert "timeout_s" in out
+    assert "mode" in out

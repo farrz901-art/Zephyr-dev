@@ -248,6 +248,7 @@ def render_config_init_toml_v1(*, only: set[str] | None = None) -> str:
     - [destinations.clickhouse]: commented block
     - [destinations.mongodb]: commented block
     - [destinations.loki]: commented block
+    - [destinations.sqlite]: commented block
     """
     lines: list[str] = []
 
@@ -264,6 +265,7 @@ def render_config_init_toml_v1(*, only: set[str] | None = None) -> str:
     include_clickhouse = include_all or ("clickhouse" in target_only)
     include_mongodb = include_all or ("mongodb" in target_only)
     include_loki = include_all or ("loki" in target_only)
+    include_sqlite = include_all or ("sqlite" in target_only)
 
     # Header
     lines.append("# Zephyr Ingest Configuration (auto-generated from spec)")
@@ -287,6 +289,7 @@ def render_config_init_toml_v1(*, only: set[str] | None = None) -> str:
         or include_clickhouse
         or include_mongodb
         or include_loki
+        or include_sqlite
     ):
         lines.append("")
         lines.append("# " + "=" * 50)
@@ -359,6 +362,16 @@ def render_config_init_toml_v1(*, only: set[str] | None = None) -> str:
                 _render_destination_section(
                     spec=loki_spec,
                     table_name="destinations.loki",
+                )
+            )
+
+    if include_sqlite:
+        sqlite_spec = get_spec(spec_id="destination.sqlite.v1")
+        if sqlite_spec:
+            lines.extend(
+                _render_destination_section(
+                    spec=sqlite_spec,
+                    table_name="destinations.sqlite",
                 )
             )
 

@@ -734,7 +734,13 @@ def _find_child_receipt(
 
 
 def _audit_sqlite_evidence(
-    *, db_path: Path, identity_key: str, flow: FlowName, token: str
+    *,
+    db_path: Path,
+    identity_key: str,
+    flow: FlowName,
+    token: str,
+    expected_sha256: str,
+    expected_run_id: str,
 ) -> EndpointEvidence:
     if not db_path.exists():
         return EndpointEvidence(False, False, "missing", False, False, False, "sqlite_db_missing")
@@ -751,23 +757,13 @@ def _audit_sqlite_evidence(
     payload = _json_dict_from_text(cast(str, row[0]))
     run_meta_obj = payload.get("run_meta")
     assert isinstance(run_meta_obj, dict)
-    run_meta = cast(dict[str, object], run_meta_obj)
-    evidence = _evaluate_payload(
+    return _evaluate_payload(
         payload=payload,
         flow=flow,
         token=token,
-        expected_sha256=cast(str, payload.get("sha256", "")),
-        expected_run_id=cast(str, run_meta.get("run_id", "")),
+        expected_sha256=expected_sha256,
+        expected_run_id=expected_run_id,
         delivery_locator_found=True,
-    )
-    return EndpointEvidence(
-        endpoint_readback_ok=True,
-        content_evidence_found=evidence.content_evidence_found,
-        evidence_kind=evidence.evidence_kind,
-        normalized_text_preview_found=evidence.normalized_text_preview_found,
-        records_preview_found=evidence.records_preview_found,
-        token_pass=evidence.token_pass,
-        note=evidence.note,
     )
 
 
@@ -1083,6 +1079,8 @@ def _readback_target_evidence(
             identity_key=_delivery_identity(case),
             flow=case.flow,
             token=case.token,
+            expected_sha256=case.sha256,
+            expected_run_id=case.run_id,
         )
     raise ValueError(f"Unsupported destination id: {destination_id}")
 
@@ -1100,6 +1098,8 @@ def _readback_audit_child_evidence(
         identity_key=_delivery_identity(case),
         flow=case.flow,
         token=case.token,
+        expected_sha256=case.sha256,
+        expected_run_id=case.run_id,
     )
 
 

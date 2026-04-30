@@ -192,6 +192,14 @@ class LokiDestFileV1:
 
 
 @dataclass(frozen=True, slots=True)
+class SqliteDestFileV1:
+    file_path: str
+    table_name: str | None = None
+    timeout_s: float | None = None
+    mode: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class DestinationsFileV1:
     webhook: WebhookDestFileV1 | None = None
     kafka: KafkaDestFileV1 | None = None
@@ -201,6 +209,7 @@ class DestinationsFileV1:
     clickhouse: ClickHouseDestFileV1 | None = None
     mongodb: MongoDBDestFileV1 | None = None
     loki: LokiDestFileV1 | None = None
+    sqlite: SqliteDestFileV1 | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -254,7 +263,17 @@ def load_config_file_v1(*, path: Path) -> ConfigFileV1:
     )
     _unknown_keys(
         dest_tbl,
-        {"webhook", "kafka", "weaviate", "s3", "opensearch", "clickhouse", "mongodb", "loki"},
+        {
+            "webhook",
+            "kafka",
+            "weaviate",
+            "s3",
+            "opensearch",
+            "clickhouse",
+            "mongodb",
+            "loki",
+            "sqlite",
+        },
         "destinations",
     )
 
@@ -523,6 +542,26 @@ def load_config_file_v1(*, path: Path) -> ConfigFileV1:
             rate_limit=_opt_float(loki_tbl, "rate_limit", "destinations.loki"),
         )
 
+    sqlite: SqliteDestFileV1 | None = None
+    if "sqlite" in dest_tbl:
+        sqlite_tbl = _as_table(dest_tbl["sqlite"], "destinations.sqlite")
+        _unknown_keys(
+            sqlite_tbl,
+            {"file_path", "table_name", "timeout_s", "mode"},
+            "destinations.sqlite",
+        )
+        file_path = _opt_str(sqlite_tbl, "file_path", "destinations.sqlite")
+        if file_path is None:
+            raise ConfigError(
+                "destinations.sqlite.file_path is required when [destinations.sqlite] is present"
+            )
+        sqlite = SqliteDestFileV1(
+            file_path=file_path,
+            table_name=_opt_str(sqlite_tbl, "table_name", "destinations.sqlite"),
+            timeout_s=_opt_float(sqlite_tbl, "timeout_s", "destinations.sqlite"),
+            mode=_opt_str(sqlite_tbl, "mode", "destinations.sqlite"),
+        )
+
     return ConfigFileV1(
         schema_version=schema_version,
         schema_version_present=schema_version_present,
@@ -554,5 +593,6 @@ def load_config_file_v1(*, path: Path) -> ConfigFileV1:
             clickhouse=clickhouse,
             mongodb=mongodb,
             loki=loki,
+            sqlite=sqlite,
         ),
     )

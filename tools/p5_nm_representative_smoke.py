@@ -460,7 +460,7 @@ def _prepare_uns_git_case(
     *, source_id: SourceId, destination_id: CatalogDestinationId, mode: ModeName, case_root: Path
 ) -> PreparedRouteCase:
     token = f"zephyr_p5_1_uns_git_{uuid.uuid4().hex}"
-    repo_root = case_root / "git_repo"
+    repo_root = (case_root / "git_repo").resolve()
     relative_path = "docs/report.txt"
     commit = init_git_text_repo(
         repo_root,

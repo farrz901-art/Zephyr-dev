@@ -400,12 +400,7 @@ DESTINATION_BLUEPRINTS: tuple[ConnectorBlueprint, ...] = (
         python_dependencies=(),
         service_readiness_kind="sqlite_db_path_ready",
         endpoint_readback_kind="sqlite_row_readback",
-        implementation_status="missing_or_unregistered",
-        notes=(
-            "SQLite destination implementation exists, but destination.sqlite.v1 "
-            "is not present in zephyr_ingest.spec.registry or spec-driven CLI "
-            "lists at this commit.",
-        ),
+        implementation_status="implemented_and_registered",
     ),
 )
 
@@ -466,8 +461,6 @@ def _source_contract_id_for_spec_id(spec_id: str) -> str | None:
 def _registry_status(blueprint: ConnectorBlueprint, spec: ConnectorSpecV1 | None) -> str:
     if blueprint.id == "filesystem":
         return "not_in_connector_spec_registry"
-    if blueprint.id == "destination.sqlite.v1":
-        return "missing_from_connector_spec_registry"
     if spec is None:
         return "missing_from_connector_spec_registry"
     return "registered_in_connector_spec_registry"
@@ -487,8 +480,6 @@ def _severity(
     blueprint: ConnectorBlueprint,
     spec_fields_status: str,
 ) -> str:
-    if blueprint.id == "destination.sqlite.v1":
-        return "major"
     if blueprint.family == "source" and spec_fields_status == "empty":
         return "major_for_source_ux"
     if blueprint.id == "filesystem":
@@ -504,13 +495,7 @@ def _notes(
     notes = list(blueprint.notes)
     if spec is not None and spec_fields_status == "present":
         notes.append(f"Spec registry field count: {len(spec['fields'])}.")
-    if blueprint.id == "destination.sqlite.v1":
-        notes.append(
-            "Implementation is present, but the P5.1 catalog treats the "
-            "connector as missing_or_unregistered because registry/spec wiring "
-            "is absent."
-        )
-    if spec is None and blueprint.id != "destination.sqlite.v1":
+    if spec is None:
         notes.append("No connector spec registry entry exists for this connector at this commit.")
     if spec_fields_status == "empty":
         contract_id = _source_contract_id_for_spec_id(blueprint.id)
