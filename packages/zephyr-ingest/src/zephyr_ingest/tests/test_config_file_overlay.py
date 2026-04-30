@@ -467,7 +467,7 @@ mode = "replace_upsert"
         snap = cast(ConfigSnapshotV1, kwargs.get("config_snapshot"))
         sqlite_snapshot = snap["destinations"].get("sqlite")
         assert sqlite_snapshot is not None
-        assert Path(cast(str, sqlite_snapshot["file_path"])) == sqlite_path
+        assert Path(sqlite_snapshot["file_path"]) == sqlite_path
         assert sqlite_snapshot["table_name"] == "delivery_rows"
         assert sqlite_snapshot["timeout_s"] == 4.5
         assert sqlite_snapshot["mode"] == "replace_upsert"
