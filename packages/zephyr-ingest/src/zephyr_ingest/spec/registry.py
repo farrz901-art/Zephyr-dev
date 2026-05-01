@@ -521,6 +521,7 @@ _REGISTRY: dict[str, ConnectorSpecV1] = {
                 "name": "destinations.mongodb.uri",
                 "type": "string",
                 "required": True,
+                "secret": True,
                 "cli_flags": ["--mongodb-uri"],
                 "help": "MongoDB connection URI.",
             },
