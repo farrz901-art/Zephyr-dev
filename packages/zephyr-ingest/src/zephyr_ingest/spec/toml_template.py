@@ -90,6 +90,37 @@ def render_spec_toml_snippet_v1(*, spec: ConnectorSpecV1) -> str:
         lines.append("")
         return "\n".join(lines)
 
+    if spec["kind"] == "source":
+        lines.append("[source]")
+        for f in spec["fields"]:
+            if not f["name"].startswith("source."):
+                continue
+
+            help_text = f.get("help")
+            if help_text is not None:
+                lines.append(f"# {help_text}")
+
+            if f.get("secret", False):
+                envs = f.get("env_names", [])
+                if envs:
+                    lines.append("# Prefer ENV injection: " + ", ".join(envs))
+
+            examples = f.get("examples", [])
+            if examples:
+                lines.append("# Example: " + " | ".join(examples))
+
+            use_placeholder = f["required"] and "default" not in f
+            value = (
+                _placeholder_for_type(f)
+                if use_placeholder
+                else (_format_value(f["default"]) if "default" in f else _placeholder_for_type(f))
+            )
+            key = f["name"].split(".")[-1]
+            lines.append(f"{key} = {value}")
+
+        lines.append("")
+        return "\n".join(lines)
+
     # backend spec
     if spec["id"] == "backend.uns_api.v1":
         lines.append("# Paste these into your [run] table:")

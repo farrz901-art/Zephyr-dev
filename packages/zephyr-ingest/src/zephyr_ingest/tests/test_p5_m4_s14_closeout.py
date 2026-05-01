@@ -179,7 +179,8 @@ def test_retained_sources_have_spec_registry_parity() -> None:
         assert spec_id in spec_ids
         assert spec is not None
         assert spec["kind"] == "source", contract_id
-        assert spec["fields"] == []
+        assert spec["fields"], contract_id
+        assert any(field["required"] for field in spec["fields"]), contract_id
 
 
 @pytest.mark.auth_contract

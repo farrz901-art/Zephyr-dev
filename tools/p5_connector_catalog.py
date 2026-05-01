@@ -49,6 +49,7 @@ class ConnectorRecord:
     implementation_status: str
     registry_status: str
     spec_fields_status: str
+    field_count: int
     severity: str
     required_env: list[str]
     optional_env: list[str]
@@ -73,9 +74,7 @@ SOURCE_BLUEPRINTS: tuple[ConnectorBlueprint, ...] = (
         service_readiness_kind="http_document_endpoint_ready",
         endpoint_readback_kind="http_body_readback",
         implementation_status="implemented_and_registered",
-        notes=(
-            "Source spec exists in zephyr_ingest.spec.registry but fields are currently empty.",
-        ),
+        notes=("Bounded retained UNS subset; the source fetches one explicit document URL.",),
     ),
     ConnectorBlueprint(
         id="source.uns.s3_document.v1",
@@ -91,9 +90,7 @@ SOURCE_BLUEPRINTS: tuple[ConnectorBlueprint, ...] = (
         service_readiness_kind="s3_object_ready",
         endpoint_readback_kind="s3_object_body_readback",
         implementation_status="implemented_and_registered",
-        notes=(
-            "Source spec exists in zephyr_ingest.spec.registry but fields are currently empty.",
-        ),
+        notes=("Bounded retained UNS subset; the source fetches one explicit bucket/key object.",),
     ),
     ConnectorBlueprint(
         id="source.uns.git_document.v1",
@@ -111,7 +108,7 @@ SOURCE_BLUEPRINTS: tuple[ConnectorBlueprint, ...] = (
         implementation_status="implemented_and_registered",
         notes=(
             "Requires git executable on PATH in addition to Python package dependencies.",
-            "Source spec exists in zephyr_ingest.spec.registry but fields are currently empty.",
+            "Bounded retained UNS subset; repository/ref/path selection stays explicit.",
         ),
     ),
     ConnectorBlueprint(
@@ -128,9 +125,7 @@ SOURCE_BLUEPRINTS: tuple[ConnectorBlueprint, ...] = (
         service_readiness_kind="google_drive_file_ready",
         endpoint_readback_kind="download_or_export_body_readback",
         implementation_status="implemented_and_registered",
-        notes=(
-            "Source spec exists in zephyr_ingest.spec.registry but fields are currently empty.",
-        ),
+        notes=("Bounded retained UNS subset; acquisition stays on explicit file/export facts.",),
     ),
     ConnectorBlueprint(
         id="source.uns.confluence_document.v1",
@@ -146,9 +141,7 @@ SOURCE_BLUEPRINTS: tuple[ConnectorBlueprint, ...] = (
         service_readiness_kind="confluence_page_ready",
         endpoint_readback_kind="page_body_readback",
         implementation_status="implemented_and_registered",
-        notes=(
-            "Source spec exists in zephyr_ingest.spec.registry but fields are currently empty.",
-        ),
+        notes=("Bounded retained UNS subset; acquisition stays on explicit site/page facts.",),
     ),
     ConnectorBlueprint(
         id="source.it.http_json_cursor.v1",
@@ -164,9 +157,7 @@ SOURCE_BLUEPRINTS: tuple[ConnectorBlueprint, ...] = (
         service_readiness_kind="http_json_endpoint_ready",
         endpoint_readback_kind="json_record_readback",
         implementation_status="implemented_and_registered",
-        notes=(
-            "Source spec exists in zephyr_ingest.spec.registry but fields are currently empty.",
-        ),
+        notes=("Bounded retained IT subset; payload contract assumes records plus next_cursor.",),
     ),
     ConnectorBlueprint(
         id="source.it.postgresql_incremental.v1",
@@ -182,9 +173,7 @@ SOURCE_BLUEPRINTS: tuple[ConnectorBlueprint, ...] = (
         service_readiness_kind="postgresql_table_ready",
         endpoint_readback_kind="sql_row_readback",
         implementation_status="implemented_and_registered",
-        notes=(
-            "Source spec exists in zephyr_ingest.spec.registry but fields are currently empty.",
-        ),
+        notes=("Bounded retained IT subset; ordered incremental table progression only.",),
     ),
     ConnectorBlueprint(
         id="source.it.clickhouse_incremental.v1",
@@ -200,9 +189,7 @@ SOURCE_BLUEPRINTS: tuple[ConnectorBlueprint, ...] = (
         service_readiness_kind="clickhouse_table_ready",
         endpoint_readback_kind="sql_row_readback",
         implementation_status="implemented_and_registered",
-        notes=(
-            "Source spec exists in zephyr_ingest.spec.registry but fields are currently empty.",
-        ),
+        notes=("Bounded retained IT subset; ordered incremental query/window progression only.",),
     ),
     ConnectorBlueprint(
         id="source.it.kafka_partition_offset.v1",
@@ -218,9 +205,7 @@ SOURCE_BLUEPRINTS: tuple[ConnectorBlueprint, ...] = (
         service_readiness_kind="kafka_topic_partition_ready",
         endpoint_readback_kind="consumer_payload_readback",
         implementation_status="implemented_and_registered",
-        notes=(
-            "Source spec exists in zephyr_ingest.spec.registry but fields are currently empty.",
-        ),
+        notes=("Bounded retained IT subset; explicit partition/offset reads only.",),
     ),
     ConnectorBlueprint(
         id="source.it.mongodb_incremental.v1",
@@ -236,9 +221,7 @@ SOURCE_BLUEPRINTS: tuple[ConnectorBlueprint, ...] = (
         service_readiness_kind="mongodb_collection_ready",
         endpoint_readback_kind="document_query_readback",
         implementation_status="implemented_and_registered",
-        notes=(
-            "Source spec exists in zephyr_ingest.spec.registry but fields are currently empty.",
-        ),
+        notes=("Bounded retained IT subset; ordered incremental document progression only.",),
     ),
 )
 
@@ -420,9 +403,7 @@ BACKEND_BLUEPRINTS: tuple[ConnectorBlueprint, ...] = (
         service_readiness_kind="http_partition_api_ready",
         endpoint_readback_kind="partition_response_readback",
         implementation_status="implemented_and_registered",
-        notes=(
-            "Cataloged as backend only; it must not be counted as a destination.",
-        ),
+        notes=("Cataloged as backend only; it must not be counted as a destination.",),
     ),
 )
 
@@ -531,6 +512,7 @@ def build_connector_catalog() -> dict[str, object]:
             implementation_status=blueprint.implementation_status,
             registry_status=_registry_status(blueprint=blueprint, spec=spec),
             spec_fields_status=spec_fields_status,
+            field_count=len(spec["fields"]) if spec is not None else 0,
             severity=_severity(blueprint=blueprint, spec_fields_status=spec_fields_status),
             required_env=required_env,
             optional_env=optional_env,
@@ -568,9 +550,10 @@ def render_markdown(catalog: dict[str, object]) -> str:
         "# Zephyr P5.1 Connector Catalog",
         "",
         "| id | family | flow_kind | implementation_status | severity | "
+        "field_count | "
         "required_env | optional_env | python_dependencies | "
         "service_readiness_kind | endpoint_readback_kind | notes |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for item in connectors:
         assert isinstance(item, dict)
@@ -592,6 +575,7 @@ def render_markdown(catalog: dict[str, object]) -> str:
                     str(typed_item["flow_kind"]),
                     str(typed_item["implementation_status"]),
                     str(typed_item["severity"]),
+                    str(typed_item["field_count"]),
                     _markdown_cell_list([str(value) for value in required_env]),
                     _markdown_cell_list([str(value) for value in optional_env]),
                     _markdown_cell_list([str(value) for value in dependencies]),

@@ -3,6 +3,59 @@ from __future__ import annotations
 from zephyr_ingest.config.constants import UNS_API_KEY_ENV_NAMES, WEAVIATE_API_KEY_ENV_NAMES
 from zephyr_ingest.spec.types import ConnectorSpecV1
 
+_P45_HTTP_FIXTURE_BASE_ENV = ["ZEPHYR_P45_HTTP_FIXTURE_BASE"]
+_P45_S3_ENV_NAMES = {
+    "bucket": ["ZEPHYR_P45_S3_BUCKET"],
+    "key": ["ZEPHYR_P45_S3_SOURCE_KEY", "ZEPHYR_P45_S3_OBJECT_KEY"],
+    "region": ["ZEPHYR_P45_S3_REGION"],
+    "access_key": ["ZEPHYR_P45_S3_ACCESS_KEY"],
+    "secret_key": ["ZEPHYR_P45_S3_SECRET_KEY"],
+    "endpoint_url": ["ZEPHYR_P45_S3_ENDPOINT"],
+    "session_token": ["ZEPHYR_P45_S3_SESSION_TOKEN"],
+}
+_P45_GOOGLE_DRIVE_ENV_NAMES = {
+    "file_id": ["ZEPHYR_P45_GOOGLE_DRIVE_FILE_ID"],
+    "access_token": ["ZEPHYR_P45_GOOGLE_DRIVE_ACCESS_TOKEN"],
+    "drive_id": ["ZEPHYR_P45_GOOGLE_DRIVE_DRIVE_ID"],
+    "export_mime_type": ["ZEPHYR_P45_GOOGLE_DRIVE_EXPORT_MIME_TYPE"],
+}
+_P45_CONFLUENCE_ENV_NAMES = {
+    "site_url": ["ZEPHYR_P45_CONFLUENCE_SITE_URL"],
+    "page_id": ["ZEPHYR_P45_CONFLUENCE_PAGE_ID"],
+    "access_token": ["ZEPHYR_P45_CONFLUENCE_ACCESS_TOKEN"],
+    "email": ["ZEPHYR_P45_CONFLUENCE_EMAIL"],
+    "space_key": ["ZEPHYR_P45_CONFLUENCE_SPACE_KEY"],
+    "page_version": ["ZEPHYR_P45_CONFLUENCE_PAGE_VERSION"],
+}
+_P45_POSTGRES_ENV_NAMES = {
+    "dsn": [
+        "ZEPHYR_P45_POSTGRES_DSN",
+        "ZEPHYR_P45_POSTGRES_HOST",
+        "ZEPHYR_P45_POSTGRES_PORT",
+        "ZEPHYR_P45_POSTGRES_DB",
+        "ZEPHYR_P45_POSTGRES_USER",
+        "ZEPHYR_P45_POSTGRES_PASSWORD",
+    ],
+    "schema": ["ZEPHYR_P45_POSTGRES_SCHEMA"],
+    "table": ["ZEPHYR_P45_POSTGRES_TABLE"],
+}
+_P45_CLICKHOUSE_ENV_NAMES = {
+    "url": ["ZEPHYR_P45_CLICKHOUSE_URL"],
+    "database": ["ZEPHYR_P45_CLICKHOUSE_DATABASE"],
+    "table": ["ZEPHYR_P45_CLICKHOUSE_TABLE"],
+    "username": ["ZEPHYR_P45_CLICKHOUSE_USERNAME"],
+    "password": ["ZEPHYR_P45_CLICKHOUSE_PASSWORD"],
+}
+_P45_KAFKA_ENV_NAMES = {
+    "brokers": ["ZEPHYR_P45_KAFKA_BROKERS"],
+    "topic": ["ZEPHYR_P45_KAFKA_TOPIC"],
+}
+_P45_MONGODB_ENV_NAMES = {
+    "uri": ["ZEPHYR_P45_MONGODB_URI"],
+    "database": ["ZEPHYR_P45_MONGODB_DATABASE"],
+    "collection": ["ZEPHYR_P45_MONGODB_COLLECTION"],
+}
+
 _REGISTRY: dict[str, ConnectorSpecV1] = {
     "backend.uns_api.v1": {
         "id": "backend.uns_api.v1",
@@ -632,7 +685,37 @@ _REGISTRY: dict[str, ConnectorSpecV1] = {
         "kind": "source",
         "name": "UNS HTTP document source",
         "description": "Bounded document acquisition from an explicit HTTP document locator.",
-        "fields": [],
+        "fields": [
+            {
+                "name": "source.kind",
+                "type": "string",
+                "required": True,
+                "default": "http_document_v1",
+                "choices": ["http_document_v1"],
+                "help": "Source kind for the retained UNS HTTP document subset.",
+            },
+            {
+                "name": "source.url",
+                "type": "string",
+                "required": True,
+                "help": "HTTP or HTTPS document URL fetched before unstructured partitioning.",
+                "examples": ["https://example.test/report.pdf"],
+            },
+            {
+                "name": "source.accept",
+                "type": "string",
+                "required": False,
+                "help": "Optional Accept header value for the document fetch request.",
+                "examples": ["application/pdf"],
+            },
+            {
+                "name": "source.timeout_s",
+                "type": "float",
+                "required": False,
+                "default": 10.0,
+                "help": "HTTP fetch timeout in seconds.",
+            },
+        ],
     },
     "source.uns.s3_document.v1": {
         "id": "source.uns.s3_document.v1",
@@ -640,7 +723,76 @@ _REGISTRY: dict[str, ConnectorSpecV1] = {
         "kind": "source",
         "name": "UNS S3-compatible document source",
         "description": "Bounded document acquisition from explicit bucket/key/version facts.",
-        "fields": [],
+        "fields": [
+            {
+                "name": "source.kind",
+                "type": "string",
+                "required": True,
+                "default": "s3_document_v1",
+                "choices": ["s3_document_v1"],
+                "help": "Source kind for the retained UNS S3-compatible document subset.",
+            },
+            {
+                "name": "source.bucket",
+                "type": "string",
+                "required": True,
+                "env_names": _P45_S3_ENV_NAMES["bucket"],
+                "help": "S3-compatible bucket/container name that holds the source document.",
+            },
+            {
+                "name": "source.key",
+                "type": "string",
+                "required": True,
+                "env_names": _P45_S3_ENV_NAMES["key"],
+                "help": "Object key for the source document.",
+                "examples": ["docs/quarterly/report.txt"],
+            },
+            {
+                "name": "source.region",
+                "type": "string",
+                "required": True,
+                "env_names": _P45_S3_ENV_NAMES["region"],
+                "help": "S3-compatible region name.",
+            },
+            {
+                "name": "source.access_key",
+                "type": "string",
+                "required": True,
+                "secret": True,
+                "env_names": _P45_S3_ENV_NAMES["access_key"],
+                "help": "S3-compatible access key. Prefer ENV injection.",
+            },
+            {
+                "name": "source.secret_key",
+                "type": "string",
+                "required": True,
+                "secret": True,
+                "env_names": _P45_S3_ENV_NAMES["secret_key"],
+                "help": "S3-compatible secret key. Prefer ENV injection.",
+            },
+            {
+                "name": "source.endpoint_url",
+                "type": "string",
+                "required": False,
+                "env_names": _P45_S3_ENV_NAMES["endpoint_url"],
+                "help": "Optional custom S3-compatible endpoint URL.",
+                "examples": ["http://127.0.0.1:59000"],
+            },
+            {
+                "name": "source.session_token",
+                "type": "string",
+                "required": False,
+                "secret": True,
+                "env_names": _P45_S3_ENV_NAMES["session_token"],
+                "help": "Optional S3-compatible session token. Prefer ENV injection.",
+            },
+            {
+                "name": "source.version_id",
+                "type": "string",
+                "required": False,
+                "help": "Optional object version ID when the bucket has versioning enabled.",
+            },
+        ],
     },
     "source.uns.git_document.v1": {
         "id": "source.uns.git_document.v1",
@@ -648,7 +800,40 @@ _REGISTRY: dict[str, ConnectorSpecV1] = {
         "kind": "source",
         "name": "UNS Git document source",
         "description": "Bounded document acquisition from explicit repository/ref/path facts.",
-        "fields": [],
+        "fields": [
+            {
+                "name": "source.kind",
+                "type": "string",
+                "required": True,
+                "default": "git_document_v1",
+                "choices": ["git_document_v1"],
+                "help": "Source kind for the retained UNS Git document subset.",
+            },
+            {
+                "name": "source.repo_root",
+                "type": "string",
+                "required": True,
+                "help": (
+                    "Repository root containing the requested blob. Prefer an absolute path or "
+                    "a stable path relative to the current working directory."
+                ),
+                "examples": ["E:/Github_Projects/Zephyr"],
+            },
+            {
+                "name": "source.commit",
+                "type": "string",
+                "required": True,
+                "help": "Requested commit or ref that resolves to a commit object.",
+                "examples": ["HEAD", "8863aeb9acf6f40b09fea9c8d6157e95c8edf7bc"],
+            },
+            {
+                "name": "source.relative_path",
+                "type": "string",
+                "required": True,
+                "help": "Relative repository path to the document blob; must not be absolute.",
+                "examples": ["docs/report.md"],
+            },
+        ],
     },
     "source.uns.google_drive_document.v1": {
         "id": "source.uns.google_drive_document.v1",
@@ -656,7 +841,67 @@ _REGISTRY: dict[str, ConnectorSpecV1] = {
         "kind": "source",
         "name": "UNS Google Drive document source",
         "description": "Bounded local acquisition from explicit Drive file/revision facts.",
-        "fields": [],
+        "fields": [
+            {
+                "name": "source.kind",
+                "type": "string",
+                "required": True,
+                "default": "google_drive_document_v1",
+                "choices": ["google_drive_document_v1"],
+                "help": "Source kind for the retained UNS Google Drive document subset.",
+            },
+            {
+                "name": "source.file_id",
+                "type": "string",
+                "required": True,
+                "env_names": _P45_GOOGLE_DRIVE_ENV_NAMES["file_id"],
+                "help": "Google Drive file ID for the requested document.",
+            },
+            {
+                "name": "source.access_token",
+                "type": "string",
+                "required": True,
+                "secret": True,
+                "env_names": _P45_GOOGLE_DRIVE_ENV_NAMES["access_token"],
+                "help": (
+                    "OAuth access token used for bounded file download/export. "
+                    "Prefer ENV injection."
+                ),
+            },
+            {
+                "name": "source.acquisition_mode",
+                "type": "string",
+                "required": True,
+                "default": "download",
+                "choices": ["download", "export"],
+                "help": "Choose raw file download or Google export mode.",
+            },
+            {
+                "name": "source.export_mime_type",
+                "type": "string",
+                "required": False,
+                "env_names": _P45_GOOGLE_DRIVE_ENV_NAMES["export_mime_type"],
+                "help": (
+                    "Required when acquisition_mode=export; forbidden when "
+                    "acquisition_mode=download."
+                ),
+                "examples": ["application/pdf"],
+            },
+            {
+                "name": "source.drive_id",
+                "type": "string",
+                "required": False,
+                "env_names": _P45_GOOGLE_DRIVE_ENV_NAMES["drive_id"],
+                "help": "Optional shared-drive identifier used with supportsAllDrives=true flows.",
+            },
+            {
+                "name": "source.timeout_s",
+                "type": "float",
+                "required": False,
+                "default": 10.0,
+                "help": "Google Drive request timeout in seconds.",
+            },
+        ],
     },
     "source.uns.confluence_document.v1": {
         "id": "source.uns.confluence_document.v1",
@@ -664,7 +909,74 @@ _REGISTRY: dict[str, ConnectorSpecV1] = {
         "kind": "source",
         "name": "UNS Confluence document source",
         "description": "Bounded page/content acquisition from explicit site/page/version facts.",
-        "fields": [],
+        "fields": [
+            {
+                "name": "source.kind",
+                "type": "string",
+                "required": True,
+                "default": "confluence_document_v1",
+                "choices": ["confluence_document_v1"],
+                "help": "Source kind for the retained UNS Confluence document subset.",
+            },
+            {
+                "name": "source.site_url",
+                "type": "string",
+                "required": True,
+                "env_names": _P45_CONFLUENCE_ENV_NAMES["site_url"],
+                "help": (
+                    "Confluence site URL. The retained subset reads content through /wiki/rest/api."
+                ),
+                "examples": ["https://example.atlassian.net/wiki"],
+            },
+            {
+                "name": "source.page_id",
+                "type": "string",
+                "required": True,
+                "env_names": _P45_CONFLUENCE_ENV_NAMES["page_id"],
+                "help": "Confluence page ID to fetch.",
+            },
+            {
+                "name": "source.access_token",
+                "type": "string",
+                "required": True,
+                "secret": True,
+                "env_names": _P45_CONFLUENCE_ENV_NAMES["access_token"],
+                "help": (
+                    "Bearer token or API token used for the bounded page fetch. "
+                    "Prefer ENV injection."
+                ),
+            },
+            {
+                "name": "source.email",
+                "type": "string",
+                "required": False,
+                "env_names": _P45_CONFLUENCE_ENV_NAMES["email"],
+                "help": (
+                    "Optional Atlassian email used together with access_token for basic auth mode."
+                ),
+            },
+            {
+                "name": "source.space_key",
+                "type": "string",
+                "required": False,
+                "env_names": _P45_CONFLUENCE_ENV_NAMES["space_key"],
+                "help": "Optional space selector that must match the fetched page.",
+            },
+            {
+                "name": "source.page_version",
+                "type": "int",
+                "required": False,
+                "env_names": _P45_CONFLUENCE_ENV_NAMES["page_version"],
+                "help": "Optional positive page version that must match the fetched page version.",
+            },
+            {
+                "name": "source.timeout_s",
+                "type": "float",
+                "required": False,
+                "default": 10.0,
+                "help": "Confluence request timeout in seconds.",
+            },
+        ],
     },
     "source.it.http_json_cursor.v1": {
         "id": "source.it.http_json_cursor.v1",
@@ -672,7 +984,51 @@ _REGISTRY: dict[str, ConnectorSpecV1] = {
         "kind": "source",
         "name": "IT HTTP JSON cursor source",
         "description": "Bounded structured record acquisition over explicit cursor progression.",
-        "fields": [],
+        "fields": [
+            {
+                "name": "source.kind",
+                "type": "string",
+                "required": True,
+                "default": "http_json_cursor_v1",
+                "choices": ["http_json_cursor_v1"],
+                "help": "Source kind for the retained IT HTTP JSON cursor subset.",
+            },
+            {
+                "name": "source.stream",
+                "type": "string",
+                "required": True,
+                "help": "Stable stream name recorded in StructuredRecord/State/Log artifacts.",
+                "examples": ["events"],
+            },
+            {
+                "name": "source.url",
+                "type": "string",
+                "required": True,
+                "env_names": _P45_HTTP_FIXTURE_BASE_ENV,
+                "help": (
+                    "HTTP or HTTPS endpoint that returns JSON objects with records and next_cursor."
+                ),
+                "examples": ["http://127.0.0.1:18081/fixtures/http-json-cursor?page=1"],
+            },
+            {
+                "name": "source.cursor_param",
+                "type": "string",
+                "required": True,
+                "help": "Query parameter name Zephyr uses to advance cursor-based pagination.",
+                "examples": ["cursor"],
+            },
+            {
+                "name": "source.query",
+                "type": "string",
+                "required": False,
+                "default": "{}",
+                "help": (
+                    "Optional additional query parameters encoded as a JSON object string "
+                    "because the current spec registry supports scalar field types only."
+                ),
+                "examples": ['{"limit":"100"}'],
+            },
+        ],
     },
     "source.it.postgresql_incremental.v1": {
         "id": "source.it.postgresql_incremental.v1",
@@ -680,7 +1036,89 @@ _REGISTRY: dict[str, ConnectorSpecV1] = {
         "kind": "source",
         "name": "IT PostgreSQL incremental source",
         "description": "Bounded structured row acquisition over explicit ordered progression.",
-        "fields": [],
+        "fields": [
+            {
+                "name": "source.kind",
+                "type": "string",
+                "required": True,
+                "default": "postgresql_incremental_v1",
+                "choices": ["postgresql_incremental_v1"],
+                "help": "Source kind for the retained IT PostgreSQL incremental subset.",
+            },
+            {
+                "name": "source.stream",
+                "type": "string",
+                "required": True,
+                "help": "Stable stream name recorded in StructuredRecord/State/Log artifacts.",
+            },
+            {
+                "name": "source.connection_name",
+                "type": "string",
+                "required": True,
+                "help": "Stable logical connection name used in provenance and state records.",
+            },
+            {
+                "name": "source.dsn",
+                "type": "string",
+                "required": True,
+                "secret": True,
+                "env_names": _P45_POSTGRES_ENV_NAMES["dsn"],
+                "help": (
+                    "PostgreSQL DSN. The retained runtime consumes a DSN directly rather than "
+                    "separate host/user/password fields. Prefer ENV injection."
+                ),
+                "examples": ["postgresql://user:password@127.0.0.1:15432/zephyr"],
+            },
+            {
+                "name": "source.schema",
+                "type": "string",
+                "required": True,
+                "env_names": _P45_POSTGRES_ENV_NAMES["schema"],
+                "help": "Simple SQL schema identifier for the bounded incremental table read.",
+                "examples": ["public"],
+            },
+            {
+                "name": "source.table",
+                "type": "string",
+                "required": True,
+                "env_names": _P45_POSTGRES_ENV_NAMES["table"],
+                "help": "Simple SQL table identifier for the bounded incremental table read.",
+            },
+            {
+                "name": "source.columns",
+                "type": "string",
+                "required": True,
+                "help": (
+                    "Ordered column list encoded as a JSON array string because the current "
+                    "spec registry supports scalar field types only."
+                ),
+                "examples": ['["customer_id","doc_cursor","name"]'],
+            },
+            {
+                "name": "source.cursor_column",
+                "type": "string",
+                "required": True,
+                "help": (
+                    "Column in source.columns used for strict ascending incremental progression."
+                ),
+            },
+            {
+                "name": "source.cursor_start",
+                "type": "string",
+                "required": False,
+                "help": (
+                    "Optional last-confirmed cursor value. Use null/omit for "
+                    "the initial bounded read."
+                ),
+            },
+            {
+                "name": "source.batch_size",
+                "type": "int",
+                "required": True,
+                "help": "Maximum rows per bounded incremental batch.",
+                "examples": ["100"],
+            },
+        ],
     },
     "source.it.clickhouse_incremental.v1": {
         "id": "source.it.clickhouse_incremental.v1",
@@ -688,7 +1126,97 @@ _REGISTRY: dict[str, ConnectorSpecV1] = {
         "kind": "source",
         "name": "IT ClickHouse incremental source",
         "description": "Bounded structured row acquisition over explicit query/window progression.",
-        "fields": [],
+        "fields": [
+            {
+                "name": "source.kind",
+                "type": "string",
+                "required": True,
+                "default": "clickhouse_incremental_v1",
+                "choices": ["clickhouse_incremental_v1"],
+                "help": "Source kind for the retained IT ClickHouse incremental subset.",
+            },
+            {
+                "name": "source.stream",
+                "type": "string",
+                "required": True,
+                "help": "Stable stream name recorded in StructuredRecord/State/Log artifacts.",
+            },
+            {
+                "name": "source.connection_name",
+                "type": "string",
+                "required": True,
+                "help": "Stable logical connection name used in provenance and state records.",
+            },
+            {
+                "name": "source.url",
+                "type": "string",
+                "required": True,
+                "env_names": _P45_CLICKHOUSE_ENV_NAMES["url"],
+                "help": "ClickHouse HTTP or HTTPS endpoint URL.",
+            },
+            {
+                "name": "source.database",
+                "type": "string",
+                "required": True,
+                "env_names": _P45_CLICKHOUSE_ENV_NAMES["database"],
+                "help": "Simple ClickHouse database identifier.",
+            },
+            {
+                "name": "source.table",
+                "type": "string",
+                "required": True,
+                "env_names": _P45_CLICKHOUSE_ENV_NAMES["table"],
+                "help": "Simple ClickHouse table identifier.",
+            },
+            {
+                "name": "source.columns",
+                "type": "string",
+                "required": True,
+                "help": (
+                    "Ordered column list encoded as a JSON array string because the current "
+                    "spec registry supports scalar field types only."
+                ),
+                "examples": ['["customer_id","doc_cursor","segment"]'],
+            },
+            {
+                "name": "source.cursor_column",
+                "type": "string",
+                "required": True,
+                "help": (
+                    "Column in source.columns used for strict ascending incremental progression."
+                ),
+            },
+            {
+                "name": "source.cursor_start",
+                "type": "string",
+                "required": False,
+                "help": (
+                    "Optional last-confirmed cursor value. Use null/omit for "
+                    "the initial bounded read."
+                ),
+            },
+            {
+                "name": "source.batch_size",
+                "type": "int",
+                "required": True,
+                "help": "Maximum rows per bounded incremental batch.",
+            },
+            {
+                "name": "source.username",
+                "type": "string",
+                "required": False,
+                "env_names": _P45_CLICKHOUSE_ENV_NAMES["username"],
+                "help": "Optional ClickHouse username. Must be paired with source.password.",
+            },
+            {
+                "name": "source.password",
+                "type": "string",
+                "required": False,
+                "secret": True,
+                "env_names": _P45_CLICKHOUSE_ENV_NAMES["password"],
+                "help": "Optional ClickHouse password. Must be paired with source.username.",
+            },
+        ],
     },
     "source.it.kafka_partition_offset.v1": {
         "id": "source.it.kafka_partition_offset.v1",
@@ -698,7 +1226,67 @@ _REGISTRY: dict[str, ConnectorSpecV1] = {
         "description": (
             "Bounded structured record acquisition over explicit partition/offset facts."
         ),
-        "fields": [],
+        "fields": [
+            {
+                "name": "source.kind",
+                "type": "string",
+                "required": True,
+                "default": "kafka_partition_offset_v1",
+                "choices": ["kafka_partition_offset_v1"],
+                "help": "Source kind for the retained IT Kafka partition/offset subset.",
+            },
+            {
+                "name": "source.stream",
+                "type": "string",
+                "required": True,
+                "help": "Stable stream name recorded in StructuredRecord/State/Log artifacts.",
+            },
+            {
+                "name": "source.connection_name",
+                "type": "string",
+                "required": True,
+                "help": "Stable logical connection name used in provenance and state records.",
+            },
+            {
+                "name": "source.brokers",
+                "type": "string",
+                "required": True,
+                "env_names": _P45_KAFKA_ENV_NAMES["brokers"],
+                "help": (
+                    "Broker list encoded as a comma-separated host:port string because the "
+                    "current spec registry supports scalar field types only."
+                ),
+                "examples": ["127.0.0.1:19092"],
+            },
+            {
+                "name": "source.topic",
+                "type": "string",
+                "required": True,
+                "env_names": _P45_KAFKA_ENV_NAMES["topic"],
+                "help": "Kafka topic name for the bounded explicit partition read.",
+            },
+            {
+                "name": "source.partition",
+                "type": "int",
+                "required": True,
+                "help": "Explicit Kafka partition number.",
+            },
+            {
+                "name": "source.offset_start",
+                "type": "int",
+                "required": False,
+                "help": (
+                    "Optional starting offset. Omit/null to begin at offset 0 "
+                    "for this bounded subset."
+                ),
+            },
+            {
+                "name": "source.batch_size",
+                "type": "int",
+                "required": True,
+                "help": "Maximum messages per bounded consume batch.",
+            },
+        ],
     },
     "source.it.mongodb_incremental.v1": {
         "id": "source.it.mongodb_incremental.v1",
@@ -706,7 +1294,82 @@ _REGISTRY: dict[str, ConnectorSpecV1] = {
         "kind": "source",
         "name": "IT MongoDB incremental source",
         "description": "Bounded structured document acquisition over explicit ordered progression.",
-        "fields": [],
+        "fields": [
+            {
+                "name": "source.kind",
+                "type": "string",
+                "required": True,
+                "default": "mongodb_incremental_v1",
+                "choices": ["mongodb_incremental_v1"],
+                "help": "Source kind for the retained IT MongoDB incremental subset.",
+            },
+            {
+                "name": "source.stream",
+                "type": "string",
+                "required": True,
+                "help": "Stable stream name recorded in StructuredRecord/State/Log artifacts.",
+            },
+            {
+                "name": "source.connection_name",
+                "type": "string",
+                "required": True,
+                "help": "Stable logical connection name used in provenance and state records.",
+            },
+            {
+                "name": "source.uri",
+                "type": "string",
+                "required": True,
+                "secret": True,
+                "env_names": _P45_MONGODB_ENV_NAMES["uri"],
+                "help": "MongoDB URI. Prefer ENV injection because it may contain credentials.",
+                "examples": ["mongodb://user:password@127.0.0.1:27018"],
+            },
+            {
+                "name": "source.database",
+                "type": "string",
+                "required": True,
+                "env_names": _P45_MONGODB_ENV_NAMES["database"],
+                "help": "MongoDB database name.",
+            },
+            {
+                "name": "source.collection",
+                "type": "string",
+                "required": True,
+                "env_names": _P45_MONGODB_ENV_NAMES["collection"],
+                "help": "MongoDB collection name.",
+            },
+            {
+                "name": "source.fields",
+                "type": "string",
+                "required": True,
+                "help": (
+                    "Projected field list encoded as a JSON array string because the current "
+                    "spec registry supports scalar field types only."
+                ),
+                "examples": ['["customer_id","doc_cursor","segment"]'],
+            },
+            {
+                "name": "source.cursor_field",
+                "type": "string",
+                "required": True,
+                "help": "Field in source.fields used for strict ascending incremental progression.",
+            },
+            {
+                "name": "source.cursor_start",
+                "type": "string",
+                "required": False,
+                "help": (
+                    "Optional last-confirmed cursor value. Use null/omit for "
+                    "the initial bounded read."
+                ),
+            },
+            {
+                "name": "source.batch_size",
+                "type": "int",
+                "required": True,
+                "help": "Maximum documents per bounded incremental batch.",
+            },
+        ],
     },
 }
 

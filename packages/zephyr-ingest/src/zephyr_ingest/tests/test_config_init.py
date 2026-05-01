@@ -147,3 +147,9 @@ def test_config_init_weaviate_fields_present() -> None:
     assert "http_host" in toml
     assert "grpc_port" in toml
     assert "skip_init_checks" in toml
+
+
+def test_config_init_remains_destination_and_backend_focused() -> None:
+    toml = render_config_init_toml_v1()
+    assert "[source]" not in toml
+    assert "# [destinations.sqlite]" in toml
