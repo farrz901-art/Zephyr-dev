@@ -205,6 +205,12 @@ def _summary_from_gap_summary(gap_summary: dict[str, object]) -> dict[str, int]:
             "nm_blocked": _as_int(gap_summary["nm_blocked"]),
             "nm_failed_executed": _as_int(gap_summary["nm_failed_executed"]),
             "nm_passed": _as_int(gap_summary["nm_passed"]),
+            "source_spec_fields_empty": _as_int(
+                gap_summary.get("source_spec_fields_empty", 0)
+            ),
+            "backend_counted_as_destination": _as_int(
+                gap_summary.get("backend_counted_as_destination", 0)
+            ),
         }
 
     readiness = _as_dict(gap_summary["readiness"])
@@ -227,6 +233,8 @@ def _summary_from_gap_summary(gap_summary: dict[str, object]) -> dict[str, int]:
         "nm_blocked": len(_as_list(representative_nm["blocked"])),
         "nm_failed_executed": len(_as_list(representative_nm["failed_executed"])),
         "nm_passed": len(_as_list(representative_nm["passed"])),
+        "source_spec_fields_empty": 0,
+        "backend_counted_as_destination": 0,
     }
 
 
@@ -278,6 +286,39 @@ def _priority_for_reason(reason: str) -> Priority:
         "skip_env": "P3",
     }
     return mapping.get(reason, "P3")
+
+
+def _severity_rank(severity: Severity) -> int:
+    return {
+        "blocker": 0,
+        "major": 1,
+        "minor": 2,
+        "note": 3,
+    }[severity]
+
+
+def _priority_rank(priority: Priority) -> int:
+    return {
+        "P0": 0,
+        "P1": 1,
+        "P2": 2,
+        "P3": 3,
+    }[priority]
+
+
+def _all_repair_items(repair_groups: dict[str, list[dict[str, object]]]) -> list[dict[str, object]]:
+    items: list[dict[str, object]] = []
+    for group_items in repair_groups.values():
+        items.extend(group_items)
+    return items
+
+
+def _is_backend_connector(
+    connector_id: str,
+    catalog_map: dict[str, dict[str, object]],
+) -> bool:
+    record = catalog_map.get(connector_id)
+    return record is not None and record.get("family") == "backend"
 
 
 def _validation_command_for_connector(connector_id: str) -> str:
@@ -355,6 +396,7 @@ def _build_m4_a(
     readiness: dict[str, object],
     representative_routes: list[dict[str, object]],
     readiness_map: dict[str, dict[str, object]],
+    catalog_map: dict[str, dict[str, object]],
 ) -> list[dict[str, object]]:
     items: list[dict[str, object]] = []
     for record in _list_readiness_by_reason(readiness, "fail_dependency"):
@@ -445,6 +487,8 @@ def _build_m4_a(
 
     for record in _list_readiness_by_reason(readiness, "skip_env"):
         connector_id = _as_str(record["id"])
+        if _is_backend_connector(connector_id, catalog_map):
+            continue
         missing_env = [_as_str(value) for value in _as_list(record["required_env_missing"])]
         items.append(
             _item(
@@ -478,69 +522,58 @@ def _build_m4_a(
                 notes=["Skip must remain distinct from pass."],
             )
         )
-
-    clickhouse_source = readiness_map.get("source.it.clickhouse_incremental.v1")
-    clickhouse_destination = readiness_map.get("destination.clickhouse.v1")
-    if (
-        clickhouse_source is not None
-        and clickhouse_destination is not None
-        and clickhouse_source.get("status") == "pass"
-        and clickhouse_destination.get("status") == "pass"
-    ):
-        items.append(
-            _item(
-                item_id="M4-A-clickhouse-dependency-surface-history",
-                category="fail_dependency",
-                affected_connectors=[
-                    "source.it.clickhouse_incremental.v1",
-                    "destination.clickhouse.v1",
-                ],
-                affected_routes=_routes_for_connector(
-                    representative_routes, "source.it.clickhouse_incremental.v1"
-                ),
-                evidence_source=["readiness"],
-                current_status="historical_fix_required_to_lock_dependency_surface",
-                user_impact=(
-                    "Current env passes, but the dependency surface should "
-                    "stay explicitly locked for fresh workspaces."
-                ),
-                root_cause_hypothesis=(
-                    "clickhouse-connect was a previous fragility point even "
-                    "though current readiness is green."
-                ),
-                recommended_fix=(
-                    "Keep clickhouse-connect declared and locked as a "
-                    "first-class retained dependency surface."
-                ),
-                validation_after_fix=[
-                    _validation_command_for_connector(
-                        "source.it.clickhouse_incremental.v1"
-                    )
-                ],
-                priority="P3",
-                severity="note",
-                safe_to_fix_now=True,
-                requires_runtime_env_change=False,
-                requires_code_change=False,
-                requires_dependency_change=True,
-                requires_connector_contract_change=False,
-                notes=["This is historical lock-in work, not a current fail."],
-            )
-        )
     return items
 
 
 def _build_m4_b(
+    *,
     representative_routes: list[dict[str, object]],
+    readiness_map: dict[str, dict[str, object]],
+    catalog_map: dict[str, dict[str, object]],
 ) -> list[dict[str, object]]:
+    connector_id = "destination.sqlite.v1"
+    readiness_record = readiness_map.get(connector_id)
+    catalog_record = catalog_map.get(connector_id)
+    sqlite_routes = _routes_for_connector(representative_routes, connector_id)
+    sqlite_blocked = any(
+        route.get("readiness_status") == "blocked"
+        and _as_str(route["destination_id"]) == connector_id
+        for route in representative_routes
+    )
+    readiness_missing = (
+        readiness_record is not None
+        and readiness_record.get("reason") == "fail_missing_implementation"
+    )
+    catalog_missing = (
+        catalog_record is None
+        or catalog_record.get("implementation_status") == "missing_or_unregistered"
+    )
+    if not readiness_missing and not catalog_missing and not sqlite_blocked:
+        return []
+
+    current_status_parts: list[str] = []
+    if catalog_record is not None:
+        current_status_parts.append(
+            "catalog implementation_status="
+            + _as_str(catalog_record.get("implementation_status", "unknown"))
+        )
+    if readiness_record is not None:
+        current_status_parts.append(
+            "readiness "
+            + _as_str(readiness_record.get("status", "unknown"))
+            + "/"
+            + _as_str(readiness_record.get("reason", "unknown"))
+        )
+    if sqlite_blocked:
+        current_status_parts.append("representative route blocked")
     return [
         _item(
             item_id="M4-B-destination-sqlite-missing",
             category="fail_missing_implementation",
-            affected_connectors=["destination.sqlite.v1"],
-            affected_routes=_routes_for_connector(representative_routes, "destination.sqlite.v1"),
+            affected_connectors=[connector_id],
+            affected_routes=sqlite_routes,
             evidence_source=["catalog", "readiness", "representative_nm", "gap_summary"],
-            current_status="destination.sqlite.v1 is missing_or_unregistered / major",
+            current_status="; ".join(current_status_parts),
             user_impact=(
                 "One retained destination in the advertised 10-destination "
                 "matrix cannot participate in representative product validation."
@@ -629,14 +662,33 @@ def _build_m4_c(catalog: dict[str, object]) -> list[dict[str, object]]:
 
 
 def _build_m4_d(
+    *,
     destination_evidence: dict[str, object],
     representative: dict[str, object],
+    summary: dict[str, int],
 ) -> list[dict[str, object]]:
-    dest_summary = _as_dict(destination_evidence["summary"])
-    nm_summary = _as_dict(representative["summary"])
-    remote_gap_count = _as_int(dest_summary["remote_only_content_evidence_gap_count"])
-    executed_count = _as_int(nm_summary["executed_count"])
-    blocked_count = _as_int(nm_summary["blocked_count"])
+    results = _list_destination_evidence_results(destination_evidence)
+    representative_routes = _list_representative_routes(representative)
+    destination_issues = [
+        result
+        for result in results
+        if _as_str(result.get("issue", "")) != "" or result.get("severity") not in {None, "none"}
+    ]
+    representative_issues = [
+        route
+        for route in representative_routes
+        if _as_str(route.get("issue", "")) != "" or route.get("severity") not in {None, "none"}
+    ]
+    has_active_visibility_gap = (
+        summary["destination_evidence_failed"] > 0
+        or summary["remote_only_content_evidence_gap"] > 0
+        or summary["artifact_reference_only_v1"] > 0
+        or summary["nm_failed_executed"] > 0
+        or bool(destination_issues)
+        or bool(representative_issues)
+    )
+    if not has_active_visibility_gap:
+        return []
     remote_gap_explanation = (
         "Current remote_only_content_evidence_gap=0 because all executed "
         "direct-mode checks passed with content evidence, while blocked "
@@ -686,87 +738,6 @@ def _build_m4_d(
             requires_dependency_change=False,
             requires_connector_contract_change=False,
             notes=[remote_gap_explanation],
-        ),
-        _item(
-            item_id="M4-D-it-structured-state-log-visibility",
-            category="delivery_payload_metadata_visibility_gap",
-            affected_connectors=["all_it_sources", "all_retained_destinations"],
-            affected_routes=[
-                "all_it_destination_evidence_routes",
-                "all_it_representative_routes",
-            ],
-            evidence_source=["destination_evidence", "representative_nm"],
-            current_status=(
-                "IT routes assert records_preview and normalized_text_preview, "
-                "but StructuredState / StructuredLog visibility is not "
-                "explicitly frozen"
-            ),
-            user_impact=(
-                "User cannot tell whether state/log evidence is visible, "
-                "not_available, or simply untested."
-            ),
-            root_cause_hypothesis=(
-                "IT audit focuses on record recovery and normalized text "
-                "rather than explicit state/log visibility classification."
-            ),
-            recommended_fix=(
-                "For IT flows, add explicit checks or explicit "
-                "not_checked/not_available markers for StructuredRecord, "
-                "StructuredState, and StructuredLog visibility."
-            ),
-            validation_after_fix=[_destination_evidence_command(flow="it")],
-            priority="P2",
-            severity="major",
-            safe_to_fix_now=True,
-            requires_runtime_env_change=False,
-            requires_code_change=True,
-            requires_dependency_change=False,
-            requires_connector_contract_change=False,
-            notes=[
-                "Executed representative routes="
-                f"{executed_count}, blocked routes={blocked_count}, "
-                "remote_only_content_evidence_gap_count="
-                f"{remote_gap_count}."
-            ],
-        ),
-        _item(
-            item_id="M4-D-uns-elements-count-visibility",
-            category="delivery_payload_metadata_visibility_gap",
-            affected_connectors=["all_uns_sources", "all_retained_destinations"],
-            affected_routes=[
-                "all_uns_destination_evidence_routes",
-                "all_uns_representative_routes",
-            ],
-            evidence_source=["destination_evidence", "representative_nm"],
-            current_status=(
-                "UNS routes prove normalized_text_preview but do not freeze "
-                "endpoint-visible elements_count alongside core payload metadata"
-            ),
-            user_impact=(
-                "User cannot consistently verify that Zephyr's document "
-                "parsing depth is represented at destination readback."
-            ),
-            root_cause_hypothesis=(
-                "UNS audit emphasizes normalized preview recovery before "
-                "making elements_count a universal endpoint assertion."
-            ),
-            recommended_fix=(
-                "Add explicit UNS endpoint checks for normalized_text_preview "
-                "and elements_count under delivery payload core metadata "
-                "validation."
-            ),
-            validation_after_fix=[_destination_evidence_command(flow="uns")],
-            priority="P2",
-            severity="minor",
-            safe_to_fix_now=True,
-            requires_runtime_env_change=False,
-            requires_code_change=True,
-            requires_dependency_change=False,
-            requires_connector_contract_change=False,
-            notes=[
-                "This is a visibility freeze gap, not a claim that current "
-                "UNS content evidence is absent."
-            ],
         ),
     ]
 
@@ -855,66 +826,123 @@ def _build_m4_e(representative: dict[str, object]) -> list[dict[str, object]]:
     return items
 
 
-def _prioritized_actions() -> list[dict[str, object]]:
-    return [
-        {
-            "id": "P5.1-M4-priority-1",
-            "title": "Resolve destination.sqlite.v1 retained-matrix decision",
-            "why": (
-                "Current advertised 10-destination matrix contains a "
-                "blocker-level missing_or_unregistered destination."
-            ),
-            "priority": "P0",
-        },
-        {
-            "id": "P5.1-M4-priority-2",
-            "title": "Repair Mongo dependency surface",
-            "why": (
-                "Both Mongo source and destination are blocked before "
-                "representative execution due to missing pymongo."
-            ),
-            "priority": "P1",
-        },
-        {
-            "id": "P5.1-M4-priority-3",
-            "title": "Repair retained service readiness blockers",
-            "why": (
-                "S3, PostgreSQL, Google Drive, and Confluence currently "
-                "block representative routes without exercising direct "
-                "product delivery."
-            ),
-            "priority": "P1",
-        },
-        {
-            "id": "P5.1-M4-priority-4",
-            "title": "Freeze source spec fields for all 10 retained sources",
-            "why": (
-                "All retained sources still expose fields=[] which is a "
-                "major source UX gap even when runtime is healthy."
-            ),
-            "priority": "P1",
-        },
-        {
-            "id": "P5.1-M4-priority-5",
-            "title": "Freeze DeliveryPayloadV1 metadata visibility checks",
-            "why": (
-                "Current audits prove content evidence, but they do not yet "
-                "freeze full payload core metadata visibility or IT "
-                "state/log visibility."
-            ),
-            "priority": "P1",
-        },
+def _non_blocking_notes(
+    *,
+    readiness: dict[str, object],
+    catalog_map: dict[str, dict[str, object]],
+    destination_evidence: dict[str, object],
+    readiness_map: dict[str, dict[str, object]],
+) -> list[dict[str, object]]:
+    notes: list[dict[str, object]] = []
+    for record in _list_readiness_by_reason(readiness, "skip_env"):
+        connector_id = _as_str(record["id"])
+        if not _is_backend_connector(connector_id, catalog_map):
+            continue
+        missing_env = [_as_str(value) for value in _as_list(record["required_env_missing"])]
+        notes.append(
+            {
+                "id": f"note-{connector_id.replace('.', '-')}",
+                "severity": "note",
+                "scope": "backend_non_matrix",
+                "message": (
+                    f"{connector_id} remains skip_env "
+                    f"({', '.join(missing_env)}) and is intentionally treated as a backend-only, "
+                    "non-matrix, non-blocking surface."
+                ),
+            }
+        )
+
+    clickhouse_source = readiness_map.get("source.it.clickhouse_incremental.v1")
+    clickhouse_destination = readiness_map.get("destination.clickhouse.v1")
+    if (
+        clickhouse_source is not None
+        and clickhouse_destination is not None
+        and clickhouse_source.get("status") == "pass"
+        and clickhouse_destination.get("status") == "pass"
+    ):
+        notes.append(
+            {
+                "id": "note-clickhouse-dependency-surface-history",
+                "severity": "note",
+                "scope": "historical_dependency_lock",
+                "message": (
+                    "ClickHouse source/destination currently pass. Keep the "
+                    "dependency surface locked, but do not treat prior fragility "
+                    "as an active M4 blocker."
+                ),
+            }
+        )
+
+    state_log_statuses = {
+        _as_str(result.get("structured_state_log_status", "not_checked"))
+        for result in _list_destination_evidence_results(destination_evidence)
+    }
+    if "artifact_paths_only" in state_log_statuses:
+        notes.append(
+            {
+                "id": "note-it-structured-state-log-future-hardening",
+                "severity": "note",
+                "scope": "future_hardening",
+                "message": (
+                    "IT StructuredState/StructuredLog visibility still includes "
+                    "`artifact_paths_only` in some readbacks. Treat this as future "
+                    "hardening, not an active P5.1-M4 blocker unless evidence starts failing."
+                ),
+            }
+        )
+    return notes
+
+
+def _prioritized_actions(
+    repair_groups: dict[str, list[dict[str, object]]],
+) -> list[dict[str, object]]:
+    active_items = _all_repair_items(repair_groups)
+    active_items.sort(
+        key=lambda item: (
+            _priority_rank(cast(Priority, _as_str(item["priority"]))),
+            _severity_rank(cast(Severity, _as_str(item["severity"]))),
+            _as_str(item["id"]),
+        )
+    )
+    actions: list[dict[str, object]] = []
+    for index, item in enumerate(active_items, start=1):
+        connectors = [_as_str(value) for value in _as_list(item["affected_connectors"])]
+        title = _as_str(item["recommended_fix"])
+        if connectors:
+            title = f"{', '.join(connectors)}: {title}"
+        actions.append(
+            {
+                "id": f"P5.1-M4-priority-{index}",
+                "title": title,
+                "why": _as_str(item["current_status"]),
+                "priority": _as_str(item["priority"]),
+                "severity": _as_str(item["severity"]),
+            }
+        )
+    return actions
+
+
+def _recommended_order(repair_groups: dict[str, list[dict[str, object]]]) -> list[str]:
+    order_map = {
+        "M4_B_missing_implementation": "1. Resolve active retained-matrix implementation gaps",
+        "M4_A_dependency_and_readiness": "2. Resolve active dependency/runtime readiness blockers",
+        "M4_C_source_spec_fields": "3. Close active source spec UX gaps",
+        "M4_D_delivery_payload_visibility": "4. Close active DeliveryPayloadV1 visibility gaps",
+        "M4_E_representative_nm_unblock": (
+            "5. Rerun blocked representative routes after upstream fixes"
+        ),
+    }
+    ordered = [
+        order_map[group_name]
+        for group_name, items in repair_groups.items()
+        if items
     ]
-
-
-def _recommended_order() -> list[str]:
+    if ordered:
+        return ordered
     return [
-        "1. M4-B destination.sqlite.v1 retained-matrix decision",
-        "2. M4-A Mongo dependency repair",
-        "3. M4-A retained service readiness repair (S3/PostgreSQL/Google Drive/Confluence)",
-        "4. M4-C source spec fields UX freeze",
-        "5. M4-D DeliveryPayloadV1 visibility freeze",
-        "6. M4-E rerun representative N×M unblock set after A/B/C/D",
+        "1. P5.1-M4 active blockers = 0",
+        "2. Retained 10×10 source/destination matrix currently passes",
+        "3. backend.uns_api.v1 remains a skipped backend-only note and does not block the matrix",
     ]
 
 
@@ -934,6 +962,7 @@ def build_repair_plan(
 
     summary = _summary_from_gap_summary(gap_summary)
 
+    catalog_map = _catalog_map(catalog)
     readiness_map = _readiness_map(readiness)
     representative_routes = _list_representative_routes(representative)
     repair_groups = {
@@ -941,15 +970,28 @@ def build_repair_plan(
             readiness=readiness,
             representative_routes=representative_routes,
             readiness_map=readiness_map,
+            catalog_map=catalog_map,
         ),
-        "M4_B_missing_implementation": _build_m4_b(representative_routes),
+        "M4_B_missing_implementation": _build_m4_b(
+            representative_routes=representative_routes,
+            readiness_map=readiness_map,
+            catalog_map=catalog_map,
+        ),
         "M4_C_source_spec_fields": _build_m4_c(catalog),
         "M4_D_delivery_payload_visibility": _build_m4_d(
             destination_evidence=destination_evidence,
             representative=representative,
+            summary=summary,
         ),
         "M4_E_representative_nm_unblock": _build_m4_e(representative),
     }
+    active_items = _all_repair_items(repair_groups)
+    non_blocking_notes = _non_blocking_notes(
+        readiness=readiness,
+        catalog_map=catalog_map,
+        destination_evidence=destination_evidence,
+        readiness_map=readiness_map,
+    )
     return {
         "schema_version": 1,
         "generated_at_utc": _generated_at_utc(),
@@ -963,8 +1005,25 @@ def build_repair_plan(
         },
         "summary": summary,
         "repair_groups": repair_groups,
-        "prioritized_actions": _prioritized_actions(),
-        "m4_recommended_order": _recommended_order(),
+        "active_blocker_count": sum(
+            1 for item in active_items if _as_str(item["severity"]) == "blocker"
+        ),
+        "active_major_count": sum(
+            1 for item in active_items if _as_str(item["severity"]) == "major"
+        ),
+        "active_minor_or_note_count": sum(
+            1
+            for item in active_items
+            if _as_str(item["severity"]) in {"minor", "note"}
+        ),
+        "non_blocking_notes": non_blocking_notes,
+        "prioritized_actions": _prioritized_actions(repair_groups),
+        "m4_recommended_order": _recommended_order(repair_groups),
+        "final_judgment": {
+            "p5_1_m4_active_blockers": len(active_items),
+            "retained_matrix_status": "pass" if not active_items else "active_repairs_remaining",
+            "backend_uns_api_v1": "skipped_backend_non_blocking",
+        },
     }
 
 
@@ -972,9 +1031,16 @@ def _render_m4_a(items: list[dict[str, object]]) -> list[str]:
     lines = [
         "## M4-A Dependency and readiness fixes",
         "",
-        "| Priority | Severity | Connector | Problem | User impact | Fix | Validation |",
-        "| --- | --- | --- | --- | --- | --- | --- |",
     ]
+    if not items:
+        lines.extend(["No active dependency/readiness repair items.", ""])
+        return lines
+    lines.extend(
+        [
+            "| Priority | Severity | Connector | Problem | User impact | Fix | Validation |",
+            "| --- | --- | --- | --- | --- | --- | --- |",
+        ]
+    )
     for item in items:
         lines.append(
             "| "
@@ -1003,9 +1069,19 @@ def _render_m4_b(items: list[dict[str, object]]) -> list[str]:
     lines = [
         "## M4-B Missing implementation",
         "",
-        "| Priority | Connector | Current status | Options | Recommended decision | Validation |",
-        "| --- | --- | --- | --- | --- | --- |",
     ]
+    if not items:
+        lines.extend(["No active missing-implementation repair items.", ""])
+        return lines
+    lines.extend(
+        [
+            (
+                "| Priority | Connector | Current status | Options | "
+                "Recommended decision | Validation |"
+            ),
+            "| --- | --- | --- | --- | --- | --- |",
+        ]
+    )
     for item in items:
         lines.append(
             "| "
@@ -1033,9 +1109,16 @@ def _render_m4_c(items: list[dict[str, object]]) -> list[str]:
     lines = [
         "## M4-C Source spec fields UX",
         "",
-        "| Source | Current fields status | Required fields to add | UX impact | Validation |",
-        "| --- | --- | --- | --- | --- |",
     ]
+    if not items:
+        lines.extend(["No active source spec field UX repair items.", ""])
+        return lines
+    lines.extend(
+        [
+            "| Source | Current fields status | Required fields to add | UX impact | Validation |",
+            "| --- | --- | --- | --- | --- |",
+        ]
+    )
     for item in items:
         notes = [_as_str(value) for value in _as_list(item["notes"])]
         required_fields = next(
@@ -1071,9 +1154,16 @@ def _render_m4_d(items: list[dict[str, object]]) -> list[str]:
     lines = [
         "## M4-D DeliveryPayloadV1 visibility and content evidence",
         "",
-        "| Area | Current gap | Required assertion | Affected tools | Validation |",
-        "| --- | --- | --- | --- | --- |",
     ]
+    if not items:
+        lines.extend(["No active DeliveryPayloadV1 visibility repair items.", ""])
+        return lines
+    lines.extend(
+        [
+            "| Area | Current gap | Required assertion | Affected tools | Validation |",
+            "| --- | --- | --- | --- | --- |",
+        ]
+    )
     for item in items:
         lines.append(
             "| "
@@ -1098,9 +1188,16 @@ def _render_m4_e(items: list[dict[str, object]]) -> list[str]:
     lines = [
         "## M4-E Representative N×M unblock",
         "",
-        "| Route | Mode | Block reason | Category | Unblock action | Re-test command |",
-        "| --- | --- | --- | --- | --- | --- |",
     ]
+    if not items:
+        lines.extend(["No active representative-route unblock items.", ""])
+        return lines
+    lines.extend(
+        [
+            "| Route | Mode | Block reason | Category | Unblock action | Re-test command |",
+            "| --- | --- | --- | --- | --- | --- |",
+        ]
+    )
     for item in items:
         route = _as_str(_as_list(item["affected_routes"])[0])
         mode = route.rsplit("[", 1)[1].removesuffix("]")
@@ -1127,6 +1224,9 @@ def _render_m4_e(items: list[dict[str, object]]) -> list[str]:
 def render_markdown(plan: dict[str, object]) -> str:
     summary = _as_dict(plan["summary"])
     repair_groups = _as_dict(plan["repair_groups"])
+    prioritized_actions = [_as_dict(item) for item in _as_list(plan["prioritized_actions"])]
+    non_blocking_notes = [_as_dict(item) for item in _as_list(plan["non_blocking_notes"])]
+    final_judgment = _as_dict(plan["final_judgment"])
     lines = [
         "# P5.1 M4 Repair Plan",
         "",
@@ -1156,10 +1256,28 @@ def render_markdown(plan: dict[str, object]) -> str:
             f"failed_executed={summary['nm_failed_executed']}, "
             f"passed={summary['nm_passed']}"
         ),
+        f"- active blocker count: {plan['active_blocker_count']}",
+        f"- active major count: {plan['active_major_count']}",
+        f"- active minor/note count: {plan['active_minor_or_note_count']}",
         "- recommended M4 order:",
     ]
     for value in _as_list(plan["m4_recommended_order"]):
         lines.append(f"  - {_as_str(value)}")
+    if prioritized_actions:
+        lines.append("- active prioritized actions:")
+        for action in prioritized_actions:
+            lines.append(
+                "  - "
+                + _as_str(action["priority"])
+                + " "
+                + _as_str(action["title"])
+            )
+    else:
+        lines.append("- active prioritized actions: none")
+    if non_blocking_notes:
+        lines.append("- non-blocking notes:")
+        for note in non_blocking_notes:
+            lines.append(f"  - {_as_str(note['message'])}")
     lines.append("")
     lines.extend(
         _render_m4_a(
@@ -1190,17 +1308,39 @@ def render_markdown(plan: dict[str, object]) -> str:
         [
             "## Final recommendation",
             "",
-            "- 先修哪个: 先处理 `destination.sqlite.v1` retained-matrix 决策，"
-            "再修 Mongo dependency，再修 S3/PostgreSQL/Google Drive/Confluence "
-            "service readiness。",
-            "- 哪些是代码改动: sqlite retained-path wiring、10 source spec "
-            "fields、DeliveryPayloadV1 visibility assertions。",
-            "- 哪些是 env/runtime 改动: S3 bucket/service readiness、"
-            "PostgreSQL connectivity、Google Drive/Confluence live source "
-            "reachability、backend.uns_api env if intentionally retained。",
-            "- 哪些是 dependency 改动: Mongo `pymongo` durable install/lock，"
-            "ClickHouse dependency surface historical lock retention。",
-            "- 哪些是产品矩阵决策: `destination.sqlite.v1` retained-vs-downgrade decision。",
+            (
+                "- P5.1-M4 active blockers: "
+                f"{final_judgment['p5_1_m4_active_blockers']}"
+            ),
+            (
+                "- retained 10 source × 10 destination matrix: "
+                f"{final_judgment['retained_matrix_status']}"
+            ),
+            (
+                "- backend.uns_api.v1 treatment: "
+                f"{final_judgment['backend_uns_api_v1']}"
+            ),
+            (
+                "- 先修哪个: "
+                "当前没有 active M4 repair blockers。"
+                if not prioritized_actions
+                else "按 active prioritized actions 顺序处理当前剩余修补项。"
+            ),
+            (
+                "- 哪些是代码改动: 仅当前仍在 active repair_groups 里的项。"
+            ),
+            (
+                "- 哪些是 env/runtime 改动: 仅当前仍在 active dependency/readiness "
+                "repair items 里的项。"
+            ),
+            (
+                "- 哪些是 dependency 改动: 仅当前仍在 active fail_dependency "
+                "repair items 里的项。"
+            ),
+            (
+                "- 哪些是产品矩阵决策: 仅当前仍在 active missing-implementation "
+                "repair items 里的项。"
+            ),
             "",
         ]
     )

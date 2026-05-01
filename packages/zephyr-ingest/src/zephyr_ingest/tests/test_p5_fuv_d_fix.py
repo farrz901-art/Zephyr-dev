@@ -418,7 +418,7 @@ def test_s3_bucket_helper_uses_sanitized_runtime_home_configuration_and_can_ensu
         env_path,
         "\n".join(
             (
-                "ZEPHYR_P45_S3_ENDPOINT=http://127.0.0.1:59000",
+                "ZEPHYR_P45_S3_ENDPOINT=http://127.0.0.1:59100",
                 "ZEPHYR_P45_S3_REGION=us-east-1",
                 "ZEPHYR_P45_S3_ACCESS_KEY=minioadmin",
                 "ZEPHYR_P45_S3_SECRET_KEY=minioadmin",
@@ -456,7 +456,7 @@ def test_p45_s3_bootstrap_cli_renders_json_without_secrets(
         runtime_home / "env" / ".env.p45.local",
         "\n".join(
             (
-                "ZEPHYR_P45_S3_ENDPOINT=http://127.0.0.1:59000",
+                "ZEPHYR_P45_S3_ENDPOINT=http://127.0.0.1:59100",
                 "ZEPHYR_P45_S3_REGION=us-east-1",
                 "ZEPHYR_P45_S3_ACCESS_KEY=minioadmin",
                 "ZEPHYR_P45_S3_SECRET_KEY=minioadmin",
@@ -473,7 +473,7 @@ def test_p45_s3_bootstrap_cli_renders_json_without_secrets(
             "dependency_installed": True,
             "available_buckets": ["zephyr-p45-bucket"],
             "bucket": "zephyr-p45-bucket",
-            "endpoint_url": "http://127.0.0.1:59000",
+            "endpoint_url": "http://127.0.0.1:59100",
             "secrets_redacted": True,
         }
 

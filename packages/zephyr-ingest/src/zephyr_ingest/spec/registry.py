@@ -776,7 +776,7 @@ _REGISTRY: dict[str, ConnectorSpecV1] = {
                 "required": False,
                 "env_names": _P45_S3_ENV_NAMES["endpoint_url"],
                 "help": "Optional custom S3-compatible endpoint URL.",
-                "examples": ["http://127.0.0.1:59000"],
+                "examples": ["http://127.0.0.1:59100"],
             },
             {
                 "name": "source.session_token",

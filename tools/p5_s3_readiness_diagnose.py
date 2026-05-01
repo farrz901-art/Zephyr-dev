@@ -131,7 +131,7 @@ def _effective_endpoint_url(env: LoadedP45Env) -> str:
     if endpoint_url is not None:
         return endpoint_url.rstrip("/")
     host = env.get("ZEPHYR_P45_S3_HOST", "127.0.0.1") or "127.0.0.1"
-    port = env.get("ZEPHYR_P45_S3_PORT", "19000") or "19000"
+    port = env.get("ZEPHYR_P45_S3_PORT", "59100") or "59100"
     return f"http://{host}:{port}"
 
 

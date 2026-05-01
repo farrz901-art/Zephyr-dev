@@ -290,7 +290,7 @@ def _make_bucket_admin_client(
     endpoint_url = loaded_env.get("ZEPHYR_P45_S3_ENDPOINT")
     if endpoint_url is None:
         host = loaded_env.get("ZEPHYR_P45_S3_HOST", "127.0.0.1") or "127.0.0.1"
-        port = loaded_env.get("ZEPHYR_P45_S3_PORT", "19000") or "19000"
+        port = loaded_env.get("ZEPHYR_P45_S3_PORT", "59100") or "59100"
         endpoint_url = f"http://{host}:{port}"
     client = session.client(
         "s3",
@@ -311,7 +311,7 @@ def collect_p45_s3_bucket_status(
     endpoint_url = env.get("ZEPHYR_P45_S3_ENDPOINT")
     if endpoint_url is None:
         host = env.get("ZEPHYR_P45_S3_HOST", "127.0.0.1") or "127.0.0.1"
-        port = env.get("ZEPHYR_P45_S3_PORT", "19000") or "19000"
+        port = env.get("ZEPHYR_P45_S3_PORT", "59100") or "59100"
         endpoint_url = f"http://{host}:{port}"
     bucket = env.get("ZEPHYR_P45_S3_BUCKET")
     region = env.get("ZEPHYR_P45_S3_REGION", "us-east-1") or "us-east-1"
