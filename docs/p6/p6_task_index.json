@@ -1,0 +1,385 @@
+{
+  "schema_version": 1,
+  "report_id": "zephyr.p6.task_index.v1",
+  "tasks": [
+    {
+      "id": "P6-M0-S1",
+      "title": "Freeze P6 phase map and execution control",
+      "phase": "P6-M0",
+      "category": "must",
+      "depends_on": [],
+      "outputs": [
+        "docs/p6/P6_MILESTONE_MAP.md",
+        "docs/p6/p6_task_index.json"
+      ],
+      "hard_gate": true,
+      "touches_zephyr_dev_core": true,
+      "touches_commercial_logic": false,
+      "runtime_home_modified": false,
+      "ui_assets_required": false,
+      "design_window_input_required": false
+    },
+    {
+      "id": "P6-M1-S1",
+      "title": "Define Zephyr-dev pure core boundary",
+      "phase": "P6-M1",
+      "category": "must",
+      "depends_on": [
+        "P6-M0-S1"
+      ],
+      "outputs": [
+        "PURE_CORE_BOUNDARY.md",
+        "docs/p6/P6_SCOPE_BOUNDARY.md"
+      ],
+      "hard_gate": true,
+      "touches_zephyr_dev_core": true,
+      "touches_commercial_logic": false,
+      "runtime_home_modified": false,
+      "ui_assets_required": false,
+      "design_window_input_required": false
+    },
+    {
+      "id": "P6-M1-S2",
+      "title": "Define six-repo derivation policy and public/private ownership",
+      "phase": "P6-M1",
+      "category": "must",
+      "depends_on": [
+        "P6-M1-S1"
+      ],
+      "outputs": [
+        "docs/p6/P6_DERIVATION_POLICY.md"
+      ],
+      "hard_gate": true,
+      "touches_zephyr_dev_core": true,
+      "touches_commercial_logic": true,
+      "runtime_home_modified": false,
+      "ui_assets_required": false,
+      "design_window_input_required": false
+    },
+    {
+      "id": "P6-M1-S3",
+      "title": "Define auditable P6 milestone map and task index",
+      "phase": "P6-M1",
+      "category": "must",
+      "depends_on": [
+        "P6-M1-S1",
+        "P6-M1-S2"
+      ],
+      "outputs": [
+        "docs/p6/P6_MILESTONE_MAP.md",
+        "docs/p6/p6_task_index.json"
+      ],
+      "hard_gate": true,
+      "touches_zephyr_dev_core": true,
+      "touches_commercial_logic": false,
+      "runtime_home_modified": false,
+      "ui_assets_required": false,
+      "design_window_input_required": false
+    },
+    {
+      "id": "P6-M1-S4",
+      "title": "Define commercial contamination denylist",
+      "phase": "P6-M1",
+      "category": "must",
+      "depends_on": [
+        "P6-M1-S1",
+        "P6-M1-S2"
+      ],
+      "outputs": [
+        "docs/p6/commercial_contamination_denylist.json"
+      ],
+      "hard_gate": true,
+      "touches_zephyr_dev_core": true,
+      "touches_commercial_logic": true,
+      "runtime_home_modified": false,
+      "ui_assets_required": false,
+      "design_window_input_required": false
+    },
+    {
+      "id": "P6-M1-S5",
+      "title": "Implement commercial contamination scanner and CI surface",
+      "phase": "P6-M1",
+      "category": "must",
+      "depends_on": [
+        "P6-M1-S4"
+      ],
+      "outputs": [
+        "tools/p6_commercial_contamination_scan.py"
+      ],
+      "hard_gate": true,
+      "touches_zephyr_dev_core": true,
+      "touches_commercial_logic": true,
+      "runtime_home_modified": false,
+      "ui_assets_required": false,
+      "design_window_input_required": false
+    },
+    {
+      "id": "P6-M1-S6",
+      "title": "Add focused anti-drift tests for pure-core contamination rules",
+      "phase": "P6-M1",
+      "category": "must",
+      "depends_on": [
+        "P6-M1-S5"
+      ],
+      "outputs": [
+        "packages/zephyr-ingest/src/zephyr_ingest/tests/test_p6_commercial_contamination_scan.py"
+      ],
+      "hard_gate": true,
+      "touches_zephyr_dev_core": true,
+      "touches_commercial_logic": false,
+      "runtime_home_modified": false,
+      "ui_assets_required": false,
+      "design_window_input_required": false
+    },
+    {
+      "id": "P6-M2-S1",
+      "title": "Define public export manifest shape from Zephyr-dev",
+      "phase": "P6-M2",
+      "category": "must",
+      "depends_on": [
+        "P6-M1-S6"
+      ],
+      "outputs": [
+        "public export manifest spec",
+        "release lineage policy"
+      ],
+      "hard_gate": true,
+      "touches_zephyr_dev_core": true,
+      "touches_commercial_logic": false,
+      "runtime_home_modified": false,
+      "ui_assets_required": false,
+      "design_window_input_required": false
+    },
+    {
+      "id": "P6-M2-S2",
+      "title": "Define private overlay import rules for downstream repos",
+      "phase": "P6-M2",
+      "category": "must",
+      "depends_on": [
+        "P6-M2-S1"
+      ],
+      "outputs": [
+        "private overlay policy",
+        "security review gate checklist"
+      ],
+      "hard_gate": true,
+      "touches_zephyr_dev_core": false,
+      "touches_commercial_logic": true,
+      "runtime_home_modified": false,
+      "ui_assets_required": false,
+      "design_window_input_required": false
+    },
+    {
+      "id": "P6-M3-S1",
+      "title": "Build Base desktop shell MVP+",
+      "phase": "P6-M3",
+      "category": "must",
+      "depends_on": [
+        "P6-M2-S2"
+      ],
+      "outputs": [
+        "Base desktop shell",
+        "local file selection flow",
+        "run-state animation",
+        "receipt and diagnosis surfaces"
+      ],
+      "hard_gate": true,
+      "touches_zephyr_dev_core": false,
+      "touches_commercial_logic": false,
+      "runtime_home_modified": false,
+      "ui_assets_required": true,
+      "design_window_input_required": true
+    },
+    {
+      "id": "P6-M4-S1",
+      "title": "Build Pro desktop shell MVP+ entitlement client",
+      "phase": "P6-M4",
+      "category": "must",
+      "depends_on": [
+        "P6-M3-S1",
+        "P6-M5-S1"
+      ],
+      "outputs": [
+        "Pro desktop shell",
+        "entitlement client status UI",
+        "device-state UI",
+        "offline grace and over-limit states"
+      ],
+      "hard_gate": true,
+      "touches_zephyr_dev_core": false,
+      "touches_commercial_logic": true,
+      "runtime_home_modified": false,
+      "ui_assets_required": true,
+      "design_window_input_required": true
+    },
+    {
+      "id": "P6-M5-S1",
+      "title": "Build Web-core commercial control plane MVP+",
+      "phase": "P6-M5",
+      "category": "must",
+      "depends_on": [
+        "P6-M2-S2"
+      ],
+      "outputs": [
+        "private control plane",
+        "entitlement authority",
+        "download and update authorization surfaces"
+      ],
+      "hard_gate": true,
+      "touches_zephyr_dev_core": false,
+      "touches_commercial_logic": true,
+      "runtime_home_modified": false,
+      "ui_assets_required": false,
+      "design_window_input_required": false
+    },
+    {
+      "id": "P6-M5-S2",
+      "title": "Add security review gates for commercial decision surfaces",
+      "phase": "P6-M5",
+      "category": "must",
+      "depends_on": [
+        "P6-M5-S1"
+      ],
+      "outputs": [
+        "security review gate checklist",
+        "private API boundary checklist"
+      ],
+      "hard_gate": true,
+      "touches_zephyr_dev_core": false,
+      "touches_commercial_logic": true,
+      "runtime_home_modified": false,
+      "ui_assets_required": false,
+      "design_window_input_required": false
+    },
+    {
+      "id": "P6-M6-S1",
+      "title": "Build public Web frontend bounded demo",
+      "phase": "P6-M6",
+      "category": "must",
+      "depends_on": [
+        "P6-M5-S1"
+      ],
+      "outputs": [
+        "login and register views",
+        "dashboard",
+        "download and purchase entry",
+        "bounded web/api task submission",
+        "quota and usage display",
+        "result view"
+      ],
+      "hard_gate": true,
+      "touches_zephyr_dev_core": false,
+      "touches_commercial_logic": false,
+      "runtime_home_modified": false,
+      "ui_assets_required": true,
+      "design_window_input_required": true
+    },
+    {
+      "id": "P6-M7-S1",
+      "title": "Build public Site marketing and legal foundation",
+      "phase": "P6-M7",
+      "category": "must",
+      "depends_on": [
+        "P6-M6-S1"
+      ],
+      "outputs": [
+        "homepage",
+        "pricing page",
+        "product comparison",
+        "enterprise cooperation form",
+        "brand visual system"
+      ],
+      "hard_gate": true,
+      "touches_zephyr_dev_core": false,
+      "touches_commercial_logic": true,
+      "runtime_home_modified": false,
+      "ui_assets_required": true,
+      "design_window_input_required": true
+    },
+    {
+      "id": "P6-M8-S1",
+      "title": "Implement signing, download, and update hard gates",
+      "phase": "P6-M8",
+      "category": "must",
+      "depends_on": [
+        "P6-M5-S1",
+        "P6-M7-S1"
+      ],
+      "outputs": [
+        "download authorization UX",
+        "signature verification UX",
+        "update entitlement UX",
+        "release-distribution hard gates"
+      ],
+      "hard_gate": true,
+      "touches_zephyr_dev_core": false,
+      "touches_commercial_logic": true,
+      "runtime_home_modified": false,
+      "ui_assets_required": true,
+      "design_window_input_required": true
+    },
+    {
+      "id": "P6-M9-S1",
+      "title": "Run P6 end-to-end commercial acceptance",
+      "phase": "P6-M9",
+      "category": "must",
+      "depends_on": [
+        "P6-M3-S1",
+        "P6-M4-S1",
+        "P6-M5-S2",
+        "P6-M6-S1",
+        "P6-M7-S1",
+        "P6-M8-S1"
+      ],
+      "outputs": [
+        "e2e acceptance evidence",
+        "boundary regression report",
+        "release blocker report"
+      ],
+      "hard_gate": true,
+      "touches_zephyr_dev_core": false,
+      "touches_commercial_logic": true,
+      "runtime_home_modified": false,
+      "ui_assets_required": false,
+      "design_window_input_required": false
+    },
+    {
+      "id": "P6-M10-S1",
+      "title": "Assemble P6 final release candidate and archive",
+      "phase": "P6-M10",
+      "category": "must",
+      "depends_on": [
+        "P6-M9-S1"
+      ],
+      "outputs": [
+        "P6 release candidate",
+        "final release pack",
+        "archive bundle"
+      ],
+      "hard_gate": true,
+      "touches_zephyr_dev_core": false,
+      "touches_commercial_logic": true,
+      "runtime_home_modified": false,
+      "ui_assets_required": false,
+      "design_window_input_required": false
+    },
+    {
+      "id": "P6-P7-S1",
+      "title": "Evaluate deferred P7 deployment and enterprise themes",
+      "phase": "P7",
+      "category": "p7",
+      "depends_on": [
+        "P6-M10-S1"
+      ],
+      "outputs": [
+        "P7 planning notes"
+      ],
+      "hard_gate": false,
+      "touches_zephyr_dev_core": false,
+      "touches_commercial_logic": true,
+      "runtime_home_modified": false,
+      "ui_assets_required": true,
+      "design_window_input_required": true
+    }
+  ]
+}

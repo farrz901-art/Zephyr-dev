@@ -1,0 +1,478 @@
+{
+  "schema_version": 1,
+  "report_id": "zephyr.p6.commercial_contamination_denylist.v1",
+  "groups": {
+    "billing_terms": [
+      {
+        "term": "billing",
+        "severity": "major",
+        "blocked_in": [
+          "packages",
+          "runtime",
+          "connector",
+          "core_contract"
+        ],
+        "allowed_in": [
+          "docs/p6",
+          "PURE_CORE_BOUNDARY.md",
+          "tests/fixtures"
+        ],
+        "reason": "Billing language is allowed in boundary docs but must not become runtime commercial authority in Zephyr-dev."
+      },
+      {
+        "term": "billing decision",
+        "severity": "blocker",
+        "blocked_in": [
+          "packages",
+          "runtime",
+          "connector",
+          "core_contract"
+        ],
+        "allowed_in": [
+          "docs/p6",
+          "PURE_CORE_BOUNDARY.md",
+          "tests/fixtures"
+        ],
+        "reason": "Zephyr-dev must not decide whether technical execution implies a billing outcome."
+      },
+      {
+        "term": "quota decision",
+        "severity": "blocker",
+        "blocked_in": [
+          "packages",
+          "runtime",
+          "connector",
+          "core_contract"
+        ],
+        "allowed_in": [
+          "docs/p6",
+          "PURE_CORE_BOUNDARY.md",
+          "tests/fixtures"
+        ],
+        "reason": "Quota authority belongs to commercial control planes, not Zephyr-dev runtime truth."
+      },
+      {
+        "term": "invoice",
+        "severity": "blocker",
+        "blocked_in": [
+          "packages",
+          "runtime",
+          "connector",
+          "core_contract"
+        ],
+        "allowed_in": [
+          "docs/p6",
+          "PURE_CORE_BOUNDARY.md",
+          "tests/fixtures"
+        ],
+        "reason": "Invoices are commercial artifacts outside the pure core."
+      }
+    ],
+    "entitlement_terms": [
+      {
+        "term": "entitlement",
+        "severity": "major",
+        "blocked_in": [
+          "packages",
+          "runtime",
+          "connector",
+          "core_contract"
+        ],
+        "allowed_in": [
+          "docs/p6",
+          "PURE_CORE_BOUNDARY.md",
+          "tests/fixtures"
+        ],
+        "reason": "Entitlement language is allowed in boundary docs but cannot become runtime decision logic in Zephyr-dev."
+      },
+      {
+        "term": "account entitlement",
+        "severity": "blocker",
+        "blocked_in": [
+          "packages",
+          "runtime",
+          "connector",
+          "core_contract"
+        ],
+        "allowed_in": [
+          "docs/p6",
+          "PURE_CORE_BOUNDARY.md",
+          "tests/fixtures"
+        ],
+        "reason": "Account-level commercial rights belong to downstream commercial repos."
+      },
+      {
+        "term": "paid_user",
+        "severity": "blocker",
+        "blocked_in": [
+          "packages",
+          "runtime",
+          "connector",
+          "core_contract"
+        ],
+        "allowed_in": [
+          "docs/p6",
+          "PURE_CORE_BOUNDARY.md",
+          "tests/fixtures"
+        ],
+        "reason": "A paid-user flag is commercial identity, not core runtime truth."
+      }
+    ],
+    "licensing_terms": [
+      {
+        "term": "license entitlement",
+        "severity": "blocker",
+        "blocked_in": [
+          "packages",
+          "runtime",
+          "connector",
+          "core_contract"
+        ],
+        "allowed_in": [
+          "docs/p6",
+          "PURE_CORE_BOUNDARY.md",
+          "tests/fixtures"
+        ],
+        "reason": "License entitlement must not be decided inside Zephyr-dev runtime code."
+      },
+      {
+        "term": "license_verify",
+        "severity": "blocker",
+        "blocked_in": [
+          "packages",
+          "runtime",
+          "connector",
+          "core_contract"
+        ],
+        "allowed_in": [
+          "docs/p6",
+          "PURE_CORE_BOUNDARY.md",
+          "tests/fixtures"
+        ],
+        "reason": "License verification logic belongs to downstream private product repos."
+      },
+      {
+        "term": "activation limit",
+        "severity": "blocker",
+        "blocked_in": [
+          "packages",
+          "runtime",
+          "connector",
+          "core_contract"
+        ],
+        "allowed_in": [
+          "docs/p6",
+          "PURE_CORE_BOUNDARY.md",
+          "tests/fixtures"
+        ],
+        "reason": "Activation-limit policy is a commercial device policy, not pure core truth."
+      }
+    ],
+    "payment_terms": [
+      {
+        "term": "payment",
+        "severity": "blocker",
+        "blocked_in": [
+          "packages",
+          "runtime",
+          "connector",
+          "core_contract"
+        ],
+        "allowed_in": [
+          "docs/p6",
+          "PURE_CORE_BOUNDARY.md",
+          "tests/fixtures"
+        ],
+        "reason": "Payment processing must not enter Zephyr-dev runtime or contracts."
+      },
+      {
+        "term": "subscription",
+        "severity": "major",
+        "blocked_in": [
+          "packages",
+          "runtime",
+          "connector",
+          "core_contract"
+        ],
+        "allowed_in": [
+          "docs/p6",
+          "PURE_CORE_BOUNDARY.md",
+          "tests/fixtures"
+        ],
+        "reason": "Subscription language may appear in boundary notes but must not become Zephyr-dev runtime truth."
+      },
+      {
+        "term": "checkout",
+        "severity": "major",
+        "blocked_in": [
+          "packages",
+          "runtime",
+          "connector",
+          "core_contract"
+        ],
+        "allowed_in": [
+          "docs/p6",
+          "PURE_CORE_BOUNDARY.md",
+          "tests/fixtures"
+        ],
+        "reason": "Commercial checkout flows are outside the pure core; Git checkout false positives must be suppressed by context."
+      },
+      {
+        "term": "refund logic",
+        "severity": "blocker",
+        "blocked_in": [
+          "packages",
+          "runtime",
+          "connector",
+          "core_contract"
+        ],
+        "allowed_in": [
+          "docs/p6",
+          "PURE_CORE_BOUNDARY.md",
+          "tests/fixtures"
+        ],
+        "reason": "Refund logic belongs to downstream commercial systems."
+      }
+    ],
+    "device_terms": [
+      {
+        "term": "hwid",
+        "severity": "blocker",
+        "blocked_in": [
+          "packages",
+          "runtime",
+          "connector",
+          "core_contract"
+        ],
+        "allowed_in": [
+          "docs/p6",
+          "PURE_CORE_BOUNDARY.md",
+          "tests/fixtures"
+        ],
+        "reason": "Hardware-identity enforcement is outside the pure core."
+      },
+      {
+        "term": "device fingerprint",
+        "severity": "blocker",
+        "blocked_in": [
+          "packages",
+          "runtime",
+          "connector",
+          "core_contract"
+        ],
+        "allowed_in": [
+          "docs/p6",
+          "PURE_CORE_BOUNDARY.md",
+          "tests/fixtures"
+        ],
+        "reason": "Device fingerprint policy is private commercial policy."
+      }
+    ],
+    "distribution_terms": [
+      {
+        "term": "download authorization",
+        "severity": "blocker",
+        "blocked_in": [
+          "packages",
+          "runtime",
+          "connector",
+          "core_contract"
+        ],
+        "allowed_in": [
+          "docs/p6",
+          "PURE_CORE_BOUNDARY.md",
+          "tests/fixtures"
+        ],
+        "reason": "Download authorization belongs to downstream product control planes."
+      },
+      {
+        "term": "presigned paid url",
+        "severity": "blocker",
+        "blocked_in": [
+          "packages",
+          "runtime",
+          "connector",
+          "core_contract"
+        ],
+        "allowed_in": [
+          "docs/p6",
+          "PURE_CORE_BOUNDARY.md",
+          "tests/fixtures"
+        ],
+        "reason": "Paid download URL issuance is commercial distribution logic."
+      }
+    ],
+    "update_terms": [
+      {
+        "term": "update entitlement",
+        "severity": "blocker",
+        "blocked_in": [
+          "packages",
+          "runtime",
+          "connector",
+          "core_contract"
+        ],
+        "allowed_in": [
+          "docs/p6",
+          "PURE_CORE_BOUNDARY.md",
+          "tests/fixtures"
+        ],
+        "reason": "Update rights belong to downstream commercial control planes."
+      },
+      {
+        "term": "manifest signature policy",
+        "severity": "blocker",
+        "blocked_in": [
+          "packages",
+          "runtime",
+          "connector",
+          "core_contract"
+        ],
+        "allowed_in": [
+          "docs/p6",
+          "PURE_CORE_BOUNDARY.md",
+          "tests/fixtures"
+        ],
+        "reason": "Manifest authorization policy belongs to later productization phases."
+      },
+      {
+        "term": "package signing policy",
+        "severity": "blocker",
+        "blocked_in": [
+          "packages",
+          "runtime",
+          "connector",
+          "core_contract"
+        ],
+        "allowed_in": [
+          "docs/p6",
+          "PURE_CORE_BOUNDARY.md",
+          "tests/fixtures"
+        ],
+        "reason": "Package-signing policy is not part of Zephyr-dev pure core runtime."
+      }
+    ],
+    "risk_terms": [
+      {
+        "term": "risk score",
+        "severity": "blocker",
+        "blocked_in": [
+          "packages",
+          "runtime",
+          "connector",
+          "core_contract"
+        ],
+        "allowed_in": [
+          "docs/p6",
+          "PURE_CORE_BOUNDARY.md",
+          "tests/fixtures"
+        ],
+        "reason": "Risk scoring is downstream commercial policy."
+      },
+      {
+        "term": "fraud detection",
+        "severity": "blocker",
+        "blocked_in": [
+          "packages",
+          "runtime",
+          "connector",
+          "core_contract"
+        ],
+        "allowed_in": [
+          "docs/p6",
+          "PURE_CORE_BOUNDARY.md",
+          "tests/fixtures"
+        ],
+        "reason": "Fraud detection belongs to private commercial systems."
+      }
+    ],
+    "account_terms": [
+      {
+        "term": "user account",
+        "severity": "blocker",
+        "blocked_in": [
+          "packages",
+          "runtime",
+          "connector",
+          "core_contract"
+        ],
+        "allowed_in": [
+          "docs/p6",
+          "PURE_CORE_BOUNDARY.md",
+          "tests/fixtures"
+        ],
+        "reason": "Account authority is not part of Zephyr-dev."
+      }
+    ],
+    "rbac_terms": [
+      {
+        "term": "rbac",
+        "severity": "major",
+        "blocked_in": [
+          "packages",
+          "runtime",
+          "connector",
+          "core_contract"
+        ],
+        "allowed_in": [
+          "docs/p6",
+          "PURE_CORE_BOUNDARY.md",
+          "tests/fixtures"
+        ],
+        "reason": "RBAC appears in boundary non-claims but must not become runtime product scope in Zephyr-dev."
+      }
+    ],
+    "pricing_terms": [
+      {
+        "term": "pricing table",
+        "severity": "blocker",
+        "blocked_in": [
+          "packages",
+          "runtime",
+          "connector",
+          "core_contract"
+        ],
+        "allowed_in": [
+          "docs/p6",
+          "PURE_CORE_BOUNDARY.md",
+          "tests/fixtures"
+        ],
+        "reason": "Pricing tables belong to product shells or site repos, not the pure core."
+      },
+      {
+        "term": "pricing",
+        "severity": "major",
+        "blocked_in": [
+          "packages",
+          "runtime",
+          "connector",
+          "core_contract"
+        ],
+        "allowed_in": [
+          "docs/p6",
+          "PURE_CORE_BOUNDARY.md",
+          "tests/fixtures"
+        ],
+        "reason": "Pricing language may exist in boundary docs but must not become runtime pricing policy."
+      }
+    ],
+    "commercial_gateway_terms": [
+      {
+        "term": "commercial api gate",
+        "severity": "blocker",
+        "blocked_in": [
+          "packages",
+          "runtime",
+          "connector",
+          "core_contract"
+        ],
+        "allowed_in": [
+          "docs/p6",
+          "PURE_CORE_BOUNDARY.md",
+          "tests/fixtures"
+        ],
+        "reason": "Commercial API gating belongs to downstream private repos."
+      }
+    ]
+  }
+}
