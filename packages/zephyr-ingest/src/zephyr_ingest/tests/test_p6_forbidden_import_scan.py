@@ -13,18 +13,25 @@ def _write(path: Path, text: str) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+def _repo_root() -> Path:
+    current = Path(__file__).resolve()
+    for candidate in current.parents:
+        if (
+            ((candidate / "pyproject.toml").exists() or (candidate / ".git").exists())
+            and (candidate / "docs/p6").exists()
+            and (candidate / "packages/zephyr-ingest").exists()
+        ):
+            return candidate
+    raise RuntimeError("Could not locate repository root from test file path")
+
+
 def _fixture_root(case_name: str) -> tuple[Path, Path]:
-    root = (
-        Path("E:/Github_Projects/Zephyr/codex_p6_forbidden_import_fixtures")
-        / f"{case_name}_{uuid4().hex}"
-        / "repo"
-    )
+    repo_root = _repo_root()
+    root = repo_root / "codex_p6_forbidden_import_fixtures" / f"{case_name}_{uuid4().hex}" / "repo"
     map_path = root / "docs/p6/forbidden_import_map.json"
     map_path.parent.mkdir(parents=True, exist_ok=True)
     map_path.write_text(
-        Path("E:/Github_Projects/Zephyr/docs/p6/forbidden_import_map.json").read_text(
-            encoding="utf-8"
-        ),
+        (repo_root / "docs/p6/forbidden_import_map.json").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
     return root, map_path
@@ -93,7 +100,7 @@ def test_fail_on_blocker_and_current_repo_pass() -> None:
     assert rc == 1
     assert json.loads(out_path.read_text(encoding="utf-8"))["summary"]["overall"] == "fail"
 
-    repo_root = Path("E:/Github_Projects/Zephyr")
+    repo_root = _repo_root()
     report = scan_tool.scan_repo(
         root=repo_root,
         rules=scan_tool.load_rules(repo_root / "docs/p6/forbidden_import_map.json"),

@@ -13,18 +13,25 @@ def _write(path: Path, text: str = "x\n") -> None:
     path.write_text(text, encoding="utf-8")
 
 
+def _repo_root() -> Path:
+    current = Path(__file__).resolve()
+    for candidate in current.parents:
+        if (
+            ((candidate / "pyproject.toml").exists() or (candidate / ".git").exists())
+            and (candidate / "docs/p6").exists()
+            and (candidate / "packages/zephyr-ingest").exists()
+        ):
+            return candidate
+    raise RuntimeError("Could not locate repository root from test file path")
+
+
 def _fixture_root(case_name: str) -> tuple[Path, Path]:
-    root = (
-        Path("E:/Github_Projects/Zephyr/codex_p6_security_path_fixtures")
-        / f"{case_name}_{uuid4().hex}"
-        / "repo"
-    )
+    repo_root = _repo_root()
+    root = repo_root / "codex_p6_security_path_fixtures" / f"{case_name}_{uuid4().hex}" / "repo"
     policy_path = root / "docs/p6/security_sensitive_paths.json"
     policy_path.parent.mkdir(parents=True, exist_ok=True)
     policy_path.write_text(
-        Path("E:/Github_Projects/Zephyr/docs/p6/security_sensitive_paths.json").read_text(
-            encoding="utf-8"
-        ),
+        (repo_root / "docs/p6/security_sensitive_paths.json").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
     return root, policy_path

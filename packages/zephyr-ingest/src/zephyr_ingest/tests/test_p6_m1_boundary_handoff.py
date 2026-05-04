@@ -13,9 +13,21 @@ def _as_dict(value: object) -> dict[str, object]:
     return cast(dict[str, object], value)
 
 
+def _repo_root() -> Path:
+    current = Path(__file__).resolve()
+    for candidate in current.parents:
+        if (
+            ((candidate / "pyproject.toml").exists() or (candidate / ".git").exists())
+            and (candidate / "docs/p6").exists()
+            and (candidate / "packages/zephyr-ingest").exists()
+        ):
+            return candidate
+    raise RuntimeError("Could not locate repository root from test file path")
+
+
 @pytest.mark.auth_contract
 def test_p6_m1_handoff_build_report_and_markdown() -> None:
-    repo_root = Path("E:/Github_Projects/Zephyr")
+    repo_root = _repo_root()
     out_root = repo_root / ".tmp/p6_m1_boundary_handoff_test"
     report = handoff_tool.build_report(root=repo_root, out_root=out_root)
     summary = _as_dict(report["summary"])
@@ -36,7 +48,7 @@ def test_p6_m1_handoff_build_report_and_markdown() -> None:
 
 @pytest.mark.auth_contract
 def test_p6_m1_handoff_cli_outputs_and_check_artifacts() -> None:
-    repo_root = Path("E:/Github_Projects/Zephyr")
+    repo_root = _repo_root()
     out_root = repo_root / ".tmp/p6_m1_boundary_handoff_test_cli"
     assert handoff_tool.main(["--root", str(repo_root), "--out-root", str(out_root), "--json"]) == 0
     assert (

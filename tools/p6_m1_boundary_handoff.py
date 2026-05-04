@@ -6,7 +6,20 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TypedDict, cast
 
-DEFAULT_ROOT = Path(".")
+
+def _discover_repo_root(start: Path) -> Path:
+    current = start.resolve()
+    for candidate in (current, *current.parents):
+        if (
+            ((candidate / "pyproject.toml").exists() or (candidate / ".git").exists())
+            and (candidate / "docs/p6").exists()
+            and (candidate / "packages/zephyr-ingest").exists()
+        ):
+            return candidate
+    raise RuntimeError("Could not locate repository root from tool path")
+
+
+DEFAULT_ROOT = _discover_repo_root(Path(__file__).resolve().parent)
 DEFAULT_OUT_ROOT = Path(".tmp/p6_m1_boundary_handoff")
 COMM_SCAN_PATH = Path(".tmp/p6_m1_boundary/commercial_contamination_scan.json")
 IMPORT_SCAN_PATH = Path(".tmp/p6_m1_boundary/forbidden_import_scan.json")
