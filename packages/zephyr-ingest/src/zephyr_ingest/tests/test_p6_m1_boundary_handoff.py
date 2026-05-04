@@ -26,9 +26,9 @@ def _repo_root() -> Path:
 
 
 @pytest.mark.auth_contract
-def test_p6_m1_handoff_build_report_and_markdown() -> None:
+def test_p6_m1_handoff_build_report_and_markdown(tmp_path: Path) -> None:
     repo_root = _repo_root()
-    out_root = repo_root / ".tmp/p6_m1_boundary_handoff_test"
+    out_root = tmp_path / "handoff_build"
     report = handoff_tool.build_report(root=repo_root, out_root=out_root)
     summary = _as_dict(report["summary"])
     six_repo_boundary = _as_dict(report["six_repo_boundary"])
@@ -47,9 +47,9 @@ def test_p6_m1_handoff_build_report_and_markdown() -> None:
 
 
 @pytest.mark.auth_contract
-def test_p6_m1_handoff_cli_outputs_and_check_artifacts() -> None:
+def test_p6_m1_handoff_cli_outputs_and_check_artifacts(tmp_path: Path) -> None:
     repo_root = _repo_root()
-    out_root = repo_root / ".tmp/p6_m1_boundary_handoff_test_cli"
+    out_root = tmp_path / "handoff_cli"
     assert handoff_tool.main(["--root", str(repo_root), "--out-root", str(out_root), "--json"]) == 0
     assert (
         handoff_tool.main(["--root", str(repo_root), "--out-root", str(out_root), "--markdown"])

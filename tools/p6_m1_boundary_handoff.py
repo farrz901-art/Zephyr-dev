@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TypedDict, cast
+from typing import Protocol, TypedDict, cast
 
 
 def _discover_repo_root(start: Path) -> Path:
@@ -21,9 +22,10 @@ def _discover_repo_root(start: Path) -> Path:
 
 DEFAULT_ROOT = _discover_repo_root(Path(__file__).resolve().parent)
 DEFAULT_OUT_ROOT = Path(".tmp/p6_m1_boundary_handoff")
-COMM_SCAN_PATH = Path(".tmp/p6_m1_boundary/commercial_contamination_scan.json")
-IMPORT_SCAN_PATH = Path(".tmp/p6_m1_boundary/forbidden_import_scan.json")
-SECURITY_SCAN_PATH = Path(".tmp/p6_m1_boundary/security_sensitive_path_scan.json")
+SCAN_OUTPUT_DIR = Path("scan_artifacts")
+COMM_SCAN_FILENAME = "commercial_contamination_scan.json"
+IMPORT_SCAN_FILENAME = "forbidden_import_scan.json"
+SECURITY_SCAN_FILENAME = "security_sensitive_path_scan.json"
 
 
 class SummaryDict(TypedDict):
@@ -31,6 +33,18 @@ class SummaryDict(TypedDict):
     p6_m1_status: str
     active_blockers: int
     major_gaps: int
+
+
+class _CommercialScanModule(Protocol):
+    def load_denylist(self, path: Path) -> object: ...
+
+    def scan_repo(self, *, root: Path, denylist: object) -> dict[str, object]: ...
+
+
+class _RuleScanModule(Protocol):
+    def load_rules(self, path: Path) -> object: ...
+
+    def scan_repo(self, *, root: Path, rules: object) -> dict[str, object]: ...
 
 
 def _generated_at_utc() -> str:
@@ -101,6 +115,71 @@ def _required_paths(root: Path) -> dict[str, Path]:
     }
 
 
+def _load_scan_modules() -> tuple[_CommercialScanModule, _RuleScanModule, _RuleScanModule]:
+    import sys
+
+    repo_root = _discover_repo_root(Path(__file__).resolve().parent)
+    if str(repo_root) not in sys.path:
+        sys.path.insert(0, str(repo_root))
+    return (
+        cast(
+            _CommercialScanModule,
+            importlib.import_module("tools.p6_commercial_contamination_scan"),
+        ),
+        cast(_RuleScanModule, importlib.import_module("tools.p6_forbidden_import_scan")),
+        cast(
+            _RuleScanModule,
+            importlib.import_module("tools.p6_security_sensitive_path_scan"),
+        ),
+    )
+
+
+def _scan_output_paths(out_root: Path) -> dict[str, Path]:
+    scan_dir = out_root / SCAN_OUTPUT_DIR
+    return {
+        "commercial_contamination": scan_dir / COMM_SCAN_FILENAME,
+        "forbidden_import": scan_dir / IMPORT_SCAN_FILENAME,
+        "security_sensitive_path": scan_dir / SECURITY_SCAN_FILENAME,
+    }
+
+
+def _build_scan_reports(root: Path) -> dict[str, dict[str, object]]:
+    commercial_scan_tool, forbidden_import_tool, security_scan_tool = _load_scan_modules()
+    commercial_path = root / "docs/p6/commercial_contamination_denylist.json"
+    forbidden_path = root / "docs/p6/forbidden_import_map.json"
+    security_path = root / "docs/p6/security_sensitive_paths.json"
+    commercial_report = commercial_scan_tool.scan_repo(
+        root=root,
+        denylist=commercial_scan_tool.load_denylist(commercial_path),
+    )
+    commercial_report["denylist_path"] = str(commercial_path)
+    forbidden_report = forbidden_import_tool.scan_repo(
+        root=root,
+        rules=forbidden_import_tool.load_rules(forbidden_path),
+    )
+    forbidden_report["map_path"] = str(forbidden_path)
+    security_report = security_scan_tool.scan_repo(
+        root=root,
+        rules=security_scan_tool.load_rules(security_path),
+    )
+    security_report["policy_path"] = str(security_path)
+    return {
+        "commercial_contamination": commercial_report,
+        "forbidden_import": forbidden_report,
+        "security_sensitive_path": security_report,
+    }
+
+
+def _write_scan_artifacts(scan_reports: dict[str, dict[str, object]], out_root: Path) -> None:
+    output_paths = _scan_output_paths(out_root)
+    for key, path in output_paths.items():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(scan_reports[key], ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
+
 def build_report(*, root: Path, out_root: Path) -> dict[str, object]:
     paths = _required_paths(root)
     for required_path in paths.values():
@@ -111,9 +190,10 @@ def build_report(*, root: Path, out_root: Path) -> dict[str, object]:
     public_manifest = _load_json_object(paths["public_core_export_manifest"])
     private_manifest = _load_json_object(paths["private_core_export_manifest"])
     task_index = _load_json_object(paths["task_index"])
-    commercial_scan = _load_json_object(root / COMM_SCAN_PATH)
-    forbidden_scan = _load_json_object(root / IMPORT_SCAN_PATH)
-    security_scan = _load_json_object(root / SECURITY_SCAN_PATH)
+    scan_reports = _build_scan_reports(root)
+    commercial_scan = scan_reports["commercial_contamination"]
+    forbidden_scan = scan_reports["forbidden_import"]
+    security_scan = scan_reports["security_sensitive_path"]
 
     repos = cast(list[dict[str, object]], _as_list(six_repo_manifest["repos"]))
     baseline = _as_dict(six_repo_manifest["baseline"])
@@ -224,9 +304,15 @@ def build_report(*, root: Path, out_root: Path) -> dict[str, object]:
         "public_consumers": cast(list[str], public_manifest["target_consumers"]),
         "private_consumers": cast(list[str], private_manifest["target_consumers"]),
         "artifact_paths": {
-            "commercial_contamination_scan": str((root / COMM_SCAN_PATH).as_posix()),
-            "forbidden_import_scan": str((root / IMPORT_SCAN_PATH).as_posix()),
-            "security_sensitive_path_scan": str((root / SECURITY_SCAN_PATH).as_posix()),
+            "commercial_contamination_scan": str(
+                _scan_output_paths(out_root)["commercial_contamination"].as_posix()
+            ),
+            "forbidden_import_scan": str(
+                _scan_output_paths(out_root)["forbidden_import"].as_posix()
+            ),
+            "security_sensitive_path_scan": str(
+                _scan_output_paths(out_root)["security_sensitive_path"].as_posix()
+            ),
             "handoff_json": str((out_root / "report.json").as_posix()),
             "handoff_md": str((out_root / "report.md").as_posix()),
         },
@@ -307,8 +393,15 @@ def render_markdown(report: dict[str, object]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def emit_outputs(*, report: dict[str, object], out_root: Path, markdown: bool) -> None:
+def emit_outputs(
+    *,
+    report: dict[str, object],
+    scan_reports: dict[str, dict[str, object]],
+    out_root: Path,
+    markdown: bool,
+) -> None:
     out_root.mkdir(parents=True, exist_ok=True)
+    _write_scan_artifacts(scan_reports, out_root)
     if markdown:
         (out_root / "report.md").write_text(render_markdown(report), encoding="utf-8")
     else:
@@ -334,20 +427,32 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     root = args.root.resolve()
     out_root = args.out_root.resolve()
+    scan_reports = _build_scan_reports(root)
     report = build_report(root=root, out_root=out_root)
     if args.check_artifacts:
+        required_scans = _scan_output_paths(out_root)
         required = (
-            root / COMM_SCAN_PATH,
-            root / IMPORT_SCAN_PATH,
-            root / SECURITY_SCAN_PATH,
+            required_scans["commercial_contamination"],
+            required_scans["forbidden_import"],
+            required_scans["security_sensitive_path"],
             out_root / "report.json",
             out_root / "report.md",
         )
         return 0 if all(path.exists() for path in required) else 1
     if args.markdown:
-        emit_outputs(report=report, out_root=out_root, markdown=True)
+        emit_outputs(
+            report=report,
+            scan_reports=scan_reports,
+            out_root=out_root,
+            markdown=True,
+        )
     else:
-        emit_outputs(report=report, out_root=out_root, markdown=False)
+        emit_outputs(
+            report=report,
+            scan_reports=scan_reports,
+            out_root=out_root,
+            markdown=False,
+        )
     return 0
 
 

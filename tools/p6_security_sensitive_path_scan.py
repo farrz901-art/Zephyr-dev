@@ -106,15 +106,27 @@ def load_rules(path: Path) -> list[RuleDict]:
     return _load_rules(path)
 
 
+def _has_skipped_relative_part(path: Path) -> bool:
+    return any(part in SKIP_DIRS for part in path.parts)
+
+
 def _iter_files(root: Path) -> list[Path]:
     files: list[Path] = []
     for dirpath, dirnames, filenames in os.walk(root, topdown=True):
-        dirnames[:] = [name for name in dirnames if name not in SKIP_DIRS]
         current_dir = Path(dirpath)
-        if any(part in SKIP_DIRS for part in current_dir.parts):
+        rel_dir = current_dir.relative_to(root)
+        if _has_skipped_relative_part(rel_dir):
             continue
+        dirnames[:] = [
+            name
+            for name in dirnames
+            if not _has_skipped_relative_part(rel_dir / name)
+        ]
         for filename in filenames:
-            files.append(current_dir / filename)
+            path = current_dir / filename
+            if _has_skipped_relative_part(path.relative_to(root)):
+                continue
+            files.append(path)
     return files
 
 

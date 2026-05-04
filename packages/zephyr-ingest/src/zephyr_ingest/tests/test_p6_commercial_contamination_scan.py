@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import cast
-from uuid import uuid4
 
 import pytest
 from tools import p6_commercial_contamination_scan as scan_tool
@@ -26,9 +25,9 @@ def _repo_root() -> Path:
     raise RuntimeError("Could not locate repository root from test file path")
 
 
-def _fixture_root(case_name: str) -> tuple[Path, Path]:
+def _fixture_root(tmp_path: Path, case_name: str) -> tuple[Path, Path]:
     repo_root = _repo_root()
-    root = repo_root / "codex_p6_scan_test_fixtures" / f"{case_name}_{uuid4().hex}" / "repo"
+    root = tmp_path / case_name / "repo"
     denylist_path = root / "docs/p6/commercial_contamination_denylist.json"
     denylist_path.parent.mkdir(parents=True, exist_ok=True)
     denylist_path.write_text(
@@ -36,6 +35,10 @@ def _fixture_root(case_name: str) -> tuple[Path, Path]:
         encoding="utf-8",
     )
     return root, denylist_path
+
+
+def _fixture_root_under_dot_tmp(tmp_path: Path, case_name: str) -> tuple[Path, Path]:
+    return _fixture_root(tmp_path / ".tmp" / "pytest" / case_name, case_name)
 
 
 def _load_report(root: Path, denylist_path: Path) -> scan_tool.ReportDict:
@@ -48,9 +51,13 @@ def _findings_for(report: scan_tool.ReportDict, term: str) -> list[dict[str, obj
     return [item for item in findings if item["term"] == term]
 
 
+def _path_of(finding: dict[str, object]) -> str:
+    return cast(str, finding["path"])
+
+
 @pytest.mark.auth_contract
-def test_boundary_docs_are_allowed_and_runtime_hits_can_block() -> None:
-    root, denylist_path = _fixture_root("boundary_allowed_blocked")
+def test_boundary_docs_are_allowed_and_runtime_hits_can_block(tmp_path: Path) -> None:
+    root, denylist_path = _fixture_root(tmp_path, "boundary_allowed_blocked")
     _write(root / "docs/p6/BOUNDARY.md", "billing\nlicense entitlement\nentitlement\n")
     _write(
         root / "PURE_CORE_BOUNDARY.md",
@@ -71,8 +78,8 @@ def test_boundary_docs_are_allowed_and_runtime_hits_can_block() -> None:
 
 
 @pytest.mark.auth_contract
-def test_negative_boundary_phrases_do_not_become_runtime_blockers() -> None:
-    root, denylist_path = _fixture_root("negative_boundary")
+def test_negative_boundary_phrases_do_not_become_runtime_blockers(tmp_path: Path) -> None:
+    root, denylist_path = _fixture_root(tmp_path, "negative_boundary")
     _write(
         root / "packages/app/src/usage_runtime.py",
         "\n".join(
@@ -98,8 +105,8 @@ def test_negative_boundary_phrases_do_not_become_runtime_blockers() -> None:
 
 
 @pytest.mark.auth_contract
-def test_skip_directories_are_not_scanned() -> None:
-    root, denylist_path = _fixture_root("skip_directories")
+def test_skip_directories_are_not_scanned(tmp_path: Path) -> None:
+    root, denylist_path = _fixture_root(tmp_path, "skip_directories")
     _write(root / ".tmp/blocked.py", "paid_user = True\n")
     _write(root / ".git/blocked.txt", "license_verify = True\n")
     _write(root / "node_modules/blocked.js", "quota decision\n")
@@ -109,8 +116,20 @@ def test_skip_directories_are_not_scanned() -> None:
 
 
 @pytest.mark.auth_contract
-def test_fail_on_blocker_and_output_generation() -> None:
-    root, denylist_path = _fixture_root("fail_on_blocker")
+def test_root_under_dot_tmp_still_scans_runtime_children(tmp_path: Path) -> None:
+    root, denylist_path = _fixture_root_under_dot_tmp(tmp_path, "root_under_dot_tmp")
+    _write(root / "packages/app/src/runtime.py", "paid_user = True\n")
+    _write(root / ".tmp/out/report.json", '{"paid_user": true}\n')
+    report = _load_report(root, denylist_path)
+    paid_user_hits = _findings_for(report, "paid_user")
+    assert paid_user_hits
+    assert any(_path_of(hit) == "packages/app/src/runtime.py" for hit in paid_user_hits)
+    assert all(not _path_of(hit).startswith(".tmp/") for hit in paid_user_hits)
+
+
+@pytest.mark.auth_contract
+def test_fail_on_blocker_and_output_generation(tmp_path: Path) -> None:
+    root, denylist_path = _fixture_root(tmp_path, "fail_on_blocker")
     _write(root / "packages/app/src/runtime.py", "paid_user = True\nquota decision = 1\n")
     json_out = root / ".tmp/out/report.json"
     md_out = root / ".tmp/out/report.md"
@@ -148,8 +167,8 @@ def test_fail_on_blocker_and_output_generation() -> None:
 
 
 @pytest.mark.auth_contract
-def test_tool_and_fixture_contexts_are_allowed() -> None:
-    root, denylist_path = _fixture_root("tool_and_fixture")
+def test_tool_and_fixture_contexts_are_allowed(tmp_path: Path) -> None:
+    root, denylist_path = _fixture_root(tmp_path, "tool_and_fixture")
     _write(root / "tools/p6_commercial_contamination_scan.py", 'TERM = "billing"\n')
     _write(root / "packages/x/src/x/tests/test_fixture.py", 'example = "not billing"\n')
     report = _load_report(root, denylist_path)
@@ -160,8 +179,10 @@ def test_tool_and_fixture_contexts_are_allowed() -> None:
 
 
 @pytest.mark.auth_contract
-def test_historical_docs_become_review_or_boundary_not_runtime_blockers() -> None:
-    root, denylist_path = _fixture_root("historical_docs")
+def test_historical_docs_become_review_or_boundary_not_runtime_blockers(
+    tmp_path: Path,
+) -> None:
+    root, denylist_path = _fixture_root(tmp_path, "historical_docs")
     _write(root / "docs/history.md", "billing and license entitlement are not claimed here\n")
     _write(root / "packages/app/src/usage_runtime.py", 'record = {"not_claimed": ["billing"]}\n')
     report = _load_report(root, denylist_path)
