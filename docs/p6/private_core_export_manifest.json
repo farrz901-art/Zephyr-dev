@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "report_id": "zephyr.p6.private_core_export_manifest.v1",
+  "target_consumers": [
+    "Zephyr-Pro",
+    "Zephyr-Web-core"
+  ],
+  "export_type": "private_core_subset_draft",
+  "allowed_exports": [
+    {
+      "id": "retained_connector_matrix_private_access",
+      "kind": "connector_surface",
+      "reason": "Pro/Web-core may use broader retained connector capabilities",
+      "stability": "candidate"
+    },
+    {
+      "id": "destination_evidence_private_tools",
+      "kind": "audit_tooling",
+      "reason": "private repos may use audit tooling for controlled product validation",
+      "stability": "candidate"
+    },
+    {
+      "id": "advanced_source_destination_orchestration",
+      "kind": "orchestration",
+      "reason": "private product surfaces may expose broader connector operations",
+      "stability": "candidate"
+    }
+  ],
+  "forbidden_exports": [
+    "payment provider secrets",
+    "license signing secrets",
+    "download signing keys",
+    "Web-core DB credentials",
+    "commercial decision code back into Zephyr-dev"
+  ]
+}

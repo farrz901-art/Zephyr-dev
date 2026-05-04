@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "report_id": "zephyr.p6.forbidden_import_map.v1",
+  "rules": [
+    {
+      "id": "zephyr_dev_must_not_import_downstream_product_repos",
+      "source_scope": "Zephyr-dev",
+      "source_paths": [
+        "packages/**",
+        "tools/**"
+      ],
+      "forbidden_patterns": [
+        "zephyr_base",
+        "zephyr_pro",
+        "zephyr_web",
+        "zephyr_web_core",
+        "zephyr_site",
+        "web_core.commercial",
+        "web_core.entitlement",
+        "pro.license",
+        "pro.activation"
+      ],
+      "severity": "blocker",
+      "reason": "Zephyr-dev pure core must not depend on downstream product or commercial repos."
+    },
+    {
+      "id": "public_repos_must_not_import_private_core",
+      "source_scope": "future_public_repos",
+      "source_paths": [
+        "Zephyr-base/**",
+        "Zephyr-Web/**",
+        "Zephyr-site/**"
+      ],
+      "forbidden_patterns": [
+        "private_core_export",
+        "web_core.internal",
+        "pro.private",
+        "commercial_control_plane",
+        "license_server",
+        "entitlement_server"
+      ],
+      "severity": "blocker",
+      "reason": "Public repos must not depend on private commercial internals."
+    },
+    {
+      "id": "pro_must_not_import_web_core_server_internals",
+      "source_scope": "future_private_pro_repo",
+      "source_paths": [
+        "Zephyr-Pro/**"
+      ],
+      "forbidden_patterns": [
+        "web_core.internal",
+        "payment_callback",
+        "quota_decision_server",
+        "risk_score_server"
+      ],
+      "severity": "blocker",
+      "reason": "Pro client can call Web-core APIs but must not import server internals."
+    }
+  ]
+}

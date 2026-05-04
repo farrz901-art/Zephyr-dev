@@ -1,0 +1,10 @@
+# CODEOWNERS draft for future downstream repos.
+# This file is documentation-only in P6-M1 and is not deployed as .github/CODEOWNERS.
+
+/docs/p6/* @zephyr-core-maintainers @zephyr-commercial-boundary
+/tools/p6_* @zephyr-core-maintainers @zephyr-commercial-boundary
+/future/web-core/entitlement/** @zephyr-security-review @zephyr-commercial-boundary
+/future/web-core/payment/** @zephyr-security-review @zephyr-commercial-boundary
+/future/web-core/download/** @zephyr-security-review @zephyr-commercial-boundary
+/future/pro/activation/** @zephyr-security-review @zephyr-commercial-boundary
+/future/pro/license/** @zephyr-security-review @zephyr-commercial-boundary

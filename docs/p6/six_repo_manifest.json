@@ -1,0 +1,199 @@
+{
+  "schema_version": 1,
+  "report_id": "zephyr.p6.six_repo_manifest.v1",
+  "baseline": {
+    "p5_1_final_sha": "b94e662a3792fd1a253d457bc1f73b38aefb33fd",
+    "p6_m1_s1_s6_sha": "76aba5e1ff0c0fe711cc688c8b84e3236be2a047"
+  },
+  "repos": [
+    {
+      "name": "Zephyr-dev",
+      "visibility": "private_or_internal_until_public_core_export",
+      "role": "pure_core_mother_repo",
+      "commercial_logic_allowed": false,
+      "commercial_logic_context": "forbidden_runtime_allowed_boundary_docs_only",
+      "allowed_responsibilities": [
+        "technical facts",
+        "runtime evidence",
+        "source/destination/backend contracts",
+        "DeliveryPayloadV1",
+        "content_evidence",
+        "readiness and evidence tooling",
+        "pure diagnostic facts"
+      ],
+      "forbidden_responsibilities": [
+        "payment",
+        "billing",
+        "license entitlement",
+        "account entitlement",
+        "quota decision",
+        "download authorization",
+        "update entitlement",
+        "risk/fraud decision",
+        "user account",
+        "RBAC"
+      ],
+      "may_depend_on": [],
+      "must_not_depend_on": [
+        "Zephyr-base",
+        "Zephyr-Pro",
+        "Zephyr-Web",
+        "Zephyr-Web-core",
+        "Zephyr-site"
+      ]
+    },
+    {
+      "name": "Zephyr-base",
+      "visibility": "public",
+      "role": "free_desktop_product",
+      "commercial_logic_allowed": false,
+      "commercial_logic_context": "no_license_no_paid_user_no_entitlement_decision",
+      "allowed_responsibilities": [
+        "Base desktop shell",
+        "local file flow",
+        "filesystem output",
+        "receipt and usage fact viewing",
+        "public update prompt"
+      ],
+      "forbidden_responsibilities": [
+        "license check",
+        "paid user decision",
+        "Pro-only private connector",
+        "Web-core internal logic",
+        "commercial API secrets"
+      ],
+      "may_depend_on": [
+        "public_core_export"
+      ],
+      "must_not_depend_on": [
+        "private_core_export",
+        "Zephyr-Pro",
+        "Zephyr-Web-core"
+      ]
+    },
+    {
+      "name": "Zephyr-Pro",
+      "visibility": "private",
+      "role": "paid_desktop_product",
+      "commercial_logic_allowed": "client_entitlement_calls_only",
+      "commercial_logic_context": "client_status_display_not_server_truth",
+      "allowed_responsibilities": [
+        "Pro desktop shell",
+        "Pro-only UI",
+        "entitlement client calls",
+        "license activation client",
+        "device status display",
+        "offline grace display",
+        "private connector integration"
+      ],
+      "forbidden_responsibilities": [
+        "primary commercial truth",
+        "billing decision",
+        "payment callback authority",
+        "server-side quota decision",
+        "risk/fraud authority"
+      ],
+      "may_depend_on": [
+        "public_core_export",
+        "private_core_export",
+        "Web-core public client API"
+      ],
+      "must_not_depend_on": [
+        "Web-core internal server modules"
+      ]
+    },
+    {
+      "name": "Zephyr-Web",
+      "visibility": "public",
+      "role": "web_frontend_shell",
+      "commercial_logic_allowed": "presentation_and_routing_only",
+      "commercial_logic_context": "display_not_authority",
+      "allowed_responsibilities": [
+        "login/register UI",
+        "dashboard UI",
+        "download page UI",
+        "purchase page UI",
+        "task submission UI",
+        "quota/status display"
+      ],
+      "forbidden_responsibilities": [
+        "commercial truth",
+        "payment callback verification",
+        "quota authority",
+        "download authorization",
+        "risk/fraud authority",
+        "private API secrets"
+      ],
+      "may_depend_on": [
+        "Web-core public API"
+      ],
+      "must_not_depend_on": [
+        "Web-core internal server modules",
+        "private_core_export"
+      ]
+    },
+    {
+      "name": "Zephyr-Web-core",
+      "visibility": "private",
+      "role": "commercial_control_plane",
+      "commercial_logic_allowed": true,
+      "commercial_logic_context": "only_repo_allowed_to_own_commercial_judgment",
+      "allowed_responsibilities": [
+        "user identity",
+        "orders",
+        "payment callbacks",
+        "entitlement",
+        "license",
+        "devices",
+        "controlled downloads",
+        "update authorization",
+        "usage ledger",
+        "quota ledger",
+        "API gate",
+        "risk events",
+        "audit logs"
+      ],
+      "forbidden_responsibilities": [
+        "leaking commercial internals to public repos",
+        "rewriting Zephyr-dev pure core runtime",
+        "normalizing commercial truth into core contracts"
+      ],
+      "may_depend_on": [
+        "private_core_export",
+        "public_core_export"
+      ],
+      "must_not_depend_on": []
+    },
+    {
+      "name": "Zephyr-site",
+      "visibility": "public",
+      "role": "site_brand_marketing",
+      "commercial_logic_allowed": "copy_links_and_public_pricing_display_only",
+      "commercial_logic_context": "marketing_not_authority",
+      "allowed_responsibilities": [
+        "homepage",
+        "product pages",
+        "pricing page",
+        "download CTA",
+        "purchase CTA",
+        "enterprise lead form",
+        "legal links",
+        "brand visual system"
+      ],
+      "forbidden_responsibilities": [
+        "payment callback authority",
+        "entitlement authority",
+        "private API secrets",
+        "unsupported P7 claims"
+      ],
+      "may_depend_on": [
+        "public Web links",
+        "public download links"
+      ],
+      "must_not_depend_on": [
+        "Web-core internal server modules",
+        "private_core_export"
+      ]
+    }
+  ]
+}

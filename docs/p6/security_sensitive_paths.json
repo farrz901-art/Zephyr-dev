@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "report_id": "zephyr.p6.security_sensitive_paths.v1",
+  "rules": [
+    {
+      "id": "zephyr_dev_boundary_docs",
+      "path_patterns": [
+        "docs/p6/**",
+        "PURE_CORE_BOUNDARY.md"
+      ],
+      "required_review": false,
+      "allowed_in_zephyr_dev": "boundary_docs_only",
+      "owner_hint": "security-owner-placeholder"
+    },
+    {
+      "id": "zephyr_dev_boundary_tooling",
+      "path_patterns": [
+        "tools/p6_*"
+      ],
+      "required_review": false,
+      "allowed_in_zephyr_dev": "tooling_only",
+      "owner_hint": "security-owner-placeholder"
+    },
+    {
+      "id": "future_web_core_sensitive",
+      "path_patterns": [
+        "Zephyr-Web-core/**/entitlement*",
+        "Zephyr-Web-core/**/payment*",
+        "Zephyr-Web-core/**/quota*",
+        "Zephyr-Web-core/**/download*",
+        "Zephyr-Web-core/**/update*",
+        "Zephyr-Web-core/**/risk*",
+        "Zephyr-Web-core/**/fraud*",
+        "Zephyr-Web-core/**/api_gate*"
+      ],
+      "required_review": true,
+      "allowed_in_zephyr_dev": "not_allowed_runtime",
+      "owner_hint": "security-owner-placeholder"
+    },
+    {
+      "id": "future_pro_sensitive",
+      "path_patterns": [
+        "Zephyr-Pro/**/activation*",
+        "Zephyr-Pro/**/license*",
+        "Zephyr-Pro/**/device*"
+      ],
+      "required_review": true,
+      "allowed_in_zephyr_dev": "not_allowed_runtime",
+      "owner_hint": "security-owner-placeholder"
+    },
+    {
+      "id": "current_runtime_sensitive_names",
+      "path_patterns": [
+        "packages/**/payment*",
+        "packages/**/license*",
+        "packages/**/entitlement*",
+        "packages/**/download_authorization*",
+        "packages/**/update_entitlement*",
+        "packages/**/risk*",
+        "packages/**/fraud*",
+        "packages/**/quota*"
+      ],
+      "required_review": true,
+      "allowed_in_zephyr_dev": "not_allowed_runtime",
+      "owner_hint": "security-owner-placeholder"
+    }
+  ]
+}

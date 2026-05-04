@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "report_id": "zephyr.p6.public_core_export_manifest.v1",
+  "target_consumers": [
+    "Zephyr-base",
+    "Zephyr-Web"
+  ],
+  "export_type": "public_core_subset_draft",
+  "allowed_exports": [
+    {
+      "id": "delivery_payload_v1_public_contract",
+      "kind": "contract",
+      "paths": [
+        "packages/zephyr-core/src/..."
+      ],
+      "reason": "public product shells may display processed payload metadata",
+      "stability": "stable_from_p5_1"
+    },
+    {
+      "id": "content_evidence_public_view",
+      "kind": "contract",
+      "paths": [
+        "packages/zephyr-core/src/..."
+      ],
+      "reason": "Base/Web can explain evidence without commercial judgment",
+      "stability": "stable_from_p5_1"
+    },
+    {
+      "id": "local_uns_document_flow",
+      "kind": "capability",
+      "paths": [
+        "bounded public subset only"
+      ],
+      "reason": "Base MVP+ local file flow",
+      "stability": "candidate"
+    },
+    {
+      "id": "filesystem_destination_public_subset",
+      "kind": "destination",
+      "paths": [
+        "bounded public subset only"
+      ],
+      "reason": "Base local output",
+      "stability": "candidate"
+    },
+    {
+      "id": "receipt_usage_fact_viewer",
+      "kind": "diagnostic",
+      "paths": [
+        "bounded public subset only"
+      ],
+      "reason": "usage fact display without billing",
+      "stability": "candidate"
+    },
+    {
+      "id": "error_taxonomy_public_view",
+      "kind": "diagnostic",
+      "paths": [
+        "bounded public subset only"
+      ],
+      "reason": "user-readable error diagnosis",
+      "stability": "candidate"
+    }
+  ],
+  "forbidden_exports": [
+    "private connectors",
+    "Pro-only feature switches",
+    "Web-core commercial internals",
+    "payment/entitlement/license/quota/risk decisions",
+    "secrets",
+    "commercial API keys",
+    "private runtime substrate secrets"
+  ]
+}

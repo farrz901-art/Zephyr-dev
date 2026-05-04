@@ -15,6 +15,7 @@
       "hard_gate": true,
       "touches_zephyr_dev_core": true,
       "touches_commercial_logic": false,
+      "commercial_logic_context": "forbidden_in_zephyr_dev_runtime",
       "runtime_home_modified": false,
       "ui_assets_required": false,
       "design_window_input_required": false
@@ -34,6 +35,7 @@
       "hard_gate": true,
       "touches_zephyr_dev_core": true,
       "touches_commercial_logic": false,
+      "commercial_logic_context": "forbidden_in_zephyr_dev_runtime",
       "runtime_home_modified": false,
       "ui_assets_required": false,
       "design_window_input_required": false
@@ -52,6 +54,7 @@
       "hard_gate": true,
       "touches_zephyr_dev_core": true,
       "touches_commercial_logic": true,
+      "commercial_logic_context": "boundary_documentation_or_guardrail_only",
       "runtime_home_modified": false,
       "ui_assets_required": false,
       "design_window_input_required": false
@@ -72,6 +75,7 @@
       "hard_gate": true,
       "touches_zephyr_dev_core": true,
       "touches_commercial_logic": false,
+      "commercial_logic_context": "forbidden_in_zephyr_dev_runtime",
       "runtime_home_modified": false,
       "ui_assets_required": false,
       "design_window_input_required": false
@@ -91,6 +95,7 @@
       "hard_gate": true,
       "touches_zephyr_dev_core": true,
       "touches_commercial_logic": true,
+      "commercial_logic_context": "boundary_documentation_or_guardrail_only",
       "runtime_home_modified": false,
       "ui_assets_required": false,
       "design_window_input_required": false
@@ -109,6 +114,7 @@
       "hard_gate": true,
       "touches_zephyr_dev_core": true,
       "touches_commercial_logic": true,
+      "commercial_logic_context": "boundary_documentation_or_guardrail_only",
       "runtime_home_modified": false,
       "ui_assets_required": false,
       "design_window_input_required": false
@@ -127,6 +133,120 @@
       "hard_gate": true,
       "touches_zephyr_dev_core": true,
       "touches_commercial_logic": false,
+      "commercial_logic_context": "forbidden_in_zephyr_dev_runtime",
+      "runtime_home_modified": false,
+      "ui_assets_required": false,
+      "design_window_input_required": false
+    },
+    {
+      "id": "P6-M1-S7",
+      "title": "Define six-repo manifest and repo-by-repo boundary",
+      "phase": "P6-M1",
+      "category": "must",
+      "depends_on": [
+        "P6-M1-S2",
+        "P6-M1-S3"
+      ],
+      "outputs": [
+        "docs/p6/six_repo_manifest.json",
+        "docs/p6/SIX_REPO_BOUNDARY.md"
+      ],
+      "hard_gate": true,
+      "touches_zephyr_dev_core": true,
+      "touches_commercial_logic": true,
+      "commercial_logic_context": "boundary_documentation_or_guardrail_only",
+      "runtime_home_modified": false,
+      "ui_assets_required": false,
+      "design_window_input_required": false
+    },
+    {
+      "id": "P6-M1-S8",
+      "title": "Define public and private export manifest drafts",
+      "phase": "P6-M1",
+      "category": "must",
+      "depends_on": [
+        "P6-M1-S7"
+      ],
+      "outputs": [
+        "docs/p6/public_core_export_manifest.json",
+        "docs/p6/private_core_export_manifest.json",
+        "docs/p6/PUBLIC_PRIVATE_EXPORT_BOUNDARY.md"
+      ],
+      "hard_gate": true,
+      "touches_zephyr_dev_core": true,
+      "touches_commercial_logic": true,
+      "commercial_logic_context": "boundary_documentation_or_guardrail_only",
+      "runtime_home_modified": false,
+      "ui_assets_required": false,
+      "design_window_input_required": false
+    },
+    {
+      "id": "P6-M1-S9",
+      "title": "Define forbidden downstream import map and scanner",
+      "phase": "P6-M1",
+      "category": "must",
+      "depends_on": [
+        "P6-M1-S7",
+        "P6-M1-S8"
+      ],
+      "outputs": [
+        "docs/p6/forbidden_import_map.json",
+        "tools/p6_forbidden_import_scan.py",
+        "focused forbidden-import tests"
+      ],
+      "hard_gate": true,
+      "touches_zephyr_dev_core": true,
+      "touches_commercial_logic": true,
+      "commercial_logic_context": "boundary_documentation_or_guardrail_only",
+      "runtime_home_modified": false,
+      "ui_assets_required": false,
+      "design_window_input_required": false
+    },
+    {
+      "id": "P6-M1-S10",
+      "title": "Define security review gate draft and sensitive path scan",
+      "phase": "P6-M1",
+      "category": "must",
+      "depends_on": [
+        "P6-M1-S7",
+        "P6-M1-S8",
+        "P6-M1-S9"
+      ],
+      "outputs": [
+        "docs/p6/SECURITY_REVIEW_REQUIRED.md",
+        "docs/p6/CODEOWNERS_DRAFT",
+        "docs/p6/security_sensitive_paths.json",
+        "tools/p6_security_sensitive_path_scan.py",
+        "focused security-path tests"
+      ],
+      "hard_gate": true,
+      "touches_zephyr_dev_core": true,
+      "touches_commercial_logic": true,
+      "commercial_logic_context": "boundary_documentation_or_guardrail_only",
+      "runtime_home_modified": false,
+      "ui_assets_required": false,
+      "design_window_input_required": false
+    },
+    {
+      "id": "P6-M1-S11",
+      "title": "Assemble P6-M1 final boundary handoff pack",
+      "phase": "P6-M1",
+      "category": "must",
+      "depends_on": [
+        "P6-M1-S7",
+        "P6-M1-S8",
+        "P6-M1-S9",
+        "P6-M1-S10"
+      ],
+      "outputs": [
+        "tools/p6_m1_boundary_handoff.py",
+        ".tmp/p6_m1_boundary_handoff/report.json",
+        ".tmp/p6_m1_boundary_handoff/report.md"
+      ],
+      "hard_gate": true,
+      "touches_zephyr_dev_core": true,
+      "touches_commercial_logic": true,
+      "commercial_logic_context": "boundary_documentation_or_guardrail_only",
       "runtime_home_modified": false,
       "ui_assets_required": false,
       "design_window_input_required": false
@@ -137,7 +257,7 @@
       "phase": "P6-M2",
       "category": "must",
       "depends_on": [
-        "P6-M1-S6"
+        "P6-M1-S11"
       ],
       "outputs": [
         "public export manifest spec",
@@ -146,6 +266,7 @@
       "hard_gate": true,
       "touches_zephyr_dev_core": true,
       "touches_commercial_logic": false,
+      "commercial_logic_context": "forbidden_in_zephyr_dev_runtime",
       "runtime_home_modified": false,
       "ui_assets_required": false,
       "design_window_input_required": false
@@ -165,6 +286,7 @@
       "hard_gate": true,
       "touches_zephyr_dev_core": false,
       "touches_commercial_logic": true,
+      "commercial_logic_context": "future_downstream_private_repo_only",
       "runtime_home_modified": false,
       "ui_assets_required": false,
       "design_window_input_required": false
@@ -186,6 +308,7 @@
       "hard_gate": true,
       "touches_zephyr_dev_core": false,
       "touches_commercial_logic": false,
+      "commercial_logic_context": "forbidden_in_zephyr_dev_runtime",
       "runtime_home_modified": false,
       "ui_assets_required": true,
       "design_window_input_required": true
@@ -208,6 +331,7 @@
       "hard_gate": true,
       "touches_zephyr_dev_core": false,
       "touches_commercial_logic": true,
+      "commercial_logic_context": "future_downstream_private_repo_only",
       "runtime_home_modified": false,
       "ui_assets_required": true,
       "design_window_input_required": true
@@ -228,6 +352,7 @@
       "hard_gate": true,
       "touches_zephyr_dev_core": false,
       "touches_commercial_logic": true,
+      "commercial_logic_context": "future_downstream_private_repo_only",
       "runtime_home_modified": false,
       "ui_assets_required": false,
       "design_window_input_required": false
@@ -247,6 +372,7 @@
       "hard_gate": true,
       "touches_zephyr_dev_core": false,
       "touches_commercial_logic": true,
+      "commercial_logic_context": "future_downstream_private_repo_only",
       "runtime_home_modified": false,
       "ui_assets_required": false,
       "design_window_input_required": false
@@ -270,6 +396,7 @@
       "hard_gate": true,
       "touches_zephyr_dev_core": false,
       "touches_commercial_logic": false,
+      "commercial_logic_context": "forbidden_in_zephyr_dev_runtime",
       "runtime_home_modified": false,
       "ui_assets_required": true,
       "design_window_input_required": true
@@ -292,6 +419,7 @@
       "hard_gate": true,
       "touches_zephyr_dev_core": false,
       "touches_commercial_logic": true,
+      "commercial_logic_context": "presentation_only_public_repo",
       "runtime_home_modified": false,
       "ui_assets_required": true,
       "design_window_input_required": true
@@ -314,6 +442,7 @@
       "hard_gate": true,
       "touches_zephyr_dev_core": false,
       "touches_commercial_logic": true,
+      "commercial_logic_context": "future_downstream_private_repo_only",
       "runtime_home_modified": false,
       "ui_assets_required": true,
       "design_window_input_required": true
@@ -339,6 +468,7 @@
       "hard_gate": true,
       "touches_zephyr_dev_core": false,
       "touches_commercial_logic": true,
+      "commercial_logic_context": "future_downstream_private_repo_only",
       "runtime_home_modified": false,
       "ui_assets_required": false,
       "design_window_input_required": false
@@ -359,6 +489,7 @@
       "hard_gate": true,
       "touches_zephyr_dev_core": false,
       "touches_commercial_logic": true,
+      "commercial_logic_context": "future_downstream_private_repo_only",
       "runtime_home_modified": false,
       "ui_assets_required": false,
       "design_window_input_required": false
@@ -377,6 +508,7 @@
       "hard_gate": false,
       "touches_zephyr_dev_core": false,
       "touches_commercial_logic": true,
+      "commercial_logic_context": "future_downstream_private_repo_only",
       "runtime_home_modified": false,
       "ui_assets_required": true,
       "design_window_input_required": true
