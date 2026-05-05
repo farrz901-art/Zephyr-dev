@@ -93,6 +93,13 @@ def _git_output(repo: Path, *args: str) -> str | None:
     return completed.stdout.strip()
 
 
+def _git_first_line(repo: Path, *args: str) -> str | None:
+    output = _git_output(repo, *args)
+    if not output:
+        return None
+    return output.splitlines()[0].strip()
+
+
 def _required_paths(base_root: Path) -> dict[str, Path]:
     return {
         "readme": base_root / "README.md",
@@ -115,11 +122,16 @@ def build_report(*, root: Path, base_root: Path) -> dict[str, object]:
     repo_exists = base_root.exists()
     repo_created = repo_exists and (base_root / ".git").exists()
     remote_url = _git_output(base_root, "remote", "get-url", "origin") if repo_created else None
-    initial_commit_sha = _git_output(base_root, "rev-parse", "HEAD") if repo_created else None
+    current_head_sha = _git_output(base_root, "rev-parse", "HEAD") if repo_created else None
+    initial_scaffold_commit_sha = (
+        _git_first_line(base_root, "rev-list", "--max-parents=0", "HEAD")
+        if repo_created
+        else None
+    )
     default_branch = (
         _git_output(base_root, "rev-parse", "--abbrev-ref", "HEAD") if repo_created else None
     )
-    pushed = bool(remote_url and initial_commit_sha)
+    pushed = bool(remote_url and current_head_sha)
     lineage_json = (
         _load_json_object(required_paths["source_lineage_json"])
         if required_paths["source_lineage_json"].exists()
@@ -187,7 +199,9 @@ def build_report(*, root: Path, base_root: Path) -> dict[str, object]:
             "repo_created": repo_created,
             "repo_url": remote_url,
             "pushed": pushed,
-            "initial_commit_sha": initial_commit_sha,
+            "initial_scaffold_commit_sha": initial_scaffold_commit_sha,
+            "current_head_sha": current_head_sha,
+            "initial_commit_sha": initial_scaffold_commit_sha,
             "default_branch": default_branch,
             "public_visibility": True if remote_url else None,
         },
@@ -261,7 +275,11 @@ def render_markdown(report: dict[str, object]) -> str:
         f"- repo_created: {repo['repo_created']}",
         f"- repo_url: {repo['repo_url']}",
         f"- pushed: {repo['pushed']}",
-        f"- initial_commit_sha: {repo['initial_commit_sha']}",
+        (
+            "- initial_scaffold_commit_sha: "
+            f"{repo['initial_scaffold_commit_sha']}"
+        ),
+        f"- current_head_sha: {repo['current_head_sha']}",
         f"- default_branch: {repo['default_branch']}",
         "",
         "## Source lineage",

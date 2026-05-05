@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "report_id": "zephyr.p6.m3.s4.public_core_entrypoint_audit.v1",
+  "summary": {
+    "real_entrypoint_found": true,
+    "recommended_entrypoint": "zephyr_ingest_local_run_path_via_local_file_source_and_uns_flow",
+    "can_process_local_file": true,
+    "can_process_local_text": true,
+    "can_emit_normalized_text": true,
+    "can_emit_content_evidence": true,
+    "can_emit_receipt": true,
+    "requires_p45_substrate": false,
+    "commercial_logic_required": false
+  },
+  "candidate_entrypoints": [
+    {
+      "id": "zephyr_ingest_cli_run",
+      "kind": "real_existing_core_path",
+      "path": "packages/zephyr-ingest/src/zephyr_ingest/cli.py",
+      "supports_local_file": true,
+      "supports_local_text_direct": false,
+      "notes": [
+        "Uses LocalFileSource for local path intake.",
+        "Routes into run_documents with uns as the default flow kind.",
+        "Can be wrapped for local_text through a temporary local file."
+      ]
+    },
+    {
+      "id": "zephyr_ingest_runner_run_documents",
+      "kind": "real_existing_core_path",
+      "path": "packages/zephyr-ingest/src/zephyr_ingest/runner.py",
+      "supports_local_file": true,
+      "supports_local_text_direct": false,
+      "notes": [
+        "Writes canonical run_meta, delivery_receipt, and usage_record artifacts.",
+        "Can be invoked by a thin S4 wrapper without re-implementing public core logic."
+      ]
+    },
+    {
+      "id": "zephyr_base_fixture_runner_s3",
+      "kind": "fixture_only_not_real_core",
+      "path": "Zephyr-base/public-core-bridge/run_public_core_fixture.py",
+      "supports_local_file": true,
+      "supports_local_text_direct": true,
+      "notes": [
+        "Regression fixture only.",
+        "Must not be counted as a real public-core entrypoint for S4."
+      ]
+    }
+  ],
+  "selected_entrypoint": {
+    "id": "zephyr_ingest_runner_run_documents_wrapper",
+    "real_entrypoint": "zephyr_ingest_local_run_path_via_LocalFileSource_and_UnsFlowProcessor",
+    "modules": [
+      "zephyr_ingest.runner",
+      "zephyr_ingest.sources.local_file",
+      "zephyr_ingest.destinations.filesystem",
+      "uns_stream.service"
+    ],
+    "local_text_bridge_mode": "temp_file_to_public_core",
+    "supported_input_extensions": [
+      ".txt",
+      ".md"
+    ],
+    "content_evidence_kind_strategy": "use_zephyr_delivery_content_evidence_helper"
+  },
+  "truthful_blockers": []
+}
