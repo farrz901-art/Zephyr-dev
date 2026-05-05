@@ -29,6 +29,11 @@ def _as_dict(value: object) -> dict[str, object]:
     return cast(dict[str, object], value)
 
 
+def _as_int(value: object) -> int:
+    assert isinstance(value, int)
+    return value
+
+
 def _write_json(path: Path, payload: dict[str, object]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -134,7 +139,7 @@ def test_base_boundary_gate_fails_on_commercial_blocker_fixture(tmp_path: Path) 
     )
     summary = _as_dict(report["summary"])
     assert summary["overall"] == "fail"
-    assert summary["active_blockers"] >= 1
+    assert _as_int(summary["active_blockers"]) >= 1
     assert summary["commercial_contamination_blockers"] == 1
 
 
