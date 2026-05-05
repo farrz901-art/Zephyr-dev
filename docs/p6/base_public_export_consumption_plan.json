@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "report_id": "zephyr.p6.m3.base_public_export_consumption_plan.v1",
+  "consumer_repo": "Zephyr-base",
+  "public_export_only": true,
+  "private_core_allowed": false,
+  "bridge_strategy": "json_artifact_or_process_bridge",
+  "python_core_runtime_owner": "Zephyr-dev public core subset",
+  "rust_tauri_owner": "desktop_shell_command_bridge_ui_orchestration",
+  "artifact_contracts": [
+    "base_run_request_v1",
+    "base_run_result_v1",
+    "base_receipt_view_v1",
+    "base_error_v1"
+  ],
+  "lineage_required": true,
+  "requires_p45_substrate": false,
+  "issues": []
+}

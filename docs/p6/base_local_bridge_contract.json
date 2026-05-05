@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "report_id": "zephyr.p6.m3.base_local_bridge_contract.v1",
+  "bridge_contract_version": "base_local_bridge_contract.v1",
+  "contracts": {
+    "base_run_request_v1": {
+      "schema_version": 1,
+      "request_id": "example-request-id",
+      "input_kind": "local_file|local_text",
+      "input_path": "path-or-inline-text-handle",
+      "output_dir": "local-output-dir",
+      "requested_outputs": [
+        "normalized_text",
+        "content_evidence",
+        "receipt",
+        "filesystem_output"
+      ]
+    },
+    "base_run_result_v1": {
+      "schema_version": 1,
+      "request_id": "example-request-id",
+      "status": "success|failed",
+      "normalized_text_preview": "safe preview only",
+      "content_evidence_summary": {
+        "elements_count": 0,
+        "has_normalized_text": true,
+        "evidence_kind": "content_evidence_summary"
+      },
+      "receipt": {
+        "run_id": "example-run-id",
+        "delivery_outcome": "success|failed",
+        "output_root": "local-output-dir"
+      },
+      "usage_fact": {
+        "fact_kind": "technical_usage_fact",
+        "billing_semantics": false
+      },
+      "output_files": [
+        "normalized_text.txt",
+        "content_evidence.json",
+        "receipt.json"
+      ],
+      "error": null
+    },
+    "base_receipt_view_v1": {
+      "schema_version": 1,
+      "receipt_id": "example-receipt-id",
+      "run_id": "example-run-id",
+      "delivery_outcome": "success|failed",
+      "output_dir": "local-output-dir",
+      "usage_fact": {
+        "billing_semantics": false
+      }
+    },
+    "base_error_v1": {
+      "schema_version": 1,
+      "error_code": "base_processing_error",
+      "category": "input|processing|filesystem|dependency|unknown",
+      "user_message": "A safe local-only error message.",
+      "technical_detail_safe": "Bounded technical detail without secrets.",
+      "secret_safe": true
+    }
+  }
+}
