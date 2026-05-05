@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "report_id": "zephyr.p6.m3.base_product_capability_manifest.v1",
+  "product": "Zephyr-base",
+  "desktop_stack": "tauri_rust_shell_web_ui",
+  "bridge_strategy": "json_artifact_or_process_bridge",
+  "base_local_only_default": true,
+  "requires_p45_substrate": false,
+  "public_core_required": true,
+  "private_core_allowed": false,
+  "license_allowed": false,
+  "entitlement_allowed": false,
+  "capabilities": [
+    {
+      "id": "local_file_input",
+      "kind": "input",
+      "status": "planned_m3"
+    },
+    {
+      "id": "local_text_input",
+      "kind": "input",
+      "status": "planned_m3"
+    },
+    {
+      "id": "normalized_text_preview",
+      "kind": "display",
+      "status": "planned_m3"
+    },
+    {
+      "id": "content_evidence_summary",
+      "kind": "display",
+      "status": "planned_m3"
+    },
+    {
+      "id": "receipt_display",
+      "kind": "display",
+      "status": "planned_m3"
+    },
+    {
+      "id": "usage_fact_display_non_billing",
+      "kind": "display",
+      "status": "planned_m3"
+    },
+    {
+      "id": "filesystem_output",
+      "kind": "output",
+      "status": "planned_m3"
+    },
+    {
+      "id": "error_diagnosis_panel",
+      "kind": "diagnostic",
+      "status": "planned_m3"
+    }
+  ],
+  "forbidden_capabilities": [
+    "license",
+    "entitlement",
+    "paid_user",
+    "web_core_api",
+    "private_core_export",
+    "cloud_processing",
+    "external_connector_ui",
+    "payment",
+    "quota_authority"
+  ],
+  "non_blocking_notes": [
+    "This manifest freezes Base boundary only and does not create a product repo.",
+    "Usage facts remain technical facts and must not be interpreted as billing."
+  ]
+}

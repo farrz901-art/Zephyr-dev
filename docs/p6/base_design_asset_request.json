@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "report_id": "zephyr.p6.m3.base_design_asset_request.v1",
+  "product": "Zephyr-base",
+  "design_window_input_required": true,
+  "visual_direction": {
+    "theme": "aerodynamic_zephyr_lines_wind_tunnel_cut_aesthetic",
+    "accent": "red",
+    "feel": "modern_enterprise_ai_productivity_desktop",
+    "forbidden_direction": "game_like"
+  },
+  "requested_assets": [
+    "welcome_screen",
+    "local_file_drag_drop_area",
+    "selected_file_state",
+    "progress_running_animation",
+    "success_result_page",
+    "normalized_text_preview_card",
+    "content_evidence_elements_summary_card",
+    "receipt_output_folder_card",
+    "usage_fact_non_billing_card",
+    "error_diagnosis_panel",
+    "empty_loading_success_failure_states",
+    "app_icon_draft"
+  ],
+  "design_tasks_count": 12,
+  "notes": [
+    "Codex does not generate final UI or animation assets in M3-0.",
+    "This request is a design-window handoff input only."
+  ]
+}
