@@ -18,9 +18,10 @@ Leaving those files in normal pytest collection makes Zephyr-dev CI depend on ex
 The following classes of files were moved to `validation/local_only/p6_m1_m3_base_product/`:
 
 - `tools/p6_m3_*` Base-product handoff and local product validation tools
-- `packages/zephyr-ingest/src/zephyr_ingest/tests/test_p6_m3_*` Base-product handoff tests
 
-These files remain in the repository only as historical local validation references. They are intentionally outside normal pytest collection.
+The `tools/p6_m3_*` files remain in the repository only as historical local validation references. They are intentionally outside normal pytest collection.
+
+The old `test_p6_m3_*` pytest-style Base-product copies are a stricter case: they may exist locally for workstation reference, but they do not belong in the remote GitHub repository. They are therefore kept as local-only files rather than tracked repository content.
 
 ## What was deleted
 
