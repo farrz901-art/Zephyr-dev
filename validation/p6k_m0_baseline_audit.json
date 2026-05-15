@@ -1,0 +1,627 @@
+{
+  "base_changed": false,
+  "baseline_sha": "d899f640cc9f084bc5457ea8ab725a4d4856d052",
+  "benchmark_plan": {
+    "expected_evidence": [
+      "Table",
+      "Image",
+      "Header",
+      "Footer",
+      "Form or FormKeysValues if locally supported",
+      "text_as_html",
+      "image_base64",
+      "image_mime_type",
+      "parent_id",
+      "more complete coordinates and layout metadata"
+    ],
+    "input_root": "E:\\Github_Projects\\Zephyr-zh-test",
+    "inputs": [
+      "fapiao.jpeg",
+      "fapiao2.jpg",
+      "fapiao3.jpg",
+      "hetong2-jiashuiyin.pdf"
+    ],
+    "output_root": "E:\\Github_Projects\\Zephyr-zh-test\\tmp",
+    "requires_path_to_exist_in_m0": false
+  },
+  "blockers": [
+    "Current environment is still on unstructured 0.21.5; M1 must handle 0.22.28 upgrade work.",
+    "Enhanced Partition Profiles are not implemented yet; M0 is audit-only by design.",
+    "PackageManifestV1 is not implemented yet; M2 is the first package-aware identity slice.",
+    "Airbyte-like structured sync contracts are not implemented yet; M4 is the first bounded it-stream hardening slice."
+  ],
+  "branch": "master",
+  "commercial_logic_added": false,
+  "current_head_sha": "d899f640cc9f084bc5457ea8ab725a4d4856d052",
+  "current_unstructured_version": "0.21.5",
+  "dependency_changed": false,
+  "next_milestone": "P6K-M1",
+  "report_id": "zephyr.dev.p6k.m0.baseline_audit.v1",
+  "repository": "Zephyr-dev",
+  "runtime_behavior_changed": false,
+  "schema_version": 1,
+  "sections": {
+    "S1_scope_roadmap_non_goals": {
+      "status": "pass"
+    },
+    "S2_unstructured_gap": {
+      "backend_passthrough_status": {
+        "http_api_alias_support_for_infer_table_structure": true,
+        "local_backend_kwargs": true,
+        "service_partition_kwargs": true,
+        "status": "backend passthrough exists in embryo form"
+      },
+      "base_public_core_risk": [
+        "Dependency and extras growth can enlarge Base bundle size if kernel changes are back-ported carelessly.",
+        "Metadata shape changes can break Base public-core compatibility wrappers.",
+        "Heavy profile defaults can unintentionally pull OCR, image, or PDF extras into Base."
+      ],
+      "benchmark_plan_for_m1": {
+        "expected_evidence": [
+          "Table",
+          "Image",
+          "Header",
+          "Footer",
+          "Form or FormKeysValues if locally supported",
+          "text_as_html",
+          "image_base64",
+          "image_mime_type",
+          "parent_id",
+          "more complete coordinates and layout metadata"
+        ],
+        "input_root": "E:\\Github_Projects\\Zephyr-zh-test",
+        "inputs": [
+          "fapiao.jpeg",
+          "fapiao2.jpg",
+          "fapiao3.jpg",
+          "hetong2-jiashuiyin.pdf"
+        ],
+        "output_root": "E:\\Github_Projects\\Zephyr-zh-test\\tmp",
+        "requires_path_to_exist_in_m0": false
+      },
+      "current_image_partition_signature": "(filename: 'Optional[str]' = None, file: 'Optional[IO[bytes]]' = None, include_page_breaks: 'bool' = False, infer_table_structure: 'bool' = False, ocr_languages: 'Optional[str]' = None, languages: 'Optional[list[str]]' = None, detect_language_per_element: 'bool' = False, strategy: 'str' = 'hi_res', metadata_last_modified: 'Optional[str]' = None, chunking_strategy: 'Optional[str]' = None, hi_res_model_name: 'Optional[str]' = None, extract_images_in_pdf: 'bool' = False, extract_image_block_types: 'Optional[list[str]]' = None, extract_image_block_output_dir: 'Optional[str]' = None, extract_image_block_to_payload: 'bool' = False, starting_page_number: 'int' = 1, extract_forms: 'bool' = False, form_extraction_skip_tables: 'bool' = True, password: 'Optional[str]' = None, **kwargs: 'Any') -> 'list[Element]'",
+      "current_partition_signature": "(filename: 'Optional[str]' = None, *, file: 'Optional[IO[bytes]]' = None, encoding: 'Optional[str]' = None, content_type: 'Optional[str]' = None, url: 'Optional[str]' = None, headers: 'dict[str, str]' = {}, ssl_verify: 'bool' = True, request_timeout: 'Optional[int]' = None, strategy: 'str' = 'auto', skip_infer_table_types: 'list[str]' = ['pdf', 'jpg', 'png', 'heic'], ocr_languages: 'Optional[str]' = None, languages: 'Optional[list[str]]' = None, detect_language_per_element: 'bool' = False, language_fallback: 'Optional[Callable[[str], Optional[list[str]]]]' = None, pdf_infer_table_structure: 'bool' = False, extract_images_in_pdf: 'bool' = False, extract_image_block_types: 'Optional[list[str]]' = None, extract_image_block_output_dir: 'Optional[str]' = None, extract_image_block_to_payload: 'bool' = False, data_source_metadata: 'Optional[DataSourceMetadata]' = None, metadata_filename: 'Optional[str]' = None, hi_res_model_name: 'Optional[str]' = None, model_name: 'Optional[str]' = None, starting_page_number: 'int' = 1, **kwargs: 'Any') -> 'list[Element]'",
+      "current_pdf_partition_signature": "(filename: 'Optional[str]' = None, file: 'Optional[IO[bytes]]' = None, include_page_breaks: 'bool' = False, strategy: 'str' = 'auto', infer_table_structure: 'bool' = False, ocr_languages: 'Optional[str]' = None, languages: 'Optional[list[str]]' = None, detect_language_per_element: 'bool' = False, metadata_last_modified: 'Optional[str]' = None, chunking_strategy: 'Optional[str]' = None, hi_res_model_name: 'Optional[str]' = None, extract_images_in_pdf: 'bool' = False, extract_image_block_types: 'Optional[list[str]]' = None, extract_image_block_output_dir: 'Optional[str]' = None, extract_image_block_to_payload: 'bool' = False, starting_page_number: 'int' = 1, extract_forms: 'bool' = False, form_extraction_skip_tables: 'bool' = True, password: 'Optional[str]' = None, pdfminer_line_margin: 'Optional[float]' = None, pdfminer_char_margin: 'Optional[float]' = None, pdfminer_line_overlap: 'Optional[float]' = None, pdfminer_word_margin: 'Optional[float]' = 0.185, **kwargs: 'Any') -> 'list[Element]'",
+      "current_unstructured_version": "0.21.5",
+      "judgment": {
+        "underlying_partition_is_existing_unstructured_capability": true,
+        "zephyr_should_implement_selective_enhanced_profiles": true,
+        "zephyr_should_not_change_vlm_or_ocr_only_route_in_m1": true,
+        "zephyr_should_not_default_enable_all_parameters": true,
+        "zephyr_should_not_rewrite_partition_backend": true,
+        "zephyr_should_preserve_governance_metadata": [
+          "run_id",
+          "pipeline_version",
+          "sha256",
+          "size_bytes",
+          "engine version",
+          "strategy",
+          "duration",
+          "warnings and retryability"
+        ]
+      },
+      "metadata_fields_explicitly_guarded_now": [
+        "is_extracted"
+      ],
+      "missing_cli_flags_for_m1": [
+        "--profile",
+        "--languages",
+        "--detect-language-per-element",
+        "--skip-infer-table-types",
+        "--extract-image-block-types",
+        "--extract-image-block-output-dir",
+        "--extract-image-block-to-payload",
+        "--hi-res-model-name",
+        "--starting-page-number",
+        "--pdf-infer-table-structure",
+        "--infer-table-structure"
+      ],
+      "missing_metadata_guards_for_m1": [
+        "text_as_html",
+        "image_base64",
+        "image_mime_type",
+        "parent_id",
+        "detection_class_prob",
+        "coordinates.system",
+        "layout_width",
+        "layout_height",
+        "page_number",
+        "filetype",
+        "filename",
+        "languages",
+        "data_source"
+      ],
+      "missing_profile_layer": true,
+      "missing_wrapper_params": [
+        "languages",
+        "detect_language_per_element",
+        "language_fallback",
+        "skip_infer_table_types",
+        "infer_table_structure",
+        "pdf_infer_table_structure",
+        "extract_image_block_types",
+        "extract_image_block_output_dir",
+        "extract_image_block_to_payload",
+        "data_source_metadata",
+        "metadata_filename",
+        "hi_res_model_name",
+        "model_name",
+        "starting_page_number",
+        "**kwargs"
+      ],
+      "parameter_layer_matrix": {
+        "**kwargs": {
+          "backend_can_pass_local": true,
+          "backend_can_pass_service": true,
+          "benchmark_plan_recorded": true,
+          "cli_exposed": false,
+          "metadata_preservation_guarded": false,
+          "profile_layer_defined": false,
+          "unstructured_partition_support": true,
+          "wrapper_exposed": false
+        },
+        "data_source_metadata": {
+          "backend_can_pass_local": true,
+          "backend_can_pass_service": true,
+          "benchmark_plan_recorded": true,
+          "cli_exposed": false,
+          "metadata_preservation_guarded": false,
+          "profile_layer_defined": false,
+          "unstructured_partition_support": true,
+          "wrapper_exposed": false
+        },
+        "detect_language_per_element": {
+          "backend_can_pass_local": true,
+          "backend_can_pass_service": true,
+          "benchmark_plan_recorded": true,
+          "cli_exposed": false,
+          "metadata_preservation_guarded": false,
+          "profile_layer_defined": false,
+          "unstructured_partition_support": true,
+          "wrapper_exposed": false
+        },
+        "extract_image_block_output_dir": {
+          "backend_can_pass_local": true,
+          "backend_can_pass_service": true,
+          "benchmark_plan_recorded": true,
+          "cli_exposed": false,
+          "metadata_preservation_guarded": false,
+          "profile_layer_defined": false,
+          "unstructured_partition_support": true,
+          "wrapper_exposed": false
+        },
+        "extract_image_block_to_payload": {
+          "backend_can_pass_local": true,
+          "backend_can_pass_service": true,
+          "benchmark_plan_recorded": true,
+          "cli_exposed": false,
+          "metadata_preservation_guarded": false,
+          "profile_layer_defined": false,
+          "unstructured_partition_support": true,
+          "wrapper_exposed": false
+        },
+        "extract_image_block_types": {
+          "backend_can_pass_local": true,
+          "backend_can_pass_service": true,
+          "benchmark_plan_recorded": true,
+          "cli_exposed": false,
+          "metadata_preservation_guarded": false,
+          "profile_layer_defined": false,
+          "unstructured_partition_support": true,
+          "wrapper_exposed": false
+        },
+        "hi_res_model_name": {
+          "backend_can_pass_local": true,
+          "backend_can_pass_service": true,
+          "benchmark_plan_recorded": true,
+          "cli_exposed": false,
+          "metadata_preservation_guarded": false,
+          "profile_layer_defined": false,
+          "unstructured_partition_support": true,
+          "wrapper_exposed": false
+        },
+        "infer_table_structure": {
+          "backend_can_pass_local": true,
+          "backend_can_pass_service": true,
+          "benchmark_plan_recorded": true,
+          "cli_exposed": false,
+          "metadata_preservation_guarded": false,
+          "profile_layer_defined": false,
+          "unstructured_partition_support": true,
+          "wrapper_exposed": false
+        },
+        "language_fallback": {
+          "backend_can_pass_local": true,
+          "backend_can_pass_service": true,
+          "benchmark_plan_recorded": true,
+          "cli_exposed": false,
+          "metadata_preservation_guarded": false,
+          "profile_layer_defined": false,
+          "unstructured_partition_support": true,
+          "wrapper_exposed": false
+        },
+        "languages": {
+          "backend_can_pass_local": true,
+          "backend_can_pass_service": true,
+          "benchmark_plan_recorded": true,
+          "cli_exposed": false,
+          "metadata_preservation_guarded": false,
+          "profile_layer_defined": false,
+          "unstructured_partition_support": true,
+          "wrapper_exposed": false
+        },
+        "metadata_filename": {
+          "backend_can_pass_local": true,
+          "backend_can_pass_service": true,
+          "benchmark_plan_recorded": true,
+          "cli_exposed": false,
+          "metadata_preservation_guarded": false,
+          "profile_layer_defined": false,
+          "unstructured_partition_support": true,
+          "wrapper_exposed": false
+        },
+        "model_name": {
+          "backend_can_pass_local": true,
+          "backend_can_pass_service": true,
+          "benchmark_plan_recorded": true,
+          "cli_exposed": false,
+          "metadata_preservation_guarded": false,
+          "profile_layer_defined": false,
+          "unstructured_partition_support": true,
+          "wrapper_exposed": false
+        },
+        "pdf_infer_table_structure": {
+          "backend_can_pass_local": true,
+          "backend_can_pass_service": true,
+          "benchmark_plan_recorded": true,
+          "cli_exposed": false,
+          "metadata_preservation_guarded": false,
+          "profile_layer_defined": false,
+          "unstructured_partition_support": true,
+          "wrapper_exposed": false
+        },
+        "skip_infer_table_types": {
+          "backend_can_pass_local": true,
+          "backend_can_pass_service": true,
+          "benchmark_plan_recorded": true,
+          "cli_exposed": false,
+          "metadata_preservation_guarded": false,
+          "profile_layer_defined": false,
+          "unstructured_partition_support": true,
+          "wrapper_exposed": false
+        },
+        "starting_page_number": {
+          "backend_can_pass_local": true,
+          "backend_can_pass_service": true,
+          "benchmark_plan_recorded": true,
+          "cli_exposed": false,
+          "metadata_preservation_guarded": false,
+          "profile_layer_defined": false,
+          "unstructured_partition_support": true,
+          "wrapper_exposed": false
+        }
+      },
+      "profile_plan_frozen_for_m1": {
+        "contract_profile": {
+          "detect_language_per_element": true,
+          "extract_image_block_to_payload": true,
+          "extract_image_block_types": [
+            "Image",
+            "Table"
+          ],
+          "languages": [
+            "zho",
+            "eng"
+          ],
+          "skip_infer_table_types": [],
+          "strategy": "auto or hi_res"
+        },
+        "default_profile": {
+          "policy": [
+            "preserve existing behavior as much as possible",
+            "do not turn on all heavy features by default"
+          ]
+        },
+        "html_heavy_profile": {
+          "extract_image_block_to_payload": true,
+          "extract_image_block_types": [
+            "Image",
+            "Table"
+          ],
+          "skip_infer_table_types": [],
+          "strategy": "hi_res or auto"
+        },
+        "invoice_profile": {
+          "extract_image_block_to_payload": true,
+          "extract_image_block_types": [
+            "Image",
+            "Table"
+          ],
+          "languages": [
+            "zho",
+            "eng"
+          ],
+          "skip_infer_table_types": [],
+          "strategy": "hi_res or auto"
+        },
+        "zh_profile": {
+          "detect_language_per_element": true,
+          "languages": [
+            "zho",
+            "eng"
+          ]
+        }
+      },
+      "report_id": "zephyr.dev.p6k.m0.unstructured_02228_gap.v1",
+      "schema_version": 1,
+      "status": "pass",
+      "target_unstructured_version": "0.22.28",
+      "upgrade_risks": [
+        "Current environment is still on unstructured 0.21.5, not 0.22.28.",
+        "auto.partition exposes richer parameters than Zephyr wrapper surface currently exports.",
+        "metadata normalization currently allows extras but explicit preservation tests do not protect target fields.",
+        "CLI does not yet expose enhanced partition profile controls.",
+        "No benchmark evidence is frozen yet for Chinese invoice and contract samples."
+      ],
+      "wrapper_exposed_params": [
+        "filename",
+        "strategy",
+        "unique_element_ids",
+        "backend",
+        "run_id",
+        "pipeline_version",
+        "sha256",
+        "size_bytes"
+      ]
+    },
+    "S3_package_manifest_gap": {
+      "collision_risks": [
+        "Current artifact layout is rooted by sha256, so the same content processed under multiple profiles or strategies can collide.",
+        "Delivery payload does not distinguish artifact kinds with stable artifact IDs.",
+        "Destination replay can identify a run, but not a package graph with per-node outputs."
+      ],
+      "current_artifacts": {
+        "it": [
+          "records.jsonl",
+          "checkpoint.json",
+          "logs.jsonl",
+          "run_meta.json",
+          "delivery_receipt.json",
+          "batch_report.json"
+        ],
+        "shared_content_evidence": true,
+        "uns": [
+          "elements.json",
+          "normalized.txt",
+          "run_meta.json",
+          "delivery_receipt.json",
+          "batch_report.json"
+        ]
+      },
+      "current_delivery_payload_v1": {
+        "artifacts_paths_v1": [
+          "out_dir",
+          "run_meta_path",
+          "elements_path",
+          "normalized_path",
+          "records_path?",
+          "state_path?",
+          "logs_path?"
+        ],
+        "fields": [
+          "schema_version",
+          "sha256",
+          "run_meta",
+          "artifacts",
+          "content_evidence"
+        ],
+        "schema_version": 1
+      },
+      "delivery_payload_compatibility_issue": "DeliveryPayloadV1 points at artifact paths and summary evidence, but it cannot describe multiple package-scoped artifacts or stable node-level identities.",
+      "missing_package_manifest_concepts": [
+        "package_id",
+        "artifact_id",
+        "workflow_id",
+        "node_id",
+        "source_id",
+        "profile",
+        "strategy_identity",
+        "package_manifest.json",
+        "artifact_descriptors",
+        "package_run_meta",
+        "node_output_identity",
+        "package_aware_content_evidence"
+      ],
+      "p6k_m2_expected_scope": [
+        "PackageManifestV1",
+        "package_id and artifact descriptors",
+        "strategy and profile identity",
+        "package-aware content evidence"
+      ],
+      "report_id": "zephyr.dev.p6k.m0.package_manifest_gap.v1",
+      "schema_version": 1,
+      "status": "pass"
+    },
+    "S4_it_stream_airbyte_gap": {
+      "can_be_done_before_batch_workflow_runtime": [
+        "Typed structured sync contracts",
+        "Per-stream state model",
+        "Catalog and discover plan",
+        "Read envelope normalization"
+      ],
+      "closest_existing_sources": [
+        "http_json_cursor_v1",
+        "postgresql_incremental_v1",
+        "clickhouse_incremental_v1",
+        "kafka_partition_offset_v1",
+        "mongodb_incremental_v1",
+        "airbyte-message-json bounded subset"
+      ],
+      "current_supported_concepts": [
+        "ConnectorSpecV1 exists as a generic Zephyr connector field spec, not an Airbyte-like sync protocol.",
+        "airbyte-message-json subset currently accepts RECORD, STATE, and LOG messages.",
+        "Single-stream bounded message normalization exists in it-stream service.",
+        "Checkpoint and resume semantics exist for bounded cursor/token/page/state_dict progress kinds.",
+        "Existing bounded source lanes include http_json_cursor_v1, postgresql_incremental_v1, clickhouse_incremental_v1, kafka_partition_offset_v1, and mongodb_incremental_v1.",
+        "Current artifacts include records.jsonl, checkpoint.json, and logs.jsonl."
+      ],
+      "missing_concepts": [
+        "DiscoverResultV1",
+        "CatalogV1",
+        "ReadProtocolV1",
+        "TRACE support",
+        "ERROR support as a first-class message type",
+        "Per-stream state contract",
+        "Per-slice checkpoint contract",
+        "Schema evolution policy",
+        "Normalization plan",
+        "Multi-stream read catalog and selection semantics"
+      ],
+      "must_wait_until_package_or_runtime_layers": [
+        "Package-aware artifact identity across multi-node workflows",
+        "Workflow-level normalization outputs",
+        "Destination package-aware delivery fanout"
+      ],
+      "p2b_minimum_scope": [
+        "Bounded ConnectorSpecV1 to DiscoverResultV1 to CatalogV1 contract line",
+        "Typed RECORD/STATE/LOG/TRACE/ERROR read envelope subset",
+        "Per-stream state and per-slice checkpoint model",
+        "Schema evolution and normalization planning hooks",
+        "Retry and recovery semantics aligned with current it-stream checkpoint ownership"
+      ],
+      "report_id": "zephyr.dev.p6k.m0.it_stream_airbyte_gap.v1",
+      "schema_version": 1,
+      "status": "pass"
+    },
+    "S5_destination_package_mapping_gap": {
+      "destinations": {
+        "clickhouse": {
+          "content_evidence_carried": true,
+          "current_behavior": "Appends one row with identity key and payload_json.",
+          "future_mapping": "package/artifact/element or chunk tables keyed by package_id and artifact_id",
+          "mapping_change_level": "needs_mapping_change",
+          "package_mapping_exists": false
+        },
+        "filesystem": {
+          "content_evidence_carried": "local artifact files only",
+          "current_behavior": "Writes artifact directory rooted by sha256; does not emit DeliveryPayloadV1 externally.",
+          "future_mapping": "package_id/manifest.json plus package-scoped artifact files",
+          "mapping_change_level": "direct_compatible",
+          "package_mapping_exists": false
+        },
+        "kafka": {
+          "content_evidence_carried": true,
+          "current_behavior": "Publishes DeliveryPayloadV1 JSON with key based on delivery identity.",
+          "future_mapping": "key=package_id:artifact_id with package envelope or artifact event",
+          "mapping_change_level": "direct_compatible",
+          "package_mapping_exists": false
+        },
+        "loki": {
+          "content_evidence_carried": true,
+          "current_behavior": "Pushes one payload JSON line with delivery labels.",
+          "future_mapping": "package event labels plus artifact event JSON log line",
+          "mapping_change_level": "direct_compatible",
+          "package_mapping_exists": false
+        },
+        "mongodb": {
+          "content_evidence_carried": true,
+          "current_behavior": "Upserts one document keyed by delivery identity with nested payload.",
+          "future_mapping": "package and artifact documents keyed by package_id and artifact_id",
+          "mapping_change_level": "needs_mapping_change",
+          "package_mapping_exists": false
+        },
+        "opensearch": {
+          "content_evidence_carried": true,
+          "current_behavior": "Indexes a document containing delivery_identity and nested payload.",
+          "future_mapping": "doc id = package_id:artifact_id or chunk id with package metadata",
+          "mapping_change_level": "needs_mapping_change",
+          "package_mapping_exists": false
+        },
+        "s3": {
+          "content_evidence_carried": true,
+          "current_behavior": "Writes one DeliveryPayloadV1 JSON object keyed by idempotency key.",
+          "future_mapping": "prefix by package_id with manifest and artifact objects",
+          "mapping_change_level": "direct_compatible",
+          "package_mapping_exists": false
+        },
+        "sqlite": {
+          "content_evidence_carried": true,
+          "current_behavior": "Upserts one row with payload_json keyed by delivery identity.",
+          "future_mapping": "package/artifact tables or compatibility wrapper over payload_json",
+          "mapping_change_level": "needs_mapping_change",
+          "package_mapping_exists": false
+        },
+        "weaviate": {
+          "content_evidence_carried": "partial",
+          "current_behavior": "Indexes one object from result summary fields, not the full payload.",
+          "future_mapping": "chunk-level objects with package metadata and artifact lineage",
+          "mapping_change_level": "needs_mapping_change",
+          "package_mapping_exists": false
+        },
+        "webhook": {
+          "content_evidence_carried": true,
+          "current_behavior": "POSTs DeliveryPayloadV1 to a single endpoint.",
+          "future_mapping": "package envelope or artifact event webhook shape",
+          "mapping_change_level": "direct_compatible",
+          "package_mapping_exists": false
+        }
+      },
+      "direct_compatible": [
+        "filesystem",
+        "kafka",
+        "loki",
+        "s3",
+        "webhook"
+      ],
+      "needs_mapping_changes": [
+        "clickhouse",
+        "mongodb",
+        "opensearch",
+        "sqlite",
+        "weaviate"
+      ],
+      "report_id": "zephyr.dev.p6k.m0.destination_package_mapping_gap.v1",
+      "schema_version": 1,
+      "status": "pass"
+    },
+    "S6_base_non_regression_boundary": {
+      "base_facts_to_preserve": {
+        "first_slice_formats": [
+          ".txt",
+          ".md"
+        ],
+        "local_only": true,
+        "non_commercial": true,
+        "public": true,
+        "public_core_bundle_bounded": true,
+        "requires_p45_substrate": false,
+        "requires_pro_private_core": false,
+        "requires_web_core": false
+      },
+      "judgment": {
+        "base_changed_in_m0": false,
+        "base_should_not_be_forced_into_package_manifest_output": true,
+        "base_should_not_require_unstructured_all_docs_or_pdf_image_extras_by_default": true,
+        "commercial_logic_added": false
+      },
+      "report_id": "zephyr.dev.p6k.m0.base_non_regression_boundary.v1",
+      "risks": {
+        "artifact_layout_compatibility": "Package-aware artifact layouts can break Base-compatible path expectations unless wrapped.",
+        "base_installer_runtime_packaging": "Future package manifest and heavy dependency layers must remain optional so Base portable packaging stays bounded.",
+        "base_runtime_size": "Additional partition extras and future nodes can inflate Base runtime size and installer footprint.",
+        "metadata_output_shape": "Richer metadata can change normalized output shape and public-core serialization assumptions.",
+        "profile_heavy_deps": "Enhanced profiles can imply OCR, PDF, image, or layout extras that Base must not absorb automatically.",
+        "public_core_export_surface": "Core export APIs must remain bounded so Base does not start depending on P6K-only kernel layers.",
+        "unstructured_02228_dependency_and_extras": "Kernel upgrade work can pull heavier extras and native dependencies that Base must not inherit by default."
+      },
+      "schema_version": 1,
+      "status": "pass"
+    },
+    "S7_execution_plan": {
+      "status": "pass"
+    }
+  },
+  "status": "pass",
+  "target_unstructured_version": "0.22.28",
+  "uv_lock_changed": false
+}

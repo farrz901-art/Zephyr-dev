@@ -1,0 +1,398 @@
+{
+  "baseline_sha": "d899f640cc9f084bc5457ea8ab725a4d4856d052",
+  "branch": "master",
+  "milestones": [
+    {
+      "completion_criteria": [
+        "Current kernel baseline is documented",
+        "Unstructured 0.22.28 gap is documented without runtime change",
+        "PackageManifest, it-stream, destination, and Base boundaries are documented"
+      ],
+      "deliverables": [
+        "P6K scope, roadmap, non-goal, and execution-plan docs",
+        "Gap audit tools and validation JSON outputs",
+        "Aggregate baseline audit report"
+      ],
+      "dependencies": [],
+      "input_prerequisites": [
+        "P6 M1-M3 complete",
+        "No dependency upgrade in scope"
+      ],
+      "milestone": "P6K-M0",
+      "non_goals": [
+        "No runtime implementation",
+        "No CLI enhancement",
+        "No dependency upgrade"
+      ],
+      "objective": "Freeze the current Zephyr-dev kernel baseline and the next-step hardening plan.",
+      "parallelizable": false,
+      "risk": "Audit can drift if later milestones change implementation without updating the frozen baseline.",
+      "title": "Baseline Audit"
+    },
+    {
+      "completion_criteria": [
+        "Selective enhanced profiles work",
+        "Governance metadata is preserved",
+        "Base regression boundary remains intact"
+      ],
+      "deliverables": [
+        "Version upgrade and compatibility layer",
+        "Profile selection layer",
+        "CLI flags for enhanced partition parameters",
+        "Metadata preservation tests"
+      ],
+      "dependencies": [
+        "P6K-M0"
+      ],
+      "input_prerequisites": [
+        "P6K-M0 audit approved",
+        "Benchmark input path recorded"
+      ],
+      "milestone": "P6K-M1",
+      "non_goals": [
+        "No PackageManifest yet",
+        "No workflow runtime yet",
+        "No commercial logic"
+      ],
+      "objective": "Upgrade to unstructured 0.22.28 and add selective enhanced partition profiles.",
+      "parallelizable": false,
+      "risk": "Version and metadata-shape drift can regress Base bundle compatibility if not bounded.",
+      "title": "Unstructured 0.22.28 Enhanced Partition Profile"
+    },
+    {
+      "completion_criteria": [
+        "Artifact identity collision risk is removed",
+        "Destination mapping can consume package-aware descriptors"
+      ],
+      "deliverables": [
+        "PackageManifestV1",
+        "package_id and artifact descriptor model",
+        "package-aware content evidence plan"
+      ],
+      "dependencies": [
+        "P6K-M1"
+      ],
+      "input_prerequisites": [
+        "P6K-M1 partition outputs stabilized"
+      ],
+      "milestone": "P6K-M2",
+      "non_goals": [
+        "No destination remap yet",
+        "No workflow runtime yet"
+      ],
+      "objective": "Add package-aware artifact identity without changing commercial boundaries.",
+      "parallelizable": false,
+      "risk": "Artifact layout changes can break replay and Base compatibility if wrapper paths are not preserved.",
+      "title": "PackageManifestV1 / package_id / artifact descriptors"
+    },
+    {
+      "completion_criteria": [
+        "Expected element classes appear",
+        "Metadata richness improves on target samples"
+      ],
+      "deliverables": [
+        "Benchmark scripts",
+        "Evidence snapshots",
+        "Regression summary"
+      ],
+      "dependencies": [
+        "P6K-M1"
+      ],
+      "input_prerequisites": [
+        "P6K-M1 complete",
+        "Benchmark samples available locally"
+      ],
+      "milestone": "P6K-M3",
+      "non_goals": [
+        "No new runtime surface beyond M1"
+      ],
+      "objective": "Benchmark enhanced partition behavior against planned Chinese invoice and contract samples.",
+      "parallelizable": true,
+      "risk": "Sample variance can hide regressions if evidence is not normalized.",
+      "title": "Partitioner enhanced profiles real benchmark"
+    },
+    {
+      "completion_criteria": [
+        "Airbyte-like subset is explicit",
+        "No uncontrolled runtime expansion occurs"
+      ],
+      "deliverables": [
+        "Structured sync contract layer",
+        "Per-stream/per-slice state model",
+        "Bounded retry and recovery semantics"
+      ],
+      "dependencies": [
+        "P6K-M0"
+      ],
+      "input_prerequisites": [
+        "P6K-M0 gap audit",
+        "Checkpoint semantics remain bounded"
+      ],
+      "milestone": "P6K-M4",
+      "non_goals": [
+        "No batch workflow runtime yet",
+        "No SaaS sync platform behavior"
+      ],
+      "objective": "Add bounded Airbyte-like structured sync semantics on the existing it-stream path.",
+      "parallelizable": false,
+      "risk": "Broadening into consumer-group or platform semantics would violate current it-stream boundaries.",
+      "title": "it-stream Airbyte-like structured sync hardening"
+    },
+    {
+      "completion_criteria": [
+        "Each retained destination has a package-aware mapping plan",
+        "Replay and delivery contracts remain bounded"
+      ],
+      "deliverables": [
+        "Destination-specific mapping rules",
+        "Schema/index/table/key migration plan",
+        "Compatibility wrappers where needed"
+      ],
+      "dependencies": [
+        "P6K-M2"
+      ],
+      "input_prerequisites": [
+        "P6K-M2"
+      ],
+      "milestone": "P6K-M5",
+      "non_goals": [
+        "No new destination families"
+      ],
+      "objective": "Map future package-aware artifacts into retained destinations.",
+      "parallelizable": true,
+      "risk": "Destination schema churn can fragment replay and inspection surfaces.",
+      "title": "Package-aware destination mapping"
+    },
+    {
+      "completion_criteria": [
+        "HTML node is bounded and package-aware"
+      ],
+      "deliverables": [
+        "HTML node contract",
+        "Artifact mapping",
+        "Node-level tests"
+      ],
+      "dependencies": [
+        "P6K-M2"
+      ],
+      "input_prerequisites": [
+        "P6K-M2"
+      ],
+      "milestone": "P6K-M6",
+      "non_goals": [
+        "No public Base HTML support"
+      ],
+      "objective": "Add an internal HTML composition node after package-aware artifacts exist.",
+      "parallelizable": true,
+      "risk": "HTML behavior can blur kernel vs product boundaries if surfaced too early.",
+      "title": "HTML Composer Node"
+    },
+    {
+      "completion_criteria": [
+        "Chunk artifacts are package-aware and replay-safe"
+      ],
+      "deliverables": [
+        "ZephyrChunk contract",
+        "Chunker node",
+        "Chunk artifact descriptors"
+      ],
+      "dependencies": [
+        "P6K-M2"
+      ],
+      "input_prerequisites": [
+        "P6K-M2"
+      ],
+      "milestone": "P6K-M7",
+      "non_goals": [
+        "No vector DB product layer"
+      ],
+      "objective": "Add typed chunk artifacts for downstream embed/search work.",
+      "parallelizable": true,
+      "risk": "Chunk identity drift can multiply collision and replay complexity.",
+      "title": "Chunker Node + ZephyrChunk"
+    },
+    {
+      "completion_criteria": [
+        "Embeddings are typed, package-aware, and optional"
+      ],
+      "deliverables": [
+        "EmbeddingProvider interface",
+        "Embedder node",
+        "Embedding artifacts"
+      ],
+      "dependencies": [
+        "P6K-M7"
+      ],
+      "input_prerequisites": [
+        "P6K-M7"
+      ],
+      "milestone": "P6K-M8",
+      "non_goals": [
+        "No Pro billing or quota logic"
+      ],
+      "objective": "Add core embedding provider abstractions without commercial gating.",
+      "parallelizable": false,
+      "risk": "Heavy dependency and model-surface creep can violate Base non-regression boundaries.",
+      "title": "Embedder Node + EmbeddingProvider"
+    },
+    {
+      "completion_criteria": [
+        "Workflow execution remains bounded and replayable"
+      ],
+      "deliverables": [
+        "Workflow model",
+        "Node execution chain",
+        "Batch runtime minimum"
+      ],
+      "dependencies": [
+        "P6K-M2",
+        "P6K-M6",
+        "P6K-M7",
+        "P6K-M8"
+      ],
+      "input_prerequisites": [
+        "P6K-M2",
+        "P6K-M6",
+        "P6K-M7",
+        "P6K-M8"
+      ],
+      "milestone": "P6K-M9",
+      "non_goals": [
+        "No SaaS orchestration plane"
+      ],
+      "objective": "Introduce the minimum workflow runtime after node and package primitives exist.",
+      "parallelizable": false,
+      "risk": "Runtime expansion can reopen orchestration boundaries if introduced before package identity is stable.",
+      "title": "Batch Workflow Runtime minimum"
+    },
+    {
+      "completion_criteria": [
+        "Kernel surfaces are stable and product-facing layers remain external"
+      ],
+      "deliverables": [
+        "Stable SDK/API surfaces",
+        "Compatibility wrappers",
+        "Integration guidance"
+      ],
+      "dependencies": [
+        "P6K-M9"
+      ],
+      "input_prerequisites": [
+        "P6K-M9"
+      ],
+      "milestone": "P6K-M10",
+      "non_goals": [
+        "No Web-core entitlement or billing in Zephyr-dev"
+      ],
+      "objective": "Expose the hardened kernel to future Pro/Web product layers without commercial logic in Zephyr-dev.",
+      "parallelizable": false,
+      "risk": "Surface leakage can collapse kernel and commercial boundaries.",
+      "title": "Pro/Web SDK/API surface"
+    },
+    {
+      "completion_criteria": [
+        "Benchmark evidence is reproducible and versioned"
+      ],
+      "deliverables": [
+        "Benchmark suite",
+        "Evidence matrix",
+        "Regression thresholds"
+      ],
+      "dependencies": [
+        "P6K-M1",
+        "P6K-M3"
+      ],
+      "input_prerequisites": [
+        "P6K-M1",
+        "P6K-M3"
+      ],
+      "milestone": "P6K-M11",
+      "non_goals": [
+        "No product feature expansion"
+      ],
+      "objective": "Expand benchmark coverage with Chinese-focused document samples and evidence capture.",
+      "parallelizable": true,
+      "risk": "Benchmark sprawl can turn into a hidden runtime contract if not scoped.",
+      "title": "Chinese benchmark suite"
+    },
+    {
+      "completion_criteria": [
+        "Provider layer is typed, optional, and non-commercial"
+      ],
+      "deliverables": [
+        "Provider interfaces",
+        "Extract/NER/table-description nodes"
+      ],
+      "dependencies": [
+        "P6K-M9"
+      ],
+      "input_prerequisites": [
+        "P6K-M9"
+      ],
+      "milestone": "P6K-M12",
+      "non_goals": [
+        "No billing or entitlement logic"
+      ],
+      "objective": "Add bounded AI extraction provider contracts after workflow primitives exist.",
+      "parallelizable": true,
+      "risk": "Model-provider coupling can leak product policy into the kernel.",
+      "title": "LLMProvider / Extract / NER / Table Description"
+    },
+    {
+      "completion_criteria": [
+        "Fallback remains experimental and optional"
+      ],
+      "deliverables": [
+        "Experiment harness",
+        "Evidence summary",
+        "Boundary assessment"
+      ],
+      "dependencies": [
+        "P6K-M1",
+        "P6K-M12"
+      ],
+      "input_prerequisites": [
+        "P6K-M1",
+        "P6K-M12"
+      ],
+      "milestone": "P6K-M13",
+      "non_goals": [
+        "No default OCR route change"
+      ],
+      "objective": "Run a bounded OCR fallback experiment without changing the default runtime path.",
+      "parallelizable": true,
+      "risk": "Experimental OCR can silently broaden dependency and runtime surfaces.",
+      "title": "DeepSeek-OCR2 fallback experiment"
+    },
+    {
+      "completion_criteria": [
+        "Feishu sources fit existing flow ownership rules"
+      ],
+      "deliverables": [
+        "Feishu source contracts",
+        "Flow-specific adapters",
+        "Focused tests"
+      ],
+      "dependencies": [
+        "P6K-M4",
+        "P6K-M9"
+      ],
+      "input_prerequisites": [
+        "P6K-M4",
+        "P6K-M9"
+      ],
+      "milestone": "P6K-M14",
+      "non_goals": [
+        "No SaaS workspace sync platform"
+      ],
+      "objective": "Add bounded Feishu document and structured sources after prior kernel layers are ready.",
+      "parallelizable": false,
+      "risk": "Feishu source breadth can blur structured vs document flow boundaries.",
+      "title": "Feishu UNS + IT sources"
+    }
+  ],
+  "next_milestone": "P6K-M1",
+  "report_id": "zephyr.dev.p6k.m0.execution_plan.v1",
+  "repository": "Zephyr-dev",
+  "schema_version": 1
+}

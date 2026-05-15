@@ -1,0 +1,51 @@
+{
+  "can_be_done_before_batch_workflow_runtime": [
+    "Typed structured sync contracts",
+    "Per-stream state model",
+    "Catalog and discover plan",
+    "Read envelope normalization"
+  ],
+  "closest_existing_sources": [
+    "http_json_cursor_v1",
+    "postgresql_incremental_v1",
+    "clickhouse_incremental_v1",
+    "kafka_partition_offset_v1",
+    "mongodb_incremental_v1",
+    "airbyte-message-json bounded subset"
+  ],
+  "current_supported_concepts": [
+    "ConnectorSpecV1 exists as a generic Zephyr connector field spec, not an Airbyte-like sync protocol.",
+    "airbyte-message-json subset currently accepts RECORD, STATE, and LOG messages.",
+    "Single-stream bounded message normalization exists in it-stream service.",
+    "Checkpoint and resume semantics exist for bounded cursor/token/page/state_dict progress kinds.",
+    "Existing bounded source lanes include http_json_cursor_v1, postgresql_incremental_v1, clickhouse_incremental_v1, kafka_partition_offset_v1, and mongodb_incremental_v1.",
+    "Current artifacts include records.jsonl, checkpoint.json, and logs.jsonl."
+  ],
+  "missing_concepts": [
+    "DiscoverResultV1",
+    "CatalogV1",
+    "ReadProtocolV1",
+    "TRACE support",
+    "ERROR support as a first-class message type",
+    "Per-stream state contract",
+    "Per-slice checkpoint contract",
+    "Schema evolution policy",
+    "Normalization plan",
+    "Multi-stream read catalog and selection semantics"
+  ],
+  "must_wait_until_package_or_runtime_layers": [
+    "Package-aware artifact identity across multi-node workflows",
+    "Workflow-level normalization outputs",
+    "Destination package-aware delivery fanout"
+  ],
+  "p2b_minimum_scope": [
+    "Bounded ConnectorSpecV1 to DiscoverResultV1 to CatalogV1 contract line",
+    "Typed RECORD/STATE/LOG/TRACE/ERROR read envelope subset",
+    "Per-stream state and per-slice checkpoint model",
+    "Schema evolution and normalization planning hooks",
+    "Retry and recovery semantics aligned with current it-stream checkpoint ownership"
+  ],
+  "report_id": "zephyr.dev.p6k.m0.it_stream_airbyte_gap.v1",
+  "schema_version": 1,
+  "status": "pass"
+}

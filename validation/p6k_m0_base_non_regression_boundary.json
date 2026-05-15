@@ -1,0 +1,33 @@
+{
+  "base_facts_to_preserve": {
+    "first_slice_formats": [
+      ".txt",
+      ".md"
+    ],
+    "local_only": true,
+    "non_commercial": true,
+    "public": true,
+    "public_core_bundle_bounded": true,
+    "requires_p45_substrate": false,
+    "requires_pro_private_core": false,
+    "requires_web_core": false
+  },
+  "judgment": {
+    "base_changed_in_m0": false,
+    "base_should_not_be_forced_into_package_manifest_output": true,
+    "base_should_not_require_unstructured_all_docs_or_pdf_image_extras_by_default": true,
+    "commercial_logic_added": false
+  },
+  "report_id": "zephyr.dev.p6k.m0.base_non_regression_boundary.v1",
+  "risks": {
+    "artifact_layout_compatibility": "Package-aware artifact layouts can break Base-compatible path expectations unless wrapped.",
+    "base_installer_runtime_packaging": "Future package manifest and heavy dependency layers must remain optional so Base portable packaging stays bounded.",
+    "base_runtime_size": "Additional partition extras and future nodes can inflate Base runtime size and installer footprint.",
+    "metadata_output_shape": "Richer metadata can change normalized output shape and public-core serialization assumptions.",
+    "profile_heavy_deps": "Enhanced profiles can imply OCR, PDF, image, or layout extras that Base must not absorb automatically.",
+    "public_core_export_surface": "Core export APIs must remain bounded so Base does not start depending on P6K-only kernel layers.",
+    "unstructured_02228_dependency_and_extras": "Kernel upgrade work can pull heavier extras and native dependencies that Base must not inherit by default."
+  },
+  "schema_version": 1,
+  "status": "pass"
+}

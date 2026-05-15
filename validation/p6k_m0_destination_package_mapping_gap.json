@@ -1,0 +1,91 @@
+{
+  "destinations": {
+    "clickhouse": {
+      "content_evidence_carried": true,
+      "current_behavior": "Appends one row with identity key and payload_json.",
+      "future_mapping": "package/artifact/element or chunk tables keyed by package_id and artifact_id",
+      "mapping_change_level": "needs_mapping_change",
+      "package_mapping_exists": false
+    },
+    "filesystem": {
+      "content_evidence_carried": "local artifact files only",
+      "current_behavior": "Writes artifact directory rooted by sha256; does not emit DeliveryPayloadV1 externally.",
+      "future_mapping": "package_id/manifest.json plus package-scoped artifact files",
+      "mapping_change_level": "direct_compatible",
+      "package_mapping_exists": false
+    },
+    "kafka": {
+      "content_evidence_carried": true,
+      "current_behavior": "Publishes DeliveryPayloadV1 JSON with key based on delivery identity.",
+      "future_mapping": "key=package_id:artifact_id with package envelope or artifact event",
+      "mapping_change_level": "direct_compatible",
+      "package_mapping_exists": false
+    },
+    "loki": {
+      "content_evidence_carried": true,
+      "current_behavior": "Pushes one payload JSON line with delivery labels.",
+      "future_mapping": "package event labels plus artifact event JSON log line",
+      "mapping_change_level": "direct_compatible",
+      "package_mapping_exists": false
+    },
+    "mongodb": {
+      "content_evidence_carried": true,
+      "current_behavior": "Upserts one document keyed by delivery identity with nested payload.",
+      "future_mapping": "package and artifact documents keyed by package_id and artifact_id",
+      "mapping_change_level": "needs_mapping_change",
+      "package_mapping_exists": false
+    },
+    "opensearch": {
+      "content_evidence_carried": true,
+      "current_behavior": "Indexes a document containing delivery_identity and nested payload.",
+      "future_mapping": "doc id = package_id:artifact_id or chunk id with package metadata",
+      "mapping_change_level": "needs_mapping_change",
+      "package_mapping_exists": false
+    },
+    "s3": {
+      "content_evidence_carried": true,
+      "current_behavior": "Writes one DeliveryPayloadV1 JSON object keyed by idempotency key.",
+      "future_mapping": "prefix by package_id with manifest and artifact objects",
+      "mapping_change_level": "direct_compatible",
+      "package_mapping_exists": false
+    },
+    "sqlite": {
+      "content_evidence_carried": true,
+      "current_behavior": "Upserts one row with payload_json keyed by delivery identity.",
+      "future_mapping": "package/artifact tables or compatibility wrapper over payload_json",
+      "mapping_change_level": "needs_mapping_change",
+      "package_mapping_exists": false
+    },
+    "weaviate": {
+      "content_evidence_carried": "partial",
+      "current_behavior": "Indexes one object from result summary fields, not the full payload.",
+      "future_mapping": "chunk-level objects with package metadata and artifact lineage",
+      "mapping_change_level": "needs_mapping_change",
+      "package_mapping_exists": false
+    },
+    "webhook": {
+      "content_evidence_carried": true,
+      "current_behavior": "POSTs DeliveryPayloadV1 to a single endpoint.",
+      "future_mapping": "package envelope or artifact event webhook shape",
+      "mapping_change_level": "direct_compatible",
+      "package_mapping_exists": false
+    }
+  },
+  "direct_compatible": [
+    "filesystem",
+    "kafka",
+    "loki",
+    "s3",
+    "webhook"
+  ],
+  "needs_mapping_changes": [
+    "clickhouse",
+    "mongodb",
+    "opensearch",
+    "sqlite",
+    "weaviate"
+  ],
+  "report_id": "zephyr.dev.p6k.m0.destination_package_mapping_gap.v1",
+  "schema_version": 1,
+  "status": "pass"
+}
