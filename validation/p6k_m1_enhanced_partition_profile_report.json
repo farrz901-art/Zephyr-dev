@@ -1,0 +1,77 @@
+{
+  "repository": "Zephyr-dev",
+  "branch": "master",
+  "previous_head_sha": "1a3c9787f497ba7ca5a6a83862f7efc00341ab04",
+  "current_head_sha": "1a3c9787f497ba7ca5a6a83862f7efc00341ab04",
+  "unstructured_previous_version": "0.21.5",
+  "unstructured_current_version": "0.22.28",
+  "target_unstructured_version": "0.22.28",
+  "dependency_changed": true,
+  "uv_lock_changed": true,
+  "runtime_behavior_changed": true,
+  "profile_layer_added": true,
+  "profiles_added": [
+    "default",
+    "zh",
+    "html_heavy",
+    "invoice",
+    "contract"
+  ],
+  "wrapper_params_added": [
+    "profile",
+    "languages",
+    "detect_language_per_element",
+    "language_fallback",
+    "skip_infer_table_types",
+    "infer_table_structure",
+    "pdf_infer_table_structure",
+    "extract_image_block_types",
+    "extract_image_block_output_dir",
+    "extract_image_block_to_payload",
+    "data_source_metadata",
+    "metadata_filename",
+    "hi_res_model_name",
+    "model_name",
+    "starting_page_number",
+    "extra_partition_kwargs"
+  ],
+  "cli_flags_added": [
+    "--profile",
+    "--languages",
+    "--detect-language-per-element",
+    "--skip-infer-table-types",
+    "--extract-image-block-types",
+    "--extract-image-block-output-dir",
+    "--extract-image-block-to-payload",
+    "--hi-res-model-name",
+    "--starting-page-number",
+    "--pdf-infer-table-structure",
+    "--infer-table-structure"
+  ],
+  "metadata_guards_added": true,
+  "benchmark_tool_added": true,
+  "benchmark_inputs_planned": {
+    "input_dir": "E:\\Github_Projects\\Zephyr-zh-test",
+    "inputs": [
+      "fapiao.jpeg",
+      "fapiao2.jpg",
+      "fapiao3.jpg",
+      "hetong2-jiashuiyin.pdf"
+    ],
+    "out_dir": "E:\\Github_Projects\\Zephyr-zh-test\\tmp"
+  },
+  "manual_benchmark_pending": false,
+  "base_changed": false,
+  "commercial_logic_added": false,
+  "product_grade_readiness": "conditional",
+  "known_limitations": [
+    "Real benchmark evidence was collected locally, but fapiao3.jpg still fails through the underlying partition/image extraction path.",
+    "Heavy profile behavior is intentionally opt-in and not global default behavior.",
+    "This slice does not implement PackageManifestV1, workflow runtime, or package-aware destination mapping."
+  ],
+  "next_validation_steps": [
+    "Diagnose and resolve the remaining fapiao3.jpg invoice benchmark failure.",
+    "Re-run the full Chinese benchmark set and confirm expected Table/Image/layout metadata evidence on all planned inputs.",
+    "Keep Base compatibility bounded by treating heavy partition profiles as opt-in only."
+  ]
+}

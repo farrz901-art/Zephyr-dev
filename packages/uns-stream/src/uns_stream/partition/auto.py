@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Mapping
 
+from uns_stream._internal.enhanced_partition import UNSET_PARTITION_OPTION
 from uns_stream.backends.base import PartitionBackend
 from uns_stream.service import partition_file
 from zephyr_core import ErrorCode, PartitionResult, PartitionStrategy, ZephyrError
@@ -85,13 +87,29 @@ _KIND_BY_EXT: dict[str, str] = {
 def partition(
     *,
     filename: str,
-    strategy: PartitionStrategy = PartitionStrategy.AUTO,
+    strategy: PartitionStrategy | None = None,
     unique_element_ids: bool = True,
     backend: PartitionBackend | None = None,
     run_id: str | None = None,
     pipeline_version: str | None = None,
     sha256: str | None = None,
     size_bytes: int | None = None,
+    profile: str | None = None,
+    languages: object = UNSET_PARTITION_OPTION,
+    detect_language_per_element: object = UNSET_PARTITION_OPTION,
+    language_fallback: object = UNSET_PARTITION_OPTION,
+    skip_infer_table_types: object = UNSET_PARTITION_OPTION,
+    infer_table_structure: object = UNSET_PARTITION_OPTION,
+    pdf_infer_table_structure: object = UNSET_PARTITION_OPTION,
+    extract_image_block_types: object = UNSET_PARTITION_OPTION,
+    extract_image_block_output_dir: object = UNSET_PARTITION_OPTION,
+    extract_image_block_to_payload: object = UNSET_PARTITION_OPTION,
+    data_source_metadata: object = UNSET_PARTITION_OPTION,
+    metadata_filename: object = UNSET_PARTITION_OPTION,
+    hi_res_model_name: object = UNSET_PARTITION_OPTION,
+    model_name: object = UNSET_PARTITION_OPTION,
+    starting_page_number: object = UNSET_PARTITION_OPTION,
+    extra_partition_kwargs: Mapping[str, object] | None = None,
 ) -> PartitionResult:
     ext = Path(filename).suffix.lower()
     kind = _KIND_BY_EXT.get(ext)
@@ -113,4 +131,20 @@ def partition(
         pipeline_version=pipeline_version,
         sha256=sha256,
         size_bytes=size_bytes,
+        profile=profile,
+        languages=languages,
+        detect_language_per_element=detect_language_per_element,
+        language_fallback=language_fallback,
+        skip_infer_table_types=skip_infer_table_types,
+        infer_table_structure=infer_table_structure,
+        pdf_infer_table_structure=pdf_infer_table_structure,
+        extract_image_block_types=extract_image_block_types,
+        extract_image_block_output_dir=extract_image_block_output_dir,
+        extract_image_block_to_payload=extract_image_block_to_payload,
+        data_source_metadata=data_source_metadata,
+        metadata_filename=metadata_filename,
+        hi_res_model_name=hi_res_model_name,
+        model_name=model_name,
+        starting_page_number=starting_page_number,
+        extra_partition_kwargs=extra_partition_kwargs,
     )

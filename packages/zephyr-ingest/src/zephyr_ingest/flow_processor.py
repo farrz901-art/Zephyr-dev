@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Literal, Protocol, cast
+from dataclasses import dataclass, field
+from inspect import Parameter, signature
+from typing import Any, Literal, Mapping, Protocol, cast
 
 from it_stream import normalize_it_input_identity_sha
 from it_stream.service import process_file as process_it_file
@@ -58,6 +59,8 @@ class CallableFlowProcessor:
 
     partition_fn: PartitionFn
     backend: object | None = None
+    partition_options: Mapping[str, object] = field(default_factory=dict)
+    strategy_was_explicit: bool = False
 
     def shared_field_semantics(self) -> FlowProcessorSharedFieldSemantics:
         return FlowProcessorSharedFieldSemantics(
@@ -81,21 +84,41 @@ class CallableFlowProcessor:
         pipeline_version: str | None,
         sha256: str,
     ) -> PartitionResult:
-        return self.partition_fn(
-            filename=doc.uri,
-            strategy=strategy,
-            unique_element_ids=unique_element_ids,
-            backend=self.backend,
-            run_id=run_id,
-            pipeline_version=pipeline_version,
-            sha256=sha256,
-            size_bytes=doc.size_bytes,
-        )
+        call_kwargs: dict[str, Any] = {
+            "filename": doc.uri,
+            "unique_element_ids": unique_element_ids,
+            "backend": self.backend,
+            "run_id": run_id,
+            "pipeline_version": pipeline_version,
+            "sha256": sha256,
+            "size_bytes": doc.size_bytes,
+        }
+        if self.strategy_was_explicit:
+            call_kwargs["strategy"] = strategy
+        if self.partition_options:
+            fn_signature = signature(self.partition_fn)
+            supports_var_kwargs = any(
+                param.kind is Parameter.VAR_KEYWORD for param in fn_signature.parameters.values()
+            )
+            missing = [
+                key
+                for key in self.partition_options
+                if not supports_var_kwargs and key not in fn_signature.parameters
+            ]
+            if missing:
+                raise ValueError(
+                    "Legacy partition_fn does not accept enhanced partition kwargs: "
+                    + ", ".join(sorted(missing))
+                )
+            call_kwargs.update(self.partition_options)
+        return self.partition_fn(**call_kwargs)
 
 
 @dataclass(frozen=True, slots=True)
 class UnsFlowProcessor:
     backend: object | None = None
+    partition_options: Mapping[str, object] = field(default_factory=dict)
+    strategy_was_explicit: bool = False
 
     def shared_field_semantics(self) -> FlowProcessorSharedFieldSemantics:
         return describe_flow_processor_shared_field_semantics(flow_kind="uns")
@@ -112,13 +135,14 @@ class UnsFlowProcessor:
     ) -> PartitionResult:
         return process_uns_file(
             filename=doc.uri,
-            strategy=strategy,
+            strategy=strategy if self.strategy_was_explicit else None,
             unique_element_ids=unique_element_ids,
             backend=cast("PartitionBackend | None", self.backend),
             run_id=run_id,
             pipeline_version=pipeline_version,
             sha256=sha256,
             size_bytes=doc.size_bytes,
+            **self.partition_options,
         )
 
 
@@ -150,10 +174,20 @@ class ItFlowProcessor:
         )
 
 
-def build_default_flow_processor(*, backend: object | None = None) -> FlowProcessor:
+def build_default_flow_processor(
+    *,
+    backend: object | None = None,
+    partition_options: Mapping[str, object] | None = None,
+    strategy_was_explicit: bool = False,
+) -> FlowProcessor:
     """Build the default processor used when no explicit processor is supplied."""
 
-    return build_processor_for_flow_kind(flow_kind=DEFAULT_FLOW_KIND, backend=backend)
+    return build_processor_for_flow_kind(
+        flow_kind=DEFAULT_FLOW_KIND,
+        backend=backend,
+        partition_options=partition_options,
+        strategy_was_explicit=strategy_was_explicit,
+    )
 
 
 def normalize_flow_input_identity_sha(
@@ -214,9 +248,15 @@ def build_processor_for_flow_kind(
     *,
     flow_kind: FlowKind | str = DEFAULT_FLOW_KIND,
     backend: object | None = None,
+    partition_options: Mapping[str, object] | None = None,
+    strategy_was_explicit: bool = False,
 ) -> FlowProcessor:
     if flow_kind == "uns":
-        return UnsFlowProcessor(backend=backend)
+        return UnsFlowProcessor(
+            backend=backend,
+            partition_options={} if partition_options is None else dict(partition_options),
+            strategy_was_explicit=strategy_was_explicit,
+        )
     if flow_kind == "it":
         return ItFlowProcessor()
     raise ValueError(f"Unsupported flow kind: {flow_kind}")

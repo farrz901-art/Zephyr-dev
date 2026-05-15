@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from zephyr_core import (
     DocumentMetadata,
     DocumentRef,
@@ -251,3 +253,147 @@ def _partition_ok(
         normalized_text="hello",
         warnings=[],
     )
+
+
+def test_runner_passes_enhanced_partition_options_to_legacy_partition_fn(tmp_path: Path) -> None:
+    f = tmp_path / "enhanced.txt"
+    f.write_text("hello", encoding="utf-8")
+    doc = DocumentRef(
+        uri=str(f),
+        source="local_file",
+        discovered_at_utc="2026-01-01T00:00:00Z",
+        filename="enhanced.txt",
+        extension=".txt",
+        size_bytes=f.stat().st_size,
+    )
+    ctx = RunContext.new(
+        pipeline_version="p-enhanced",
+        run_id="r-enhanced",
+        timestamp_utc="2026-01-01T00:00:00Z",
+    )
+    cfg = RunnerConfig(
+        out_root=tmp_path / "out-enhanced",
+        workers=1,
+        destination=OkDest(),
+        strategy=PartitionStrategy.HI_RES,
+        partition_options={
+            "profile": "contract",
+            "languages": ["zho", "eng"],
+            "detect_language_per_element": True,
+            "extract_image_block_to_payload": True,
+        },
+    )
+
+    captured: dict[str, object] = {}
+
+    def fake_partition_fn(
+        *,
+        filename: str,
+        strategy: PartitionStrategy = PartitionStrategy.AUTO,
+        unique_element_ids: bool = True,
+        backend: Any | None = None,
+        run_id: str | None = None,
+        pipeline_version: str | None = None,
+        sha256: str | None = None,
+        size_bytes: int | None = None,
+        profile: str | None = None,
+        languages: list[str] | None = None,
+        detect_language_per_element: bool | None = None,
+        extract_image_block_to_payload: bool | None = None,
+    ) -> PartitionResult:
+        captured.update(
+            {
+                "filename": filename,
+                "strategy": strategy,
+                "unique_element_ids": unique_element_ids,
+                "backend": backend,
+                "run_id": run_id,
+                "pipeline_version": pipeline_version,
+                "sha256": sha256,
+                "size_bytes": size_bytes,
+                "profile": profile,
+                "languages": languages,
+                "detect_language_per_element": detect_language_per_element,
+                "extract_image_block_to_payload": extract_image_block_to_payload,
+            }
+        )
+        return _partition_ok(
+            filename=filename,
+            strategy=strategy,
+            unique_element_ids=unique_element_ids,
+            backend=backend,
+            run_id=run_id,
+            pipeline_version=pipeline_version,
+            sha256=sha256,
+            size_bytes=size_bytes,
+        )
+
+    run_documents(
+        docs=[doc],
+        cfg=cfg,
+        ctx=ctx,
+        partition_fn=fake_partition_fn,
+        destination=OkDest(),
+    )
+
+    assert captured["filename"] == str(f)
+    assert captured["strategy"] == PartitionStrategy.HI_RES
+    assert captured["profile"] == "contract"
+    assert captured["languages"] == ["zho", "eng"]
+    assert captured["detect_language_per_element"] is True
+    assert captured["extract_image_block_to_payload"] is True
+
+
+def test_runner_rejects_enhanced_partition_options_for_legacy_partition_fn_without_support(
+    tmp_path: Path,
+) -> None:
+    f = tmp_path / "reject.txt"
+    f.write_text("hello", encoding="utf-8")
+    doc = DocumentRef(
+        uri=str(f),
+        source="local_file",
+        discovered_at_utc="2026-01-01T00:00:00Z",
+        filename="reject.txt",
+        extension=".txt",
+        size_bytes=f.stat().st_size,
+    )
+    ctx = RunContext.new(
+        pipeline_version="p-reject",
+        run_id="r-reject",
+        timestamp_utc="2026-01-01T00:00:00Z",
+    )
+    cfg = RunnerConfig(
+        out_root=tmp_path / "out-reject",
+        workers=1,
+        destination=OkDest(),
+        partition_options={"profile": "invoice"},
+    )
+
+    def strict_partition_fn(
+        *,
+        filename: str,
+        unique_element_ids: bool = True,
+        backend: Any | None = None,
+        run_id: str | None = None,
+        pipeline_version: str | None = None,
+        sha256: str | None = None,
+        size_bytes: int | None = None,
+    ) -> PartitionResult:
+        return _partition_ok(
+            filename=filename,
+            unique_element_ids=unique_element_ids,
+            backend=backend,
+            run_id=run_id,
+            pipeline_version=pipeline_version,
+            sha256=sha256,
+            size_bytes=size_bytes,
+        )
+
+    with pytest.raises(ValueError, match="enhanced partition kwargs: profile"):
+        run_documents(
+            docs=[doc],
+            cfg=cfg,
+            ctx=ctx,
+            partition_fn=strict_partition_fn,
+            destination=OkDest(),
+        )

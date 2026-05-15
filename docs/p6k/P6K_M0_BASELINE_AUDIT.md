@@ -3,8 +3,8 @@
 - Repository: Zephyr-dev
 - Branch: master
 - Baseline SHA: d899f640cc9f084bc5457ea8ab725a4d4856d052
-- Current head SHA at report generation: d899f640cc9f084bc5457ea8ab725a4d4856d052
-- Current unstructured version: 0.21.5
+- Current head SHA at report generation: 1a3c9787f497ba7ca5a6a83862f7efc00341ab04
+- Current unstructured version: 0.22.28
 - Target unstructured version: 0.22.28
 - dependency_changed: false
 - uv_lock_changed: false
@@ -20,12 +20,12 @@
 
 ## S2 Unstructured 0.22.28 Enhanced Partition Profile gap
 
-- Current version: 0.21.5
+- Current version: 0.22.28
 - Target version: 0.22.28
-- Wrapper exposed params now: filename, strategy, unique_element_ids, backend, run_id, pipeline_version, sha256, size_bytes
-- Missing wrapper params: languages, detect_language_per_element, language_fallback, skip_infer_table_types, infer_table_structure, pdf_infer_table_structure, extract_image_block_types, extract_image_block_output_dir, extract_image_block_to_payload, data_source_metadata, metadata_filename, hi_res_model_name, model_name, starting_page_number, **kwargs
-- Missing CLI flags: --profile, --languages, --detect-language-per-element, --skip-infer-table-types, --extract-image-block-types, --extract-image-block-output-dir, --extract-image-block-to-payload, --hi-res-model-name, --starting-page-number, --pdf-infer-table-structure, --infer-table-structure
-- Missing metadata guards: text_as_html, image_base64, image_mime_type, parent_id, detection_class_prob, coordinates.system, layout_width, layout_height, page_number, filetype, filename, languages, data_source
+- Wrapper exposed params now: filename, strategy, unique_element_ids, backend, run_id, pipeline_version, sha256, size_bytes, profile, languages, detect_language_per_element, language_fallback, skip_infer_table_types, infer_table_structure, pdf_infer_table_structure, extract_image_block_types, extract_image_block_output_dir, extract_image_block_to_payload, data_source_metadata, metadata_filename, hi_res_model_name, model_name, starting_page_number, extra_partition_kwargs
+- Missing wrapper params:
+- Missing CLI flags:
+- Missing metadata guards:
 
 ## S3 PackageManifest gap
 
@@ -54,8 +54,6 @@
 
 ## Blockers
 
-- Current environment is still on unstructured 0.21.5; M1 must handle 0.22.28 upgrade work.
-- Enhanced Partition Profiles are not implemented yet; M0 is audit-only by design.
 - PackageManifestV1 is not implemented yet; M2 is the first package-aware identity slice.
 - Airbyte-like structured sync contracts are not implemented yet; M4 is the first bounded it-stream hardening slice.
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 from typing import Any, Callable
 
 from uns_stream._internal.errors import missing_extra
@@ -95,12 +96,17 @@ class LocalUnstructuredBackend:
         - 其他格式：不传递 strategy 参数，避免 TypeError
         """
         fn = _load_partition_fn(kind)
+        fn_signature = inspect.signature(fn)
+        accepted_params = set(fn_signature.parameters.keys())
+        accepts_var_kwargs = any(
+            param.kind is inspect.Parameter.VAR_KEYWORD
+            for param in fn_signature.parameters.values()
+        )
 
         # 构造调用参数
         call_kwargs: dict[str, Any] = {
             "filename": filename,
             "unique_element_ids": unique_element_ids,
-            **kwargs,
         }
 
         # 只对 pdf 和 image 传递 strategy 参数
@@ -110,6 +116,26 @@ class LocalUnstructuredBackend:
                 call_kwargs["strategy"] = "auto"
             else:
                 call_kwargs["strategy"] = strategy.value
+
+        unsupported_keys = [
+            key for key in kwargs if not accepts_var_kwargs and key not in accepted_params
+        ]
+        if unsupported_keys:
+            raise ZephyrError(
+                code=ErrorCode.UNS_PARTITION_FAILED,
+                message=(
+                    f"Partition parameters {unsupported_keys!r} are not supported "
+                    f"for kind '{kind}' by installed unstructured {self.version}"
+                ),
+                details={
+                    "retryable": False,
+                    "kind": kind,
+                    "unsupported_partition_kwargs": unsupported_keys,
+                    "engine_version": self.version,
+                },
+            )
+
+        call_kwargs.update(kwargs)
 
         # 执行调用
         elements = fn(**call_kwargs)

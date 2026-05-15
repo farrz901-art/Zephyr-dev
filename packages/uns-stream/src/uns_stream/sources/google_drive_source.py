@@ -531,13 +531,14 @@ def _with_fetch_provenance(
 def process_file(
     *,
     filename: str,
-    strategy: PartitionStrategy = PartitionStrategy.AUTO,
+    strategy: PartitionStrategy | None = None,
     unique_element_ids: bool = True,
     backend: PartitionBackend | None = None,
     run_id: str | None = None,
     pipeline_version: str | None = None,
     sha256: str | None = None,
     size_bytes: int | None = None,
+    **partition_kwargs: object,
 ) -> PartitionResult:
     path = Path(filename)
     config = _load_google_drive_document_source_config_from_path(path)
@@ -551,6 +552,7 @@ def process_file(
             pipeline_version=pipeline_version,
             sha256=sha256,
             size_bytes=size_bytes,
+            **partition_kwargs,
         )
 
     fetched = fetch_google_drive_document_source(config=config)
@@ -568,6 +570,7 @@ def process_file(
             pipeline_version=pipeline_version,
             sha256=sha256,
             size_bytes=len(fetched.content),
+            **partition_kwargs,
         )
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)

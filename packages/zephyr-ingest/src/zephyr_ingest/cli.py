@@ -9,6 +9,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Sequence, cast
 
+from uns_stream._internal.enhanced_partition import supported_partition_profiles
 from uns_stream.backends.http_uns_api import HttpUnsApiBackend
 from zephyr_core import RunContext
 from zephyr_core.contracts.v1.document_ref import DocumentRef
@@ -106,8 +107,22 @@ class RunCmd:
     glob: str
     out: str
 
-    strategy: PartitionStrategy
+    strategy: PartitionStrategy | None
     backend: str
+    profile: str | None
+    languages: list[str] | None
+    detect_language_per_element: bool | None
+    skip_infer_table_types: list[str] | None
+    infer_table_structure: bool | None
+    pdf_infer_table_structure: bool | None
+    extract_image_block_types: list[str] | None
+    extract_image_block_output_dir: str | None
+    extract_image_block_to_payload: bool | None
+    hi_res_model_name: str | None
+    model_name: str | None
+    metadata_filename: str | None
+    starting_page_number: int | None
+    partition_options: dict[str, object]
 
     uns_api_url: str
     uns_api_key: str | None
@@ -267,9 +282,111 @@ def _add_runlike_args(*, p: argparse.ArgumentParser, paths_required: bool) -> No
 
     p.add_argument(
         "--strategy",
-        default="auto",
+        default=None,
         choices=["auto", "fast", "hi_res", "ocr_only"],
-        help="Partition strategy (mainly for pdf/image)",
+        help="Partition strategy override. Heavy behavior stays opt-in through profiles.",
+    )
+    p.add_argument(
+        "--profile",
+        default=None,
+        choices=list(supported_partition_profiles()),
+        help="Enhanced partition profile. Heavy profiles are opt-in.",
+    )
+    p.add_argument(
+        "--languages",
+        action="append",
+        default=None,
+        help="Repeatable or comma-separated language codes, e.g. eng,zho",
+    )
+    p.add_argument(
+        "--detect-language-per-element",
+        dest="detect_language_per_element",
+        action="store_true",
+        default=None,
+        help="Enable per-element language detection.",
+    )
+    p.add_argument(
+        "--no-detect-language-per-element",
+        dest="detect_language_per_element",
+        action="store_false",
+        help="Disable per-element language detection.",
+    )
+    p.add_argument(
+        "--skip-infer-table-types",
+        action="append",
+        default=None,
+        help="Repeatable or comma-separated table types to skip inferring.",
+    )
+    p.add_argument(
+        "--extract-image-block-types",
+        action="append",
+        default=None,
+        help="Repeatable or comma-separated block types to extract, e.g. Image,Table",
+    )
+    p.add_argument(
+        "--extract-image-block-output-dir",
+        default=None,
+        help="Directory for extracted image blocks.",
+    )
+    p.add_argument(
+        "--extract-image-block-to-payload",
+        dest="extract_image_block_to_payload",
+        action="store_true",
+        default=None,
+        help="Inline extracted image blocks into payload metadata.",
+    )
+    p.add_argument(
+        "--no-extract-image-block-to-payload",
+        dest="extract_image_block_to_payload",
+        action="store_false",
+        help="Disable payload inlining for extracted image blocks.",
+    )
+    p.add_argument(
+        "--hi-res-model-name",
+        default=None,
+        help="Optional hi-res model name override for Unstructured.",
+    )
+    p.add_argument(
+        "--model-name",
+        default=None,
+        help="Optional model name override for Unstructured.",
+    )
+    p.add_argument(
+        "--metadata-filename",
+        default=None,
+        help="Optional metadata filename override forwarded to partitioning.",
+    )
+    p.add_argument(
+        "--starting-page-number",
+        type=int,
+        default=None,
+        help="Optional starting page number for partition metadata.",
+    )
+    p.add_argument(
+        "--pdf-infer-table-structure",
+        dest="pdf_infer_table_structure",
+        action="store_true",
+        default=None,
+        help="Enable PDF table structure inference.",
+    )
+    p.add_argument(
+        "--no-pdf-infer-table-structure",
+        dest="pdf_infer_table_structure",
+        action="store_false",
+        help="Disable PDF table structure inference.",
+    )
+    p.add_argument(
+        "--infer-table-structure",
+        dest="infer_table_structure",
+        action="store_true",
+        default=None,
+        help="Compatibility alias for --pdf-infer-table-structure.",
+    )
+    p.add_argument(
+        "--no-infer-table-structure",
+        dest="infer_table_structure",
+        action="store_false",
+        help="Disable the compatibility alias for table structure inference.",
     )
     # Spec-driven args (SSOT): backend.uns_api + destinations
     spec_ids = [
@@ -321,6 +438,18 @@ def _add_runlike_args(*, p: argparse.ArgumentParser, paths_required: bool) -> No
     # KafkaConfigV1.add_cli_args(p)
     # WeaviateConfigV1.add_cli_args(p)
     # Destination configs are spec-driven (see above).
+
+
+def _split_csv_flag_values(values: Sequence[str] | None) -> list[str] | None:
+    if values is None:
+        return None
+    items: list[str] = []
+    for raw in values:
+        for piece in raw.split(","):
+            value = piece.strip()
+            if value:
+                items.append(value)
+    return items or []
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -687,18 +816,131 @@ def _parse_run_cmd(ns: argparse.Namespace, argv: Sequence[str]) -> RunCmd:
     # -------------------------
     # strategy / backend
     # -------------------------
-    strategy_str_cli = get_req_str(ns, "strategy")
+    strategy_str_cli = get_opt_str(ns, "strategy")
     file_strategy = None if run_file is None else run_file.strategy
-    strategy_str = _choose_str(
+    strategy_str = _choose_opt_str(
         flag="--strategy",
         cli_val=strategy_str_cli,
         file_val=file_strategy,
     )
     sources["runner.strategy"] = _src("--strategy", file_strategy)
-    try:
-        strategy = PartitionStrategy(strategy_str)
-    except ValueError as e:
-        raise ConfigError(f"Invalid --strategy: {strategy_str}") from e
+    strategy: PartitionStrategy | None
+    if strategy_str is None:
+        strategy = None
+    else:
+        try:
+            strategy = PartitionStrategy(strategy_str)
+        except ValueError as e:
+            raise ConfigError(f"Invalid --strategy: {strategy_str}") from e
+
+    profile = get_opt_str(ns, "profile")
+    sources["runner.profile"] = _src("--profile", None)
+
+    languages = _split_csv_flag_values(getattr(ns, "languages", None))
+    if languages is not None:
+        sources["runner.languages"] = "cli"
+
+    detect_language_per_element = getattr(ns, "detect_language_per_element", None)
+    if any_flag_present(
+        present,
+        "--detect-language-per-element",
+        "--no-detect-language-per-element",
+    ):
+        sources["runner.detect_language_per_element"] = "cli"
+
+    skip_infer_table_types = _split_csv_flag_values(getattr(ns, "skip_infer_table_types", None))
+    if skip_infer_table_types is not None:
+        sources["runner.skip_infer_table_types"] = "cli"
+
+    extract_image_block_types = _split_csv_flag_values(
+        getattr(ns, "extract_image_block_types", None)
+    )
+    if extract_image_block_types is not None:
+        sources["runner.extract_image_block_types"] = "cli"
+
+    extract_image_block_output_dir = get_opt_str(ns, "extract_image_block_output_dir")
+    if extract_image_block_output_dir is not None:
+        sources["runner.extract_image_block_output_dir"] = "cli"
+
+    extract_image_block_to_payload = getattr(ns, "extract_image_block_to_payload", None)
+    if any_flag_present(
+        present,
+        "--extract-image-block-to-payload",
+        "--no-extract-image-block-to-payload",
+    ):
+        sources["runner.extract_image_block_to_payload"] = "cli"
+
+    hi_res_model_name = get_opt_str(ns, "hi_res_model_name")
+    if hi_res_model_name is not None:
+        sources["runner.hi_res_model_name"] = "cli"
+
+    model_name = get_opt_str(ns, "model_name")
+    if model_name is not None:
+        sources["runner.model_name"] = "cli"
+
+    metadata_filename = get_opt_str(ns, "metadata_filename")
+    if metadata_filename is not None:
+        sources["runner.metadata_filename"] = "cli"
+
+    starting_page_number = get_opt_int(ns, "starting_page_number")
+    if starting_page_number is not None:
+        sources["runner.starting_page_number"] = "cli"
+
+    infer_table_structure = getattr(ns, "infer_table_structure", None)
+    infer_table_structure_present = any_flag_present(
+        present,
+        "--infer-table-structure",
+        "--no-infer-table-structure",
+    )
+    if infer_table_structure_present:
+        sources["runner.infer_table_structure"] = "cli"
+
+    pdf_infer_table_structure = getattr(ns, "pdf_infer_table_structure", None)
+    pdf_infer_table_structure_present = any_flag_present(
+        present,
+        "--pdf-infer-table-structure",
+        "--no-pdf-infer-table-structure",
+    )
+    if pdf_infer_table_structure_present:
+        sources["runner.pdf_infer_table_structure"] = "cli"
+
+    if (
+        infer_table_structure_present
+        and pdf_infer_table_structure_present
+        and infer_table_structure != pdf_infer_table_structure
+    ):
+        raise ConfigError(
+            "--infer-table-structure and --pdf-infer-table-structure conflict; "
+            "provide only one value or keep them equal"
+        )
+
+    partition_options: dict[str, object] = {}
+    if profile is not None:
+        partition_options["profile"] = profile
+    if languages is not None:
+        partition_options["languages"] = languages
+    if detect_language_per_element is not None:
+        partition_options["detect_language_per_element"] = detect_language_per_element
+    if skip_infer_table_types is not None:
+        partition_options["skip_infer_table_types"] = skip_infer_table_types
+    if infer_table_structure is not None:
+        partition_options["infer_table_structure"] = infer_table_structure
+    if pdf_infer_table_structure is not None:
+        partition_options["pdf_infer_table_structure"] = pdf_infer_table_structure
+    if extract_image_block_types is not None:
+        partition_options["extract_image_block_types"] = extract_image_block_types
+    if extract_image_block_output_dir is not None:
+        partition_options["extract_image_block_output_dir"] = extract_image_block_output_dir
+    if extract_image_block_to_payload is not None:
+        partition_options["extract_image_block_to_payload"] = extract_image_block_to_payload
+    if hi_res_model_name is not None:
+        partition_options["hi_res_model_name"] = hi_res_model_name
+    if model_name is not None:
+        partition_options["model_name"] = model_name
+    if metadata_filename is not None:
+        partition_options["metadata_filename"] = metadata_filename
+    if starting_page_number is not None:
+        partition_options["starting_page_number"] = starting_page_number
 
     backend_cli = get_req_str(ns, "backend")
     file_backend = None if run_file is None else run_file.backend
@@ -1645,6 +1887,20 @@ def _parse_run_cmd(ns: argparse.Namespace, argv: Sequence[str]) -> RunCmd:
         out=get_req_str(ns, "out"),
         strategy=strategy,
         backend=backend,
+        profile=profile,
+        languages=languages,
+        detect_language_per_element=detect_language_per_element,
+        skip_infer_table_types=skip_infer_table_types,
+        infer_table_structure=infer_table_structure,
+        pdf_infer_table_structure=pdf_infer_table_structure,
+        extract_image_block_types=extract_image_block_types,
+        extract_image_block_output_dir=extract_image_block_output_dir,
+        extract_image_block_to_payload=extract_image_block_to_payload,
+        hi_res_model_name=hi_res_model_name,
+        model_name=model_name,
+        metadata_filename=metadata_filename,
+        starting_page_number=starting_page_number,
+        partition_options=partition_options,
         # uns_api_url=get_req_str(ns, "uns_api_url"),
         uns_api_url=uns_api_url,
         uns_api_key=uns_api_key,
@@ -2088,6 +2344,43 @@ def _build_config_snapshot(*, cmd: RunCmd) -> ConfigSnapshotV1:
     else:
         backend = {"kind": "local"}
 
+    runner_snapshot = {
+        "out": cmd.out,
+        "strategy": str(cmd.strategy or PartitionStrategy.AUTO),
+        "skip_existing": cmd.skip_existing,
+        "skip_unsupported": cmd.skip_unsupported,
+        "force": cmd.force,
+        "unique_element_ids": cmd.unique_element_ids,
+        "workers": cmd.workers,
+        "stale_lock_ttl_s": cmd.stale_lock_ttl_s,
+    }
+    if cmd.profile is not None:
+        runner_snapshot["profile"] = cmd.profile
+    if cmd.languages is not None:
+        runner_snapshot["languages"] = list(cmd.languages)
+    if cmd.detect_language_per_element is not None:
+        runner_snapshot["detect_language_per_element"] = cmd.detect_language_per_element
+    if cmd.skip_infer_table_types is not None:
+        runner_snapshot["skip_infer_table_types"] = list(cmd.skip_infer_table_types)
+    if cmd.infer_table_structure is not None:
+        runner_snapshot["infer_table_structure"] = cmd.infer_table_structure
+    if cmd.pdf_infer_table_structure is not None:
+        runner_snapshot["pdf_infer_table_structure"] = cmd.pdf_infer_table_structure
+    if cmd.extract_image_block_types is not None:
+        runner_snapshot["extract_image_block_types"] = list(cmd.extract_image_block_types)
+    if cmd.extract_image_block_output_dir is not None:
+        runner_snapshot["extract_image_block_output_dir"] = cmd.extract_image_block_output_dir
+    if cmd.extract_image_block_to_payload is not None:
+        runner_snapshot["extract_image_block_to_payload"] = cmd.extract_image_block_to_payload
+    if cmd.hi_res_model_name is not None:
+        runner_snapshot["hi_res_model_name"] = cmd.hi_res_model_name
+    if cmd.model_name is not None:
+        runner_snapshot["model_name"] = cmd.model_name
+    if cmd.metadata_filename is not None:
+        runner_snapshot["metadata_filename"] = cmd.metadata_filename
+    if cmd.starting_page_number is not None:
+        runner_snapshot["starting_page_number"] = cmd.starting_page_number
+
     return {
         "schema_version": CONFIG_SNAPSHOT_SCHEMA_VERSION,
         "input": {
@@ -2095,16 +2388,7 @@ def _build_config_snapshot(*, cmd: RunCmd) -> ConfigSnapshotV1:
             "glob": cmd.glob,
             "source": "local_file",
         },
-        "runner": {
-            "out": cmd.out,
-            "strategy": str(cmd.strategy),
-            "skip_existing": cmd.skip_existing,
-            "skip_unsupported": cmd.skip_unsupported,
-            "force": cmd.force,
-            "unique_element_ids": cmd.unique_element_ids,
-            "workers": cmd.workers,
-            "stale_lock_ttl_s": cmd.stale_lock_ttl_s,
-        },
+        "runner": runner_snapshot,
         "retry": {
             "enabled": cmd.retry.enabled,
             "max_attempts": cmd.retry.max_attempts,
@@ -2451,6 +2735,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 cfg = RunnerConfig(
                     out_root=Path(iter_cmd.out),
                     strategy=iter_cmd.strategy,
+                    partition_options=iter_cmd.partition_options,
                     unique_element_ids=iter_cmd.unique_element_ids,
                     skip_unsupported=iter_cmd.skip_unsupported,
                     skip_existing=iter_cmd.skip_existing,
@@ -2708,6 +2993,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         cfg = RunnerConfig(
             out_root=Path(cmd.out),
             strategy=cmd.strategy,
+            partition_options=cmd.partition_options,
             unique_element_ids=cmd.unique_element_ids,
             skip_unsupported=cmd.skip_unsupported,
             skip_existing=cmd.skip_existing,

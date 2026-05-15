@@ -4,8 +4,13 @@ import logging
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Mapping, cast
 
+from uns_stream._internal.enhanced_partition import (
+    UNSET_PARTITION_OPTION,
+    resolve_partition_options,
+    validate_unknown_partition_kwargs,
+)
 from uns_stream._internal.retry_policy import is_retryable_exception
 from uns_stream._internal.utils import sha256_file
 from uns_stream.backends.base import PartitionBackend
@@ -27,17 +32,55 @@ def partition_file(
     *,
     filename: str,
     kind: str,
-    strategy: PartitionStrategy = PartitionStrategy.AUTO,
+    strategy: PartitionStrategy | None = None,
     unique_element_ids: bool = True,
     backend: PartitionBackend | None = None,
     run_id: str | None = None,
     pipeline_version: str | None = None,
     sha256: str | None = None,
     size_bytes: int | None = None,
+    profile: str | None = None,
+    languages: object = UNSET_PARTITION_OPTION,
+    detect_language_per_element: object = UNSET_PARTITION_OPTION,
+    language_fallback: object = UNSET_PARTITION_OPTION,
+    skip_infer_table_types: object = UNSET_PARTITION_OPTION,
+    infer_table_structure: object = UNSET_PARTITION_OPTION,
+    pdf_infer_table_structure: object = UNSET_PARTITION_OPTION,
+    extract_image_block_types: object = UNSET_PARTITION_OPTION,
+    extract_image_block_output_dir: object = UNSET_PARTITION_OPTION,
+    extract_image_block_to_payload: object = UNSET_PARTITION_OPTION,
+    data_source_metadata: object = UNSET_PARTITION_OPTION,
+    metadata_filename: object = UNSET_PARTITION_OPTION,
+    hi_res_model_name: object = UNSET_PARTITION_OPTION,
+    model_name: object = UNSET_PARTITION_OPTION,
+    starting_page_number: object = UNSET_PARTITION_OPTION,
+    extra_partition_kwargs: Mapping[str, object] | None = None,
     **partition_kwargs: object,
 ) -> PartitionResult:
     t0 = time.perf_counter()
     p = Path(filename)
+    validate_unknown_partition_kwargs(partition_kwargs)
+
+    resolved_partition = resolve_partition_options(
+        profile=profile,
+        strategy=strategy,
+        languages=languages,
+        detect_language_per_element=detect_language_per_element,
+        language_fallback=language_fallback,
+        skip_infer_table_types=skip_infer_table_types,
+        infer_table_structure=infer_table_structure,
+        pdf_infer_table_structure=pdf_infer_table_structure,
+        extract_image_block_types=extract_image_block_types,
+        extract_image_block_output_dir=extract_image_block_output_dir,
+        extract_image_block_to_payload=extract_image_block_to_payload,
+        data_source_metadata=data_source_metadata,
+        metadata_filename=metadata_filename,
+        hi_res_model_name=hi_res_model_name,
+        model_name=model_name,
+        starting_page_number=starting_page_number,
+        extra_partition_kwargs=extra_partition_kwargs,
+    )
+    effective_strategy = resolved_partition.strategy or PartitionStrategy.AUTO
 
     # IO metadata (log/audit-friendly)
     size_bytes2 = size_bytes if size_bytes is not None else p.stat().st_size
@@ -48,26 +91,27 @@ def partition_file(
 
     logger.info(
         "partition_start run_id=%s pipeline_version=%s file=%s kind=%s strategy=%s "
-        "engine=%s backend=%s bytes=%s sha256=%s kwargs=%s",
+        "engine=%s backend=%s bytes=%s sha256=%s profile=%s kwargs=%s",
         run_id,
         pipeline_version,
         p.name,
         kind,
-        str(strategy),
+        str(effective_strategy),
         b.name,
         b.backend,
         size_bytes2,
         sha,
-        sorted(partition_kwargs.keys()),
+        resolved_partition.profile,
+        sorted(resolved_partition.merged_backend_kwargs().keys()),
     )
 
     try:
         elements: list[ZephyrElement] = b.partition_elements(
             filename=str(p),
             kind=kind,
-            strategy=strategy,
+            strategy=effective_strategy,
             unique_element_ids=unique_element_ids,
-            **partition_kwargs,
+            **resolved_partition.merged_backend_kwargs(),
         )
 
     except ZephyrError as ze:
@@ -101,7 +145,7 @@ def partition_file(
             pipeline_version,
             p.name,
             kind,
-            str(strategy),
+            str(effective_strategy),
             sha,
             duration_ms,
             code_str,
@@ -123,12 +167,15 @@ def partition_file(
             details={
                 "filename": str(p),
                 "kind": kind,
-                "strategy": str(strategy),
+                "strategy": str(effective_strategy),
+                "profile": resolved_partition.profile,
                 "engine": {"name": b.name, "backend": b.backend, "version": b.version},
                 "sha256": sha,
                 "size_bytes": size_bytes,
                 "duration_ms": duration_ms,
-                "extra_kwargs": {k: str(v) for k, v in partition_kwargs.items()},
+                "extra_kwargs": {
+                    k: str(v) for k, v in resolved_partition.merged_backend_kwargs().items()
+                },
                 "exc_type": type(e).__name__,
                 "exc": str(e),
                 "retryable": is_retryable,
@@ -142,7 +189,7 @@ def partition_file(
             pipeline_version,
             p.name,
             kind,
-            str(strategy),
+            str(effective_strategy),
             sha,
             b.name,
             b.backend,
@@ -163,7 +210,7 @@ def partition_file(
         pipeline_version,
         p.name,
         kind,
-        str(strategy),
+        str(effective_strategy),
         sha,
         b.name,
         b.backend,
@@ -180,7 +227,12 @@ def partition_file(
         created_at_utc=datetime.now(timezone.utc).isoformat(),
     )
 
-    engine = EngineInfo(name=b.name, backend=b.backend, version=b.version, strategy=strategy)
+    engine = EngineInfo(
+        name=b.name,
+        backend=b.backend,
+        version=b.version,
+        strategy=effective_strategy,
+    )
 
     return PartitionResult(
         document=doc,

@@ -132,9 +132,17 @@ def test_runner_defaults_to_uns_flow_kind(monkeypatch: pytest.MonkeyPatch, tmp_p
                 warnings=[],
             )
 
-    def fake_build_processor_for_flow_kind(*, flow_kind: str, backend: object | None) -> object:
+    def fake_build_processor_for_flow_kind(
+        *,
+        flow_kind: str,
+        backend: object | None,
+        partition_options: object | None = None,
+        strategy_was_explicit: bool = False,
+    ) -> object:
         captured["flow_kind"] = flow_kind
         captured["backend"] = backend
+        captured["partition_options"] = partition_options
+        captured["strategy_was_explicit"] = strategy_was_explicit
         return RecordingProcessor()
 
     import zephyr_ingest.runner as runner_mod
@@ -147,6 +155,8 @@ def test_runner_defaults_to_uns_flow_kind(monkeypatch: pytest.MonkeyPatch, tmp_p
 
     assert captured["flow_kind"] == DEFAULT_FLOW_KIND
     assert captured["backend"] is None
+    assert captured["partition_options"] == {}
+    assert captured["strategy_was_explicit"] is False
     assert captured["processor_used"] is True
 
 

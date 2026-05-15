@@ -26,6 +26,23 @@ def _strategy_for_kind(kind: str, strategy: PartitionStrategy) -> str:
     return str(strategy)
 
 
+def _append_form_field(fields: list[tuple[str, str]], key: str, value: object) -> None:
+    if value is None:
+        return
+    if isinstance(value, bool):
+        fields.append((key, _bool_str(value)))
+        return
+    if isinstance(value, (int, float, str)):
+        fields.append((key, str(value)))
+        return
+    if isinstance(value, list):
+        values = cast(list[object], value)
+        for item in values:
+            if isinstance(item, str):
+                fields.append((key, item))
+        return
+
+
 def _element_dict_to_zephyr(el: dict[str, Any]) -> ZephyrElement:
     raw_meta = dict(el.get("metadata") or {})
     norm_meta, _warnings = normalize_unstructured_metadata(raw_meta)
@@ -73,25 +90,28 @@ class HttpUnsApiBackend:
                 self.api_key
             )  # per Unstructured API docs <!--citation:6-->
 
-        # Build multipart form fields (list-of-tuples to support repeated fields)
-        data: dict[str, Any] = {
-            "output_format": "application/json",
-            "unique_element_ids": _bool_str(bool(unique_element_ids)),
-            "coordinates": _bool_str(bool(kwargs.pop("coordinates", False))),
-            "strategy": _strategy_for_kind(kind, strategy),
-        }
+        data: list[tuple[str, str]] = [
+            ("output_format", "application/json"),
+            ("unique_element_ids", _bool_str(bool(unique_element_ids))),
+            ("coordinates", _bool_str(bool(kwargs.pop("coordinates", False)))),
+            ("strategy", _strategy_for_kind(kind, strategy)),
+        ]
 
         # Map our local-style kwargs to API param names.
         # Your code uses infer_table_structure for local pdf; API expects
         # pdf_infer_table_structure. <!--citation:6-->
         infer_table_structure = kwargs.pop("infer_table_structure", None)
         if infer_table_structure is not None:
-            data["pdf_infer_table_structure"] = _bool_str(bool(infer_table_structure))
+            data.append(("pdf_infer_table_structure", _bool_str(bool(infer_table_structure))))
+
+        pdf_infer_table_structure = kwargs.pop("pdf_infer_table_structure", None)
+        if pdf_infer_table_structure is not None:
+            data.append(("pdf_infer_table_structure", _bool_str(bool(pdf_infer_table_structure))))
 
         # include_page_breaks is supported by API. <!--citation:6-->
         include_page_breaks = kwargs.pop("include_page_breaks", None)
         if include_page_breaks is not None:
-            data["include_page_breaks"] = _bool_str(bool(include_page_breaks))
+            data.append(("include_page_breaks", _bool_str(bool(include_page_breaks))))
 
         # languages: API accepts string[]; safest is repeated fields. <!--citation:7-->
         languages_obj = kwargs.pop("languages", None)
@@ -102,18 +122,13 @@ class HttpUnsApiBackend:
                 if isinstance(lang_obj, str):
                     languages_list.append(lang_obj)
             if languages_list:
-                data["languages"] = languages_list
+                for language in languages_list:
+                    data.append(("languages", language))
 
         # Pass through remaining kwargs if they are simple scalars.
         # (Keeps this backend generic without guessing every API option.)
         for k, v in list(kwargs.items()):
-            if v is None:
-                continue
-            if isinstance(v, bool):
-                data[k] = _bool_str(v)
-            elif isinstance(v, (int, float, str)):
-                data[k] = str(v)
-            # ignore complex types by default (dict/list) to avoid sending invalid form encoding
+            _append_form_field(data, k, v)
 
         with p.open("rb") as f:
             files = {

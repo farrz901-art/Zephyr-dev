@@ -134,13 +134,14 @@ def normalize_uns_input_identity_sha(*, filename: str, default_sha: str) -> str:
 def process_file(
     *,
     filename: str,
-    strategy: PartitionStrategy = PartitionStrategy.AUTO,
+    strategy: PartitionStrategy | None = None,
     unique_element_ids: bool = True,
     backend: PartitionBackend | None = None,
     run_id: str | None = None,
     pipeline_version: str | None = None,
     sha256: str | None = None,
     size_bytes: int | None = None,
+    **partition_kwargs: object,
 ) -> PartitionResult:
     source_kind = _load_source_kind(filename=filename)
     if source_kind.problem is not None:
@@ -159,6 +160,7 @@ def process_file(
             pipeline_version=pipeline_version,
             sha256=sha256,
             size_bytes=size_bytes,
+            **partition_kwargs,
         )
     if source_kind.kind == http_source.HTTP_DOCUMENT_SOURCE_KIND:
         return http_source.process_file(
@@ -170,6 +172,7 @@ def process_file(
             pipeline_version=pipeline_version,
             sha256=sha256,
             size_bytes=size_bytes,
+            **partition_kwargs,
         )
     if source_kind.kind == s3_source.S3_DOCUMENT_SOURCE_KIND:
         return s3_source.process_file(
@@ -181,6 +184,7 @@ def process_file(
             pipeline_version=pipeline_version,
             sha256=sha256,
             size_bytes=size_bytes,
+            **partition_kwargs,
         )
     if source_kind.kind == git_source.GIT_DOCUMENT_SOURCE_KIND:
         return git_source.process_file(
@@ -192,6 +196,7 @@ def process_file(
             pipeline_version=pipeline_version,
             sha256=sha256,
             size_bytes=size_bytes,
+            **partition_kwargs,
         )
     if source_kind.kind == google_drive_source.GOOGLE_DRIVE_DOCUMENT_SOURCE_KIND:
         return google_drive_source.process_file(
@@ -203,6 +208,7 @@ def process_file(
             pipeline_version=pipeline_version,
             sha256=sha256,
             size_bytes=size_bytes,
+            **partition_kwargs,
         )
     if source_kind.kind == confluence_source.CONFLUENCE_DOCUMENT_SOURCE_KIND:
         return confluence_source.process_file(
@@ -214,6 +220,7 @@ def process_file(
             pipeline_version=pipeline_version,
             sha256=sha256,
             size_bytes=size_bytes,
+            **partition_kwargs,
         )
     raise AssertionError(f"Unhandled supported uns-stream source kind: {source_kind.kind}")
 

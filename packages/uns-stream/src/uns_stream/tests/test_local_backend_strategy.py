@@ -6,7 +6,7 @@ import pytest
 
 import uns_stream.backends.local_unstructured as local_mod
 from uns_stream.backends.local_unstructured import LocalUnstructuredBackend
-from zephyr_core import PartitionStrategy, ZephyrElement
+from zephyr_core import ErrorCode, PartitionStrategy, ZephyrElement, ZephyrError
 
 
 class FakeElement:
@@ -96,3 +96,39 @@ def test_image_fast_strategy_maps_to_auto(monkeypatch: pytest.MonkeyPatch) -> No
     # We keep ZephyrStrategy uniform; for image FAST is not a supported unstructured strategy,
     # so we normalize it to "auto".
     assert calls[-1]["kwargs"]["strategy"] == "auto"
+
+
+def test_local_backend_rejects_unsupported_enhanced_kwargs_for_strict_partition_fn(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    backend = LocalUnstructuredBackend()
+
+    def fake_loader(kind: str) -> Callable[..., Any]:
+        del kind
+
+        def fake_partition_fn(
+            *,
+            filename: str,
+            unique_element_ids: bool = True,
+        ) -> list[FakeElement]:
+            del filename, unique_element_ids
+            return [FakeElement(text="strict")]
+
+        return fake_partition_fn
+
+    monkeypatch.setattr(local_mod, "_load_partition_fn", fake_loader)
+
+    with pytest.raises(ZephyrError) as excinfo:
+        backend.partition_elements(
+            filename="x.txt",
+            kind="text",
+            strategy=PartitionStrategy.AUTO,
+            unique_element_ids=True,
+            extract_image_block_to_payload=True,
+        )
+
+    assert excinfo.value.code == ErrorCode.UNS_PARTITION_FAILED
+    assert excinfo.value.details is not None
+    assert excinfo.value.details["unsupported_partition_kwargs"] == [
+        "extract_image_block_to_payload"
+    ]

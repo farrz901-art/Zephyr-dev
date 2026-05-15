@@ -20,6 +20,19 @@ class RunnerSnapshotV1(TypedDict):
     unique_element_ids: bool
     workers: int
     stale_lock_ttl_s: int | None
+    profile: NotRequired[str]
+    languages: NotRequired[list[str]]
+    detect_language_per_element: NotRequired[bool]
+    skip_infer_table_types: NotRequired[list[str]]
+    infer_table_structure: NotRequired[bool]
+    pdf_infer_table_structure: NotRequired[bool]
+    extract_image_block_types: NotRequired[list[str]]
+    extract_image_block_output_dir: NotRequired[str]
+    extract_image_block_to_payload: NotRequired[bool]
+    hi_res_model_name: NotRequired[str]
+    model_name: NotRequired[str]
+    metadata_filename: NotRequired[str]
+    starting_page_number: NotRequired[int]
 
 
 class RetrySnapshotV1(TypedDict):

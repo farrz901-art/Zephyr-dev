@@ -8,7 +8,7 @@ from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable, cast
+from typing import Any, Iterable, Mapping, cast
 
 from zephyr_core import (
     DocumentRef,
@@ -94,9 +94,10 @@ def _default_retry() -> RetryConfig:
 @dataclass(frozen=True, slots=True)
 class RunnerConfig:
     out_root: Path
-    strategy: PartitionStrategy = PartitionStrategy.AUTO
+    strategy: PartitionStrategy | None = None
     unique_element_ids: bool = True
     backend: object | None = None
+    partition_options: Mapping[str, object] = field(default_factory=dict)
     skip_unsupported: bool = True
     skip_existing: bool = True
     force: bool = False
@@ -141,6 +142,8 @@ def _resolve_flow_processor(
     processor: FlowProcessor | None,
     partition_fn: PartitionFn | None,
     backend: object | None,
+    partition_options: Mapping[str, object] | None,
+    strategy_was_explicit: bool,
 ) -> FlowProcessor:
     # `processor` is the primary orchestration boundary.
     if processor is not None:
@@ -148,9 +151,19 @@ def _resolve_flow_processor(
 
     # `partition_fn` remains supported only as a legacy compatibility adapter path.
     if partition_fn is not None:
-        return CallableFlowProcessor(partition_fn=partition_fn, backend=backend)
+        return CallableFlowProcessor(
+            partition_fn=partition_fn,
+            backend=backend,
+            partition_options={} if partition_options is None else dict(partition_options),
+            strategy_was_explicit=strategy_was_explicit,
+        )
 
-    return build_processor_for_flow_kind(flow_kind=flow_kind, backend=backend)
+    return build_processor_for_flow_kind(
+        flow_kind=flow_kind,
+        backend=backend,
+        partition_options=partition_options,
+        strategy_was_explicit=strategy_was_explicit,
+    )
 
 
 def _write_delivery_receipt(out_dir: Path, receipt: DeliveryReceipt) -> None:
@@ -262,7 +275,7 @@ def _build_task_for_document(
             )
         ),
         execution=TaskExecutionV1(
-            strategy=cfg.strategy,
+            strategy=cfg.strategy or PartitionStrategy.AUTO,
             unique_element_ids=cfg.unique_element_ids,
         ),
         identity=TaskIdentityV1(
@@ -588,6 +601,8 @@ class TaskExecutionHandler:
                     processor=None,
                     partition_fn=self.partition_fn,
                     backend=self.cfg.backend,
+                    partition_options=self.cfg.partition_options,
+                    strategy_was_explicit=self.cfg.strategy is not None,
                 )
                 self._processor_cache[selected_flow_kind] = active_processor
 
@@ -795,6 +810,8 @@ def run_documents(
         processor=processor,
         partition_fn=partition_fn,
         backend=cfg.backend,
+        partition_options=cfg.partition_options,
+        strategy_was_explicit=cfg.strategy is not None,
     )
 
     out_root = cfg.out_root.expanduser().resolve()
@@ -1008,7 +1025,7 @@ def run_documents(
         "run_id": ctx.run_id,
         "pipeline_version": ctx.pipeline_version,
         "timestamp_utc": ctx.timestamp_utc,
-        "strategy": str(cfg.strategy),
+        "strategy": str(cfg.strategy or PartitionStrategy.AUTO),
         "counts": {
             "total": stats.total,
             "success": stats.success,

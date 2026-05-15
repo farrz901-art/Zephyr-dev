@@ -60,20 +60,24 @@ def build_report() -> dict[str, Any]:
     blockers: list[str] = []
     if unstructured["current_unstructured_version"] != TARGET_UNSTRUCTURED_VERSION:
         blockers.append(
-            "Current environment is still on unstructured 0.21.5; M1 must "
-            "handle 0.22.28 upgrade work."
+            "Current environment is still on "
+            f"unstructured {unstructured['current_unstructured_version']}; "
+            f"M1 must handle {TARGET_UNSTRUCTURED_VERSION} upgrade work."
         )
-    blockers.append(
-        "Enhanced Partition Profiles are not implemented yet; M0 is audit-only by design."
-    )
-    blockers.append(
-        "PackageManifestV1 is not implemented yet; M2 is the first "
-        "package-aware identity slice."
-    )
-    blockers.append(
-        "Airbyte-like structured sync contracts are not implemented yet; "
-        "M4 is the first bounded it-stream hardening slice."
-    )
+    if unstructured["missing_profile_layer"]:
+        blockers.append(
+            "Enhanced Partition Profiles are not implemented yet; M0 is audit-only by design."
+        )
+    if package_manifest["status"] == "pass":
+        blockers.append(
+            "PackageManifestV1 is not implemented yet; M2 is the first "
+            "package-aware identity slice."
+        )
+    if it_stream["status"] == "pass":
+        blockers.append(
+            "Airbyte-like structured sync contracts are not implemented yet; "
+            "M4 is the first bounded it-stream hardening slice."
+        )
 
     report: dict[str, Any] = {
         "schema_version": 1,

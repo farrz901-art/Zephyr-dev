@@ -509,9 +509,26 @@ def current_image_partition_signature() -> str:
 
 def explicit_metadata_test_coverage() -> list[str]:
     text = read_text("packages/uns-stream/src/uns_stream/tests/test_metadata_normalize.py")
+    coverage_needles = {
+        "text_as_html": "text_as_html",
+        "image_base64": "image_base64",
+        "image_mime_type": "image_mime_type",
+        "parent_id": "parent_id",
+        "is_extracted": "is_extracted",
+        "detection_class_prob": "detection_class_prob",
+        "coordinates.system": '["coordinates"]["system"]',
+        "layout_width": "layout_width",
+        "layout_height": "layout_height",
+        "page_number": "page_number",
+        "filetype": "filetype",
+        "filename": "filename",
+        "languages": "languages",
+        "data_source": "data_source",
+    }
     covered: list[str] = []
-    if 'out["is_extracted"]' in text:
-        covered.append("is_extracted")
+    for field, needle in coverage_needles.items():
+        if needle in text:
+            covered.append(field)
     return covered
 
 

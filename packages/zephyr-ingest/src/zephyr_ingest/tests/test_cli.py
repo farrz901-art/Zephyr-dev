@@ -8,6 +8,7 @@ import pytest
 
 from zephyr_core import DocumentRef, PartitionStrategy
 from zephyr_ingest import cli
+from zephyr_ingest.config.errors import ConfigError
 from zephyr_ingest.config.snapshot_v1 import ConfigSnapshotV1
 from zephyr_ingest.spool_queue import LocalSpoolQueue
 from zephyr_ingest.sqlite_queue import SqliteQueueBackend
@@ -111,6 +112,119 @@ def test_cli_run_invokes_runner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
 
     assert rc == 0
     assert called["ok"] is True
+
+
+def test_cli_enhanced_partition_flags_flow_into_runner_and_snapshot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    inbox = tmp_path / "inbox-enhanced"
+    inbox.mkdir()
+    (inbox / "a.pdf").write_bytes(b"%PDF-1.4 fake")
+
+    captured: dict[str, object] = {}
+
+    def fake_run_documents(*, docs: Any, cfg: Any, ctx: Any, **kwargs: Any) -> Any:
+        del docs, ctx
+        captured["partition_options"] = dict(cfg.partition_options)
+        captured["strategy"] = cfg.strategy
+        snap = cast(ConfigSnapshotV1, kwargs["config_snapshot"])
+        captured["snapshot"] = snap
+
+    monkeypatch.setattr(cli, "run_documents", fake_run_documents)
+
+    rc = cli.main(
+        [
+            "run",
+            "--path",
+            str(inbox / "a.pdf"),
+            "--out",
+            str(tmp_path / "out-enhanced"),
+            "--profile",
+            "invoice",
+            "--languages",
+            "zho,eng",
+            "--languages",
+            "fra",
+            "--detect-language-per-element",
+            "--skip-infer-table-types",
+            "pdf,jpg",
+            "--extract-image-block-types",
+            "Image,Table",
+            "--extract-image-block-output-dir",
+            str(tmp_path / "images"),
+            "--extract-image-block-to-payload",
+            "--hi-res-model-name",
+            "yolox",
+            "--model-name",
+            "layout-model",
+            "--metadata-filename",
+            "invoice.pdf",
+            "--starting-page-number",
+            "3",
+            "--infer-table-structure",
+            "--strategy",
+            "hi_res",
+        ]
+    )
+
+    assert rc == 0
+    assert captured["strategy"] == PartitionStrategy.HI_RES
+    partition_options = cast(dict[str, object], captured["partition_options"])
+    assert partition_options == {
+        "profile": "invoice",
+        "languages": ["zho", "eng", "fra"],
+        "detect_language_per_element": True,
+        "skip_infer_table_types": ["pdf", "jpg"],
+        "extract_image_block_types": ["Image", "Table"],
+        "extract_image_block_output_dir": str(tmp_path / "images"),
+        "extract_image_block_to_payload": True,
+        "hi_res_model_name": "yolox",
+        "model_name": "layout-model",
+        "metadata_filename": "invoice.pdf",
+        "starting_page_number": 3,
+        "infer_table_structure": True,
+    }
+
+    snap = cast(ConfigSnapshotV1, captured["snapshot"])
+    runner_snapshot = cast(dict[str, object], snap["runner"])
+    assert runner_snapshot["strategy"] == "hi_res"
+    assert runner_snapshot["profile"] == "invoice"
+    assert runner_snapshot["languages"] == ["zho", "eng", "fra"]
+    assert runner_snapshot["detect_language_per_element"] is True
+    assert runner_snapshot["skip_infer_table_types"] == ["pdf", "jpg"]
+    assert runner_snapshot["extract_image_block_types"] == ["Image", "Table"]
+    assert runner_snapshot["extract_image_block_output_dir"] == str(tmp_path / "images")
+    assert runner_snapshot["extract_image_block_to_payload"] is True
+    assert runner_snapshot["hi_res_model_name"] == "yolox"
+    assert runner_snapshot["model_name"] == "layout-model"
+    assert runner_snapshot["metadata_filename"] == "invoice.pdf"
+    assert runner_snapshot["starting_page_number"] == 3
+    assert runner_snapshot["infer_table_structure"] is True
+
+
+def test_cli_rejects_conflicting_table_inference_alias_flags() -> None:
+    parser = cli.build_parser()
+    ns = parser.parse_args(
+        [
+            "run",
+            "--path",
+            "dummy.txt",
+            "--infer-table-structure",
+            "--no-pdf-infer-table-structure",
+        ]
+    )
+
+    with pytest.raises(ConfigError, match="conflict"):
+        cli._parse_run_cmd(  # pyright: ignore[reportPrivateUsage] # noqa: SLF001
+            ns,
+            [
+                "run",
+                "--path",
+                "dummy.txt",
+                "--infer-table-structure",
+                "--no-pdf-infer-table-structure",
+            ],
+        )
 
 
 def test_cli_run_webhook_fanout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

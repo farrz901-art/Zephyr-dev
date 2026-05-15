@@ -26,6 +26,7 @@ OUTPUT_PATH = VALIDATION_DIR / "p6k_m0_unstructured_02228_gap.json"
 
 
 def build_report() -> dict[str, Any]:
+    current_version = current_unstructured_version()
     wrapper_params = function_parameter_names(
         "packages/uns-stream/src/uns_stream/partition/auto.py",
         "partition",
@@ -44,6 +45,15 @@ def build_report() -> dict[str, Any]:
     missing_metadata_fields = [
         field for field in REQUIRED_METADATA_FIELDS if field not in explicit_metadata_fields
     ]
+    missing_wrapper_params = [
+        field
+        for field in TARGET_PARTITION_PARAMS
+        if field != "**kwargs" and field not in wrapper_params
+    ]
+    profile_layer_defined = file_contains(
+        "packages/uns-stream/src/uns_stream/_internal/enhanced_partition.py",
+        "supported_partition_profiles",
+    )
 
     http_api_alias_support = file_contains(
         "packages/uns-stream/src/uns_stream/backends/http_uns_api.py",
@@ -61,20 +71,42 @@ def build_report() -> dict[str, Any]:
             "wrapper_exposed": wrapper_exposed,
             "backend_can_pass_local": local_backend_has_kwargs,
             "backend_can_pass_service": service_has_kwargs,
-            "profile_layer_defined": False,
+            "profile_layer_defined": profile_layer_defined,
             "cli_exposed": (
                 False
                 if parameter == "**kwargs"
                 else f"--{parameter.replace('_', '-')}" in current_flags
             ),
-            "metadata_preservation_guarded": False,
+            "metadata_preservation_guarded": parameter in explicit_metadata_fields,
             "benchmark_plan_recorded": True,
         }
+
+    upgrade_risks = [
+        "auto.partition exposes richer parameters than Zephyr wrapper surface exports."
+        if missing_wrapper_params
+        else "Wrapper surface now covers the planned enhanced partition parameter set.",
+        (
+            "metadata normalization currently allows extras but explicit "
+            "preservation tests do not protect target fields."
+        )
+        if missing_metadata_fields
+        else "Explicit metadata preservation guards cover the target enhanced fields.",
+        "CLI does not yet expose enhanced partition profile controls."
+        if missing_cli_flags
+        else "CLI exposes the planned enhanced partition profile controls.",
+        "No benchmark evidence is frozen yet for Chinese invoice and contract samples.",
+    ]
+    if current_version != TARGET_UNSTRUCTURED_VERSION:
+        upgrade_risks.insert(
+            0,
+            f"Current environment is still on unstructured {current_version}, "
+            f"not {TARGET_UNSTRUCTURED_VERSION}.",
+        )
 
     report: dict[str, Any] = {
         "schema_version": 1,
         "report_id": "zephyr.dev.p6k.m0.unstructured_02228_gap.v1",
-        "current_unstructured_version": current_unstructured_version(),
+        "current_unstructured_version": current_version,
         "target_unstructured_version": TARGET_UNSTRUCTURED_VERSION,
         "current_partition_signature": current_partition_signature(),
         "current_pdf_partition_signature": current_pdf_partition_signature(),
@@ -87,22 +119,14 @@ def build_report() -> dict[str, Any]:
             "status": "backend passthrough exists in embryo form",
         },
         "parameter_layer_matrix": parameter_layer_matrix,
-        "missing_wrapper_params": list(TARGET_PARTITION_PARAMS),
-        "missing_profile_layer": True,
+        "missing_wrapper_params": missing_wrapper_params,
+        "missing_profile_layer": not profile_layer_defined,
         "profile_plan_frozen_for_m1": PROFILE_PLAN,
         "metadata_fields_explicitly_guarded_now": explicit_metadata_fields,
         "missing_metadata_guards_for_m1": missing_metadata_fields,
         "missing_cli_flags_for_m1": missing_cli_flags,
         "benchmark_plan_for_m1": benchmark_plan(),
-        "upgrade_risks": [
-            "Current environment is still on unstructured 0.21.5, not 0.22.28.",
-            "auto.partition exposes richer parameters than Zephyr wrapper "
-            "surface currently exports.",
-            "metadata normalization currently allows extras but explicit "
-            "preservation tests do not protect target fields.",
-            "CLI does not yet expose enhanced partition profile controls.",
-            "No benchmark evidence is frozen yet for Chinese invoice and contract samples.",
-        ],
+        "upgrade_risks": upgrade_risks,
         "base_public_core_risk": [
             "Dependency and extras growth can enlarge Base bundle size if "
             "kernel changes are back-ported carelessly.",
