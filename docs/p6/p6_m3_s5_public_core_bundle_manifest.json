@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "report_id": "zephyr.p6.m3.s5.public_core_bundle_manifest.v1",
+  "zephyr_dev_adapter_commit_sha": "1b53c126131ce457c43e7ebeb55f77612911cd92",
+  "p5_1_final_sha": "b94e662a3792fd1a253d457bc1f73b38aefb33fd",
+  "bundle_kind": "base_public_core_runtime_first_slice",
+  "bundle_status": "first_slice_not_full_installer_runtime",
+  "bundle_surface_status": "trimmed_base_txt_md_first_slice",
+  "allowed_consumers": [
+    "Zephyr-base"
+  ],
+  "supported_input_extensions": [
+    ".txt",
+    ".md"
+  ],
+  "allowed_partition_kinds": [
+    "text",
+    "md"
+  ],
+  "allowed_sources": [
+    "local_file"
+  ],
+  "allowed_destinations": [
+    "filesystem"
+  ],
+  "requires_p45_substrate": false,
+  "requires_network": false,
+  "commercial_logic_allowed": false,
+  "license_allowed": false,
+  "entitlement_allowed": false,
+  "web_core_dependency_allowed": false,
+  "private_core_allowed": false,
+  "included_entrypoints": [
+    "tools/p6_m3_public_core_local_runner.py"
+  ],
+  "included_public_packages": [
+    "zephyr-core",
+    "zephyr-ingest",
+    "uns-stream"
+  ],
+  "excluded": [
+    "Web-core",
+    "Pro",
+    "payment",
+    "license",
+    "entitlement",
+    "billing",
+    "quota authority",
+    "risk decision",
+    "runtime secrets",
+    "P4.5 substrate config"
+  ],
+  "bundle_lineage_required": true,
+  "bundle_execution_requires_zephyr_dev_working_tree": false,
+  "bundle_generation_requires_zephyr_dev_working_tree": true,
+  "removed_surface": {
+    "non_txt_md_partition_modules_removed": true,
+    "remote_sources_removed": true,
+    "remote_destinations_removed": true,
+    "testing_helpers_removed": true,
+    "queue_worker_observability_governance_removed": true
+  }
+}

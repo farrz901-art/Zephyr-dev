@@ -24,11 +24,17 @@ from zephyr_ingest.sources.local_file import LocalFileSource
 def _discover_repo_root(start: Path) -> Path:
     current = start.resolve()
     for candidate in (current, *current.parents):
-        if (
+        is_repo_root = (
             ((candidate / "pyproject.toml").exists() or (candidate / ".git").exists())
             and (candidate / "docs/p6").exists()
             and (candidate / "packages/zephyr-ingest").exists()
-        ):
+        )
+        is_bundle_root = (
+            (candidate / "manifest/public_core_bundle_manifest.json").exists()
+            and (candidate / "packages/zephyr-ingest/src").exists()
+            and (candidate / "runner").exists()
+        )
+        if is_repo_root or is_bundle_root:
             return candidate
     raise RuntimeError("Could not locate repository root from tool path")
 
