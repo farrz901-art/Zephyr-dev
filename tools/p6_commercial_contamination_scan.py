@@ -221,11 +221,7 @@ def _iter_files(root: Path) -> list[Path]:
         rel_dir = current_dir.relative_to(root)
         if _has_skipped_relative_part(rel_dir):
             continue
-        dirnames[:] = [
-            name
-            for name in dirnames
-            if not _has_skipped_relative_part(rel_dir / name)
-        ]
+        dirnames[:] = [name for name in dirnames if not _has_skipped_relative_part(rel_dir / name)]
         for filename in filenames:
             path = current_dir / filename
             if _has_skipped_relative_part(path.relative_to(root)):
@@ -259,6 +255,16 @@ def _should_ignore_false_positive(term: str, context_lower: str) -> bool:
     if term == "checkout" and any(
         marker in context_lower
         for marker in ("actions/checkout", "sparse-checkout", "checkout state", "ambient checkout")
+    ):
+        return True
+    if term == "invoice" and any(
+        marker in context_lower
+        for marker in (
+            "partitionprofilename",
+            "partitionoptionspec(",
+            'profile="invoice"',
+            "invoice profile",
+        )
     ):
         return True
     return term == "subscription" and "subscription selector" in context_lower

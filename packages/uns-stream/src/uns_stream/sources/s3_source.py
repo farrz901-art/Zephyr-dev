@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Mapping, Protocol, cast
 from uuid import uuid4
 
+from uns_stream._internal.enhanced_partition import build_explicit_partition_kwargs
 from uns_stream.backends.base import PartitionBackend
 from uns_stream.partition.auto import partition as auto_partition
 from zephyr_core import (
@@ -403,13 +404,46 @@ def process_file(
     strategy: PartitionStrategy | None = None,
     unique_element_ids: bool = True,
     backend: PartitionBackend | None = None,
+    profile: str | None = None,
+    languages: list[str] | None = None,
+    detect_language_per_element: bool | None = None,
+    language_fallback: object | None = None,
+    skip_infer_table_types: list[str] | None = None,
+    infer_table_structure: bool | None = None,
+    pdf_infer_table_structure: bool | None = None,
+    extract_image_block_types: list[str] | None = None,
+    extract_image_block_output_dir: str | None = None,
+    extract_image_block_to_payload: bool | None = None,
+    data_source_metadata: object | None = None,
+    metadata_filename: str | None = None,
+    hi_res_model_name: str | None = None,
+    model_name: str | None = None,
+    starting_page_number: int | None = None,
+    extra_partition_kwargs: Mapping[str, object] | None = None,
     run_id: str | None = None,
     pipeline_version: str | None = None,
     sha256: str | None = None,
     size_bytes: int | None = None,
-    **partition_kwargs: object,
 ) -> PartitionResult:
     path = Path(filename)
+    partition_kwargs = build_explicit_partition_kwargs(
+        profile=profile,
+        languages=languages,
+        detect_language_per_element=detect_language_per_element,
+        language_fallback=language_fallback,
+        skip_infer_table_types=skip_infer_table_types,
+        infer_table_structure=infer_table_structure,
+        pdf_infer_table_structure=pdf_infer_table_structure,
+        extract_image_block_types=extract_image_block_types,
+        extract_image_block_output_dir=extract_image_block_output_dir,
+        extract_image_block_to_payload=extract_image_block_to_payload,
+        data_source_metadata=data_source_metadata,
+        metadata_filename=metadata_filename,
+        hi_res_model_name=hi_res_model_name,
+        model_name=model_name,
+        starting_page_number=starting_page_number,
+        extra_partition_kwargs=extra_partition_kwargs,
+    )
     config = _load_s3_document_source_config_from_path(path)
     if config is None:
         return auto_partition(

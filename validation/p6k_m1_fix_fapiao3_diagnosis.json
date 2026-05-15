@@ -1,0 +1,49 @@
+{
+  "repository": "Zephyr-dev",
+  "report_id": "zephyr.dev.p6k.m1.fix.fapiao3.diagnosis.v1",
+  "input_file": "fapiao3.jpg",
+  "input_path": "E:\\Github_Projects\\Zephyr-zh-test\\fapiao3.jpg",
+  "missing_input": false,
+  "file_exists": true,
+  "file_size": 153964,
+  "image_format": "GIF",
+  "image_mode": "P",
+  "image_dimensions": {
+    "width": 440,
+    "height": 330
+  },
+  "exif_orientation": null,
+  "unstructured_version": "0.22.28",
+  "pillow_version": "12.1.1",
+  "profile": "invoice",
+  "strategy": "hi_res",
+  "resolved_partition_kwargs": {
+    "languages": [
+      "zho",
+      "eng"
+    ],
+    "skip_infer_table_types": [],
+    "extract_image_block_types": [
+      "Image",
+      "Table"
+    ],
+    "extract_image_block_to_payload": true
+  },
+  "extract_image_block_types": [
+    "Image",
+    "Table"
+  ],
+  "extract_image_block_to_payload": true,
+  "extract_image_block_output_dir": null,
+  "image_extraction_enabled": true,
+  "status": "ok",
+  "exception_type": null,
+  "exception_message": null,
+  "exception_chain_summary": [],
+  "traceback_tail": [],
+  "failure_stage": null,
+  "warnings": [
+    "{\"image_format\": \"GIF\", \"image_preflight_applied\": true, \"image_preflight_reason\": \"palette_mode_jpeg_save_risk\", \"kind\": \"zephyr_image_preflight_v1\", \"normalized_image_mode\": \"RGB\", \"normalized_image_used\": true, \"original_image_mode\": \"P\"}"
+  ],
+  "elements_count": 1
+}

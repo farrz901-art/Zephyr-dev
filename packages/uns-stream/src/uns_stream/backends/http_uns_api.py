@@ -131,13 +131,15 @@ class HttpUnsApiBackend:
             _append_form_field(data, k, v)
 
         with p.open("rb") as f:
-            files = {
-                "files": (p.name, f, "application/octet-stream")
-            }  # form field name "files" <!--citation:6-->
+            files: list[tuple[str, tuple[str | None, object, str | None]]] = [
+                ("files", (p.name, f, "application/octet-stream"))
+            ]
+            for key, value in data:
+                files.append((key, (None, value, None)))
 
             client = httpx.Client(timeout=self.timeout_s, transport=self.transport)
             try:
-                resp = client.post(self.url, headers=headers, data=data, files=files)
+                resp = client.post(self.url, headers=headers, files=cast("Any", files))
             finally:
                 client.close()
 

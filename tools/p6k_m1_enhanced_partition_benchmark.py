@@ -7,6 +7,8 @@ from importlib.metadata import version
 from pathlib import Path
 from typing import Any
 
+from uns_stream._internal.enhanced_partition import resolve_partition_options
+from uns_stream._internal.image_preflight import image_preflight_warning_kind
 from uns_stream.partition.auto import partition as auto_partition
 from zephyr_core import PartitionStrategy, ZephyrElement
 
@@ -105,11 +107,37 @@ def _element_type_summary(elements: list[dict[str, Any]]) -> tuple[dict[str, int
     return counts, presence
 
 
+def _extract_fix_evidence(warnings: list[str]) -> dict[str, Any]:
+    evidence: dict[str, Any] = {
+        "image_preflight_applied": False,
+        "image_preflight_reason": None,
+        "partition_retry_applied": False,
+        "partition_retry_reason": None,
+        "normalized_image_used": False,
+        "degraded_mode_used": False,
+    }
+    for warning in warnings:
+        try:
+            payload_obj = json.loads(warning)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(payload_obj, dict):
+            continue
+        payload = payload_obj
+        if payload.get("kind") != image_preflight_warning_kind():
+            continue
+        evidence["image_preflight_applied"] = bool(payload.get("image_preflight_applied"))
+        evidence["image_preflight_reason"] = payload.get("image_preflight_reason")
+        evidence["normalized_image_used"] = bool(payload.get("normalized_image_used"))
+    return evidence
+
+
 def generate_report(args: BenchmarkArgs) -> dict[str, Any]:
     results: list[dict[str, Any]] = []
     missing_inputs: list[str] = []
     resolved_input_dir = args.input_dir.expanduser().resolve(strict=False)
     resolved_out_dir = args.out_dir.expanduser().resolve(strict=False)
+    resolved_partition = resolve_partition_options(profile=args.profile, strategy=args.strategy)
 
     for planned_name in PLANNED_INPUTS:
         input_path = resolved_input_dir / planned_name
@@ -130,6 +158,12 @@ def generate_report(args: BenchmarkArgs) -> dict[str, Any]:
                     "elements_output_path": None,
                     "warnings": [f"missing input: {input_path}"],
                     "errors": [],
+                    "image_preflight_applied": False,
+                    "image_preflight_reason": None,
+                    "partition_retry_applied": False,
+                    "partition_retry_reason": None,
+                    "normalized_image_used": False,
+                    "degraded_mode_used": False,
                 }
             )
             continue
@@ -145,6 +179,7 @@ def generate_report(args: BenchmarkArgs) -> dict[str, Any]:
             elements_payload = _element_dicts(result.elements)
             element_counts, element_presence = _element_type_summary(elements_payload)
             metadata_coverage = _metadata_coverage(elements_payload)
+            fix_evidence = _extract_fix_evidence(list(result.warnings))
 
             normalized_output_path = output_root / "normalized_text.txt"
             elements_output_path = output_root / "elements.json"
@@ -168,6 +203,7 @@ def generate_report(args: BenchmarkArgs) -> dict[str, Any]:
                     "elements_output_path": str(elements_output_path),
                     "warnings": warnings,
                     "errors": [],
+                    **fix_evidence,
                 }
             )
         except Exception as exc:
@@ -185,6 +221,12 @@ def generate_report(args: BenchmarkArgs) -> dict[str, Any]:
                     "elements_output_path": None,
                     "warnings": warnings,
                     "errors": [f"{type(exc).__name__}: {exc}"],
+                    "image_preflight_applied": False,
+                    "image_preflight_reason": None,
+                    "partition_retry_applied": False,
+                    "partition_retry_reason": None,
+                    "normalized_image_used": False,
+                    "degraded_mode_used": False,
                 }
             )
 
@@ -198,6 +240,7 @@ def generate_report(args: BenchmarkArgs) -> dict[str, Any]:
         "out_dir": str(resolved_out_dir),
         "profile": args.profile,
         "strategy": None if args.strategy is None else str(args.strategy),
+        "resolved_partition_kwargs": resolved_partition.merged_backend_kwargs(),
         "planned_inputs": list(PLANNED_INPUTS),
         "results": results,
         "summary": {
@@ -237,6 +280,12 @@ def render_markdown(report: dict[str, Any]) -> str:
         lines.append(f"- Metadata coverage: {result['metadata_coverage']}")
         lines.append(f"- Normalized output: {result['normalized_output_path']}")
         lines.append(f"- Elements output: {result['elements_output_path']}")
+        lines.append(f"- Image preflight applied: {result['image_preflight_applied']}")
+        lines.append(f"- Image preflight reason: {result['image_preflight_reason']}")
+        lines.append(f"- Partition retry applied: {result['partition_retry_applied']}")
+        lines.append(f"- Partition retry reason: {result['partition_retry_reason']}")
+        lines.append(f"- Normalized image used: {result['normalized_image_used']}")
+        lines.append(f"- Degraded mode used: {result['degraded_mode_used']}")
         lines.append(f"- Warnings: {result['warnings']}")
         lines.append(f"- Errors: {result['errors']}")
         lines.append("")

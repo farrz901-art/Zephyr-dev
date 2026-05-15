@@ -1,0 +1,31 @@
+{
+  "repository": "Zephyr-dev",
+  "branch": "master",
+  "previous_head_sha": "9e00800daa3c3c6de4ddbb4cbb7cbb52ffa3804d",
+  "current_head_sha": "9e00800daa3c3c6de4ddbb4cbb7cbb52ffa3804d",
+  "target_sample": "E:\\Github_Projects\\Zephyr-zh-test\\fapiao3.jpg",
+  "root_cause_category": "palette_mode_gif_named_jpg_triggered_unstructured_image_block_extraction_jpeg_save_failure",
+  "fix_strategy": "bounded_image_preflight_rgb_normalization_for_extraction_enabled_image_inputs",
+  "fapiao3_before_status": "error",
+  "fapiao3_after_status": "ok",
+  "full_benchmark_pass_count": 4,
+  "full_benchmark_total_count": 4,
+  "product_grade_readiness_after_fix": "achieved",
+  "dependency_changed": false,
+  "uv_lock_changed": false,
+  "runtime_behavior_changed": true,
+  "base_changed": false,
+  "commercial_logic_added": false,
+  "commands_run": [
+    "uv run --locked --no-sync python -c \"from importlib.metadata import version; print(version('unstructured'))\"",
+    "uv run --locked --no-sync python tools/p6k_m1_diagnose_fapiao3.py --input E:\\Github_Projects\\Zephyr-zh-test\\fapiao3.jpg --out validation/p6k_m1_fix_fapiao3_diagnosis.json",
+    "uv run --locked --no-sync python tools/p6k_m1_enhanced_partition_benchmark.py --input-dir E:\\Github_Projects\\Zephyr-zh-test --out-dir E:\\Github_Projects\\Zephyr-zh-test\\tmp --profile invoice --json",
+    "uv run --locked --no-sync pyright",
+    "uv run --locked --no-sync pytest -n auto",
+    "uv run --locked --no-sync ruff check <changed-files>"
+  ],
+  "known_limitations": [
+    "The fix is intentionally narrow to extraction-enabled image inputs and does not broaden default image behavior.",
+    "Local benchmark runs may emit an unauthenticated HF Hub warning, but that warning did not block 4/4 benchmark success."
+  ]
+}

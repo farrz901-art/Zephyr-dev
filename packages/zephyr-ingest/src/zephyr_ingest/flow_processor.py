@@ -53,13 +53,17 @@ class FlowProcessor(Protocol):
     ) -> PartitionResult: ...
 
 
+def _empty_partition_options() -> dict[str, object]:
+    return {}
+
+
 @dataclass(frozen=True, slots=True)
 class CallableFlowProcessor:
     """Compatibility adapter for legacy ``partition_fn=...`` call sites."""
 
     partition_fn: PartitionFn
     backend: object | None = None
-    partition_options: Mapping[str, object] = field(default_factory=dict)
+    partition_options: Mapping[str, object] = field(default_factory=_empty_partition_options)
     strategy_was_explicit: bool = False
 
     def shared_field_semantics(self) -> FlowProcessorSharedFieldSemantics:
@@ -117,7 +121,7 @@ class CallableFlowProcessor:
 @dataclass(frozen=True, slots=True)
 class UnsFlowProcessor:
     backend: object | None = None
-    partition_options: Mapping[str, object] = field(default_factory=dict)
+    partition_options: Mapping[str, object] = field(default_factory=_empty_partition_options)
     strategy_was_explicit: bool = False
 
     def shared_field_semantics(self) -> FlowProcessorSharedFieldSemantics:
@@ -133,6 +137,7 @@ class UnsFlowProcessor:
         pipeline_version: str | None,
         sha256: str,
     ) -> PartitionResult:
+        partition_kwargs = cast("dict[str, Any]", dict(self.partition_options))
         return process_uns_file(
             filename=doc.uri,
             strategy=strategy if self.strategy_was_explicit else None,
@@ -142,7 +147,7 @@ class UnsFlowProcessor:
             pipeline_version=pipeline_version,
             sha256=sha256,
             size_bytes=doc.size_bytes,
-            **self.partition_options,
+            **partition_kwargs,
         )
 
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import time
+from contextlib import nullcontext
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping, cast
@@ -10,6 +11,10 @@ from uns_stream._internal.enhanced_partition import (
     UNSET_PARTITION_OPTION,
     resolve_partition_options,
     validate_unknown_partition_kwargs,
+)
+from uns_stream._internal.image_preflight import (
+    PreparedImageInput,
+    prepared_image_input,
 )
 from uns_stream._internal.retry_policy import is_retryable_exception
 from uns_stream._internal.utils import sha256_file
@@ -26,6 +31,24 @@ from zephyr_core import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _partition_with_backend(
+    *,
+    backend: PartitionBackend,
+    partition_path: Path,
+    kind: str,
+    effective_strategy: PartitionStrategy,
+    unique_element_ids: bool,
+    partition_kwargs: Mapping[str, object],
+) -> list[ZephyrElement]:
+    return backend.partition_elements(
+        filename=str(partition_path),
+        kind=kind,
+        strategy=effective_strategy,
+        unique_element_ids=unique_element_ids,
+        **partition_kwargs,
+    )
 
 
 def partition_file(
@@ -105,14 +128,53 @@ def partition_file(
         sorted(resolved_partition.merged_backend_kwargs().keys()),
     )
 
-    try:
-        elements: list[ZephyrElement] = b.partition_elements(
-            filename=str(p),
-            kind=kind,
-            strategy=effective_strategy,
-            unique_element_ids=unique_element_ids,
-            **resolved_partition.merged_backend_kwargs(),
+    backend_kwargs = dict(resolved_partition.merged_backend_kwargs())
+    metadata_filename_override = backend_kwargs.get("metadata_filename")
+    metadata_filename = (
+        metadata_filename_override
+        if isinstance(metadata_filename_override, str) or metadata_filename_override is None
+        else None
+    )
+    preflight_ctx = (
+        prepared_image_input(
+            original_path=p,
+            metadata_filename=metadata_filename,
+            partition_kwargs=backend_kwargs,
         )
+        if kind == "image"
+        else nullcontext(
+            PreparedImageInput(
+                path=p,
+                metadata_filename=metadata_filename,
+                warning=None,
+                applied=False,
+                normalized_image_used=False,
+                image_preflight_reason=None,
+                original_image_mode=None,
+                normalized_image_mode=None,
+                image_format=None,
+            )
+        )
+    )
+
+    result_warnings: list[str] = []
+
+    try:
+        with preflight_ctx as prepared:
+            call_partition_kwargs = dict(backend_kwargs)
+            if prepared.metadata_filename is not None:
+                call_partition_kwargs["metadata_filename"] = prepared.metadata_filename
+            if prepared.warning is not None:
+                result_warnings.append(prepared.warning)
+
+            elements = _partition_with_backend(
+                backend=b,
+                partition_path=prepared.path,
+                kind=kind,
+                effective_strategy=effective_strategy,
+                unique_element_ids=unique_element_ids,
+                partition_kwargs=call_partition_kwargs,
+            )
 
     except ZephyrError as ze:
         duration_ms = int((time.perf_counter() - t0) * 1000)
@@ -239,5 +301,5 @@ def partition_file(
         engine=engine,
         elements=elements,
         normalized_text=normalized_text,
-        warnings=[],
+        warnings=result_warnings,
     )

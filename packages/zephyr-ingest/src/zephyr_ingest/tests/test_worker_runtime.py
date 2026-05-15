@@ -425,9 +425,17 @@ def test_run_worker_uses_shared_task_processor_delivery_chain(
                 warnings=[],
             )
 
-    def fake_build_processor_for_flow_kind(*, flow_kind: str, backend: object | None) -> object:
+    def fake_build_processor_for_flow_kind(
+        *,
+        flow_kind: str,
+        backend: object | None,
+        partition_options: object | None = None,
+        strategy_was_explicit: bool = False,
+    ) -> object:
         captured["flow_kind"] = flow_kind
         captured["backend"] = backend
+        captured["partition_options"] = partition_options
+        captured["strategy_was_explicit"] = strategy_was_explicit
         return RecordingProcessor()
 
     monkeypatch.setattr(
@@ -451,6 +459,8 @@ def test_run_worker_uses_shared_task_processor_delivery_chain(
     assert rc == 0
     assert captured["flow_kind"] == "it"
     assert captured["backend"] is None
+    assert captured["partition_options"] == {}
+    assert captured["strategy_was_explicit"] is False
     assert captured["run_id"] == "r-worker-shared-chain"
     assert captured["pipeline_version"] == "p-worker"
     assert captured["strategy"] == PartitionStrategy.AUTO

@@ -29,6 +29,7 @@ def test_benchmark_tool_skips_missing_inputs_by_default(
     assert payload["summary"]["missing_count"] == 4
     assert payload["summary"]["manual_benchmark_pending"] is True
     assert all(item["status"] == "missing_input" for item in payload["results"])
+    assert all(item["image_preflight_applied"] is False for item in payload["results"])
 
 
 def test_benchmark_tool_can_fail_on_missing_inputs(tmp_path: Path) -> None:
@@ -74,3 +75,5 @@ def test_benchmark_tool_marks_product_grade_not_ready_on_runtime_error(
     assert report["summary"]["error_count"] == 1
     assert report["summary"]["manual_benchmark_pending"] is False
     assert report["summary"]["product_grade_ready"] is False
+    assert report["results"][0]["normalized_image_used"] is False
+    assert report["results"][0]["partition_retry_applied"] is False

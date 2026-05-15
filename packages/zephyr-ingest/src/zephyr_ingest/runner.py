@@ -91,13 +91,17 @@ def _default_retry() -> RetryConfig:
     return RetryConfig()
 
 
+def _empty_partition_options() -> dict[str, object]:
+    return {}
+
+
 @dataclass(frozen=True, slots=True)
 class RunnerConfig:
     out_root: Path
     strategy: PartitionStrategy | None = None
     unique_element_ids: bool = True
     backend: object | None = None
-    partition_options: Mapping[str, object] = field(default_factory=dict)
+    partition_options: Mapping[str, object] = field(default_factory=_empty_partition_options)
     skip_unsupported: bool = True
     skip_existing: bool = True
     force: bool = False

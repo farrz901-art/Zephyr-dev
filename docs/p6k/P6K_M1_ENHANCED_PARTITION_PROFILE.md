@@ -233,19 +233,27 @@ Boundary notes:
 
 ## Current implementation judgment
 
-Implementation status is strong-core complete in code, but full product-grade evidence is still
-conditional on benchmark stability.
+Implementation status and product-grade evidence are now both achieved.
 
 Current local benchmark findings:
 
 - real benchmark samples were run locally against `unstructured==0.22.28`
-- `fapiao.jpeg`, `fapiao2.jpg`, and `hetong2-jiashuiyin.pdf` executed successfully
-- `fapiao3.jpg` currently fails through the underlying partition path with an image extraction /
-  JPEG save failure that surfaces as `ZE-UNS-PARTITION-FAILED`
+- `fapiao.jpeg` executed successfully
+- `fapiao2.jpg` executed successfully
+- `fapiao3.jpg` executed successfully after bounded Zephyr image preflight normalization
+- `hetong2-jiashuiyin.pdf` executed successfully
+- full benchmark result: `4/4 passed`
+
+For the remaining previously failing image:
+
+- `fapiao3.jpg` is actually a palette-mode `GIF` payload named with a `.jpg` extension
+- under the `invoice` profile, upstream image-block extraction attempted JPEG save on palette data
+- Zephyr now applies a narrow RGB preflight only for extraction-enabled image inputs that are
+  JPEG-unsafe
+- the benchmark records `image_preflight_applied=true` and `normalized_image_used=true`
 
 Therefore:
 
 - implementation completeness: achieved
-- product-grade strong-core evidence: conditional
-- next required validation: resolve the remaining benchmark failure and re-run the full Chinese
-  sample set
+- product-grade strong-core evidence: achieved
+- next required validation: proceed to `P6K-M2` without reopening Base or commercial boundaries

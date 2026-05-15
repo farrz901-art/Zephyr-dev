@@ -63,6 +63,7 @@ from zephyr_ingest.config.snapshot_v1 import (
     ConfigSourcesV1,
     ConfigValueSource,
     DestinationsSnapshotV1,
+    RunnerSnapshotV1,
 )
 from zephyr_ingest.destinations.base import Destination
 from zephyr_ingest.destinations.filesystem import FilesystemDestination
@@ -2344,7 +2345,7 @@ def _build_config_snapshot(*, cmd: RunCmd) -> ConfigSnapshotV1:
     else:
         backend = {"kind": "local"}
 
-    runner_snapshot = {
+    runner_snapshot: RunnerSnapshotV1 = {
         "out": cmd.out,
         "strategy": str(cmd.strategy or PartitionStrategy.AUTO),
         "skip_existing": cmd.skip_existing,

@@ -58,6 +58,9 @@ strictSetInference = true
 exclude = [
     ".tmp",
     "**/.tmp",
+    ".pytest_tmp_artifacts",
+    "**/.pytest_tmp_artifacts",
+    "validation/local_only",
     "packages/uns-stream/src/uns_stream/tests/fixtures",
     "**/node_modules",
     "**/__pycache__",
@@ -120,7 +123,8 @@ indent-style = "space"
 
 [tool.pytest.ini_options]
 testpaths = ["packages"]
-addopts = ["-q", "-n", "auto", "--basetemp=.tmp/pytest"]
+addopts = ["-q", "-n", "auto", "--basetemp=.pytest_tmp_artifacts"]
+cache_dir = ".pytest_tmp_artifacts/.pytest_cache"
 markers = [
   "integration: requires optional extras and fixture files",
   "auth_contract: P4.5 authenticity contract tier",

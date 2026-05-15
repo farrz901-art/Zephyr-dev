@@ -181,6 +181,12 @@ def _write_scan_artifacts(scan_reports: dict[str, dict[str, object]], out_root: 
 
 
 def build_report(*, root: Path, out_root: Path) -> dict[str, object]:
+    return _build_report(root=root, out_root=out_root, scan_reports=_build_scan_reports(root))
+
+
+def _build_report(
+    *, root: Path, out_root: Path, scan_reports: dict[str, dict[str, object]]
+) -> dict[str, object]:
     paths = _required_paths(root)
     for required_path in paths.values():
         if not required_path.exists():
@@ -190,7 +196,6 @@ def build_report(*, root: Path, out_root: Path) -> dict[str, object]:
     public_manifest = _load_json_object(paths["public_core_export_manifest"])
     private_manifest = _load_json_object(paths["private_core_export_manifest"])
     task_index = _load_json_object(paths["task_index"])
-    scan_reports = _build_scan_reports(root)
     commercial_scan = scan_reports["commercial_contamination"]
     forbidden_scan = scan_reports["forbidden_import"]
     security_scan = scan_reports["security_sensitive_path"]
@@ -297,7 +302,7 @@ def build_report(*, root: Path, out_root: Path) -> dict[str, object]:
             "review_required_hits retained for historical docs/notes classification",
             "actual six repos are not created in this step",
             "actual public/private export mechanics start in P6-M2",
-            "actual product UI starts later and requires design-window inputs"
+            "actual product UI starts later and requires design-window inputs",
         ],
         "issues": [],
         "m1_task_count": len(m1_tasks),
@@ -427,8 +432,6 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     root = args.root.resolve()
     out_root = args.out_root.resolve()
-    scan_reports = _build_scan_reports(root)
-    report = build_report(root=root, out_root=out_root)
     if args.check_artifacts:
         required_scans = _scan_output_paths(out_root)
         required = (
@@ -439,6 +442,8 @@ def main(argv: list[str] | None = None) -> int:
             out_root / "report.md",
         )
         return 0 if all(path.exists() for path in required) else 1
+    scan_reports = _build_scan_reports(root)
+    report = _build_report(root=root, out_root=out_root, scan_reports=scan_reports)
     if args.markdown:
         emit_outputs(
             report=report,

@@ -372,6 +372,7 @@ def test_runner_rejects_enhanced_partition_options_for_legacy_partition_fn_witho
     def strict_partition_fn(
         *,
         filename: str,
+        strategy: PartitionStrategy = PartitionStrategy.AUTO,
         unique_element_ids: bool = True,
         backend: Any | None = None,
         run_id: str | None = None,
@@ -381,6 +382,7 @@ def test_runner_rejects_enhanced_partition_options_for_legacy_partition_fn_witho
     ) -> PartitionResult:
         return _partition_ok(
             filename=filename,
+            strategy=strategy,
             unique_element_ids=unique_element_ids,
             backend=backend,
             run_id=run_id,

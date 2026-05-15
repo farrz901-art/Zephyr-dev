@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Final, Literal, Mapping, cast
+from typing import Any, Final, Literal, Mapping, cast
 
 from zephyr_core import ErrorCode, PartitionStrategy, ZephyrError
 
@@ -39,15 +39,19 @@ class PartitionOptionKind(str, Enum):
     EXTRA = "extra"
 
 
+def _new_object_dict() -> dict[str, object]:
+    return {}
+
+
 @dataclass(frozen=True, slots=True)
 class ResolvedPartitionOptions:
     profile: PartitionProfileName
     strategy: PartitionStrategy | None
-    option_values: dict[str, object] = field(default_factory=dict)
-    extra_partition_kwargs: dict[str, object] = field(default_factory=dict)
+    option_values: dict[str, object] = field(default_factory=_new_object_dict)
+    extra_partition_kwargs: dict[str, object] = field(default_factory=_new_object_dict)
 
     def merged_backend_kwargs(self) -> dict[str, object]:
-        merged = dict(self.option_values)
+        merged: dict[str, object] = dict(self.option_values)
         merged.update(self.extra_partition_kwargs)
         return merged
 
@@ -69,7 +73,7 @@ class PartitionOptionSpec:
     hi_res_model_name: str | None = None
     model_name: str | None = None
     starting_page_number: int | None = None
-    extra_partition_kwargs: dict[str, object] = field(default_factory=dict)
+    extra_partition_kwargs: dict[str, object] = field(default_factory=_new_object_dict)
 
 
 _PROFILE_SPECS: Final[dict[PartitionProfileName, PartitionOptionSpec]] = {
@@ -126,24 +130,32 @@ def _coerce_profile(value: str | None) -> PartitionProfileName:
                 "supported_profiles": list(_PROFILE_SPECS.keys()),
             },
         )
-    return cast("PartitionProfileName", profile_name)
+    return profile_name
 
 
 def _normalize_str_list(value: object, *, field_name: str) -> list[str]:
-    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+    if not isinstance(value, list):
         raise ZephyrError(
             code=ErrorCode.UNS_PARTITION_FAILED,
             message=f"{field_name} must be list[str]",
             details={"retryable": False, "field": field_name},
         )
-    return cast("list[str]", value)
+    items = cast("list[object]", value)
+    for item in items:
+        if not isinstance(item, str):
+            raise ZephyrError(
+                code=ErrorCode.UNS_PARTITION_FAILED,
+                message=f"{field_name} must be list[str]",
+                details={"retryable": False, "field": field_name},
+            )
+    return cast("list[str]", items)
 
 
 def _normalize_extra_partition_kwargs(value: Mapping[str, object] | None) -> dict[str, object]:
     if value is None:
         return {}
     out: dict[str, object] = {}
-    for key, item in value.items():
+    for key in value:
         if key in _DIRECT_KNOWN_FIELDS:
             raise ZephyrError(
                 code=ErrorCode.UNS_PARTITION_FAILED,
@@ -154,8 +166,33 @@ def _normalize_extra_partition_kwargs(value: Mapping[str, object] | None) -> dic
                     "kind": PartitionOptionKind.EXTRA.value,
                 },
             )
-        out[str(key)] = item
+        out[str(key)] = value[key]
     return out
+
+
+def _coerce_int_option(*, field_name: str, value: object) -> int:
+    if isinstance(value, bool):
+        raise ZephyrError(
+            code=ErrorCode.UNS_PARTITION_FAILED,
+            message=f"{field_name} must be an integer",
+            details={"retryable": False, "field": field_name},
+        )
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError as exc:
+            raise ZephyrError(
+                code=ErrorCode.UNS_PARTITION_FAILED,
+                message=f"{field_name} must be an integer",
+                details={"retryable": False, "field": field_name},
+            ) from exc
+    raise ZephyrError(
+        code=ErrorCode.UNS_PARTITION_FAILED,
+        message=f"{field_name} must be an integer",
+        details={"retryable": False, "field": field_name},
+    )
 
 
 def validate_unknown_partition_kwargs(raw_partition_kwargs: Mapping[str, object]) -> None:
@@ -174,6 +211,61 @@ def validate_unknown_partition_kwargs(raw_partition_kwargs: Mapping[str, object]
             "direct_known_fields": sorted(_DIRECT_KNOWN_FIELDS),
         },
     )
+
+
+def build_explicit_partition_kwargs(
+    *,
+    profile: str | None = None,
+    languages: list[str] | None = None,
+    detect_language_per_element: bool | None = None,
+    language_fallback: object | None = None,
+    skip_infer_table_types: list[str] | None = None,
+    infer_table_structure: bool | None = None,
+    pdf_infer_table_structure: bool | None = None,
+    extract_image_block_types: list[str] | None = None,
+    extract_image_block_output_dir: str | None = None,
+    extract_image_block_to_payload: bool | None = None,
+    data_source_metadata: object | None = None,
+    metadata_filename: str | None = None,
+    hi_res_model_name: str | None = None,
+    model_name: str | None = None,
+    starting_page_number: int | None = None,
+    extra_partition_kwargs: Mapping[str, object] | None = None,
+) -> dict[str, Any]:
+    partition_kwargs: dict[str, Any] = {}
+    if profile is not None:
+        partition_kwargs["profile"] = profile
+    if languages is not None:
+        partition_kwargs["languages"] = languages
+    if detect_language_per_element is not None:
+        partition_kwargs["detect_language_per_element"] = detect_language_per_element
+    if language_fallback is not None:
+        partition_kwargs["language_fallback"] = language_fallback
+    if skip_infer_table_types is not None:
+        partition_kwargs["skip_infer_table_types"] = skip_infer_table_types
+    if infer_table_structure is not None:
+        partition_kwargs["infer_table_structure"] = infer_table_structure
+    if pdf_infer_table_structure is not None:
+        partition_kwargs["pdf_infer_table_structure"] = pdf_infer_table_structure
+    if extract_image_block_types is not None:
+        partition_kwargs["extract_image_block_types"] = extract_image_block_types
+    if extract_image_block_output_dir is not None:
+        partition_kwargs["extract_image_block_output_dir"] = extract_image_block_output_dir
+    if extract_image_block_to_payload is not None:
+        partition_kwargs["extract_image_block_to_payload"] = extract_image_block_to_payload
+    if data_source_metadata is not None:
+        partition_kwargs["data_source_metadata"] = data_source_metadata
+    if metadata_filename is not None:
+        partition_kwargs["metadata_filename"] = metadata_filename
+    if hi_res_model_name is not None:
+        partition_kwargs["hi_res_model_name"] = hi_res_model_name
+    if model_name is not None:
+        partition_kwargs["model_name"] = model_name
+    if starting_page_number is not None:
+        partition_kwargs["starting_page_number"] = starting_page_number
+    if extra_partition_kwargs is not None:
+        partition_kwargs["extra_partition_kwargs"] = dict(extra_partition_kwargs)
+    return partition_kwargs
 
 
 def resolve_partition_options(
@@ -202,12 +294,12 @@ def resolve_partition_options(
     resolved_strategy = profile_defaults.strategy if strategy is None else strategy
     resolved_kwargs: dict[str, object] = {}
 
-    def _pick(field_name: str, explicit_value: object, profile_value: object) -> object:
+    def _pick(explicit_value: object, profile_value: object) -> object:
         if explicit_value is _UNSET:
             return profile_value
         return explicit_value
 
-    languages_value = _pick("languages", languages, profile_defaults.languages)
+    languages_value = _pick(languages, profile_defaults.languages)
     if languages_value is not None and languages_value is not _UNSET:
         resolved_kwargs["languages"] = _normalize_str_list(
             languages_value,
@@ -215,7 +307,6 @@ def resolve_partition_options(
         )
 
     detect_value = _pick(
-        "detect_language_per_element",
         detect_language_per_element,
         profile_defaults.detect_language_per_element,
     )
@@ -223,7 +314,6 @@ def resolve_partition_options(
         resolved_kwargs["detect_language_per_element"] = bool(detect_value)
 
     fallback_value = _pick(
-        "language_fallback",
         language_fallback,
         profile_defaults.language_fallback,
     )
@@ -231,7 +321,6 @@ def resolve_partition_options(
         resolved_kwargs["language_fallback"] = fallback_value
 
     skip_value = _pick(
-        "skip_infer_table_types",
         skip_infer_table_types,
         profile_defaults.skip_infer_table_types,
     )
@@ -264,7 +353,6 @@ def resolve_partition_options(
         resolved_kwargs["infer_table_structure"] = local_infer
 
     extract_types_value = _pick(
-        "extract_image_block_types",
         extract_image_block_types,
         profile_defaults.extract_image_block_types,
     )
@@ -275,7 +363,6 @@ def resolve_partition_options(
         )
 
     output_dir_value = _pick(
-        "extract_image_block_output_dir",
         extract_image_block_output_dir,
         profile_defaults.extract_image_block_output_dir,
     )
@@ -283,7 +370,6 @@ def resolve_partition_options(
         resolved_kwargs["extract_image_block_output_dir"] = str(output_dir_value)
 
     to_payload_value = _pick(
-        "extract_image_block_to_payload",
         extract_image_block_to_payload,
         profile_defaults.extract_image_block_to_payload,
     )
@@ -291,7 +377,6 @@ def resolve_partition_options(
         resolved_kwargs["extract_image_block_to_payload"] = bool(to_payload_value)
 
     data_source_metadata_value = _pick(
-        "data_source_metadata",
         data_source_metadata,
         profile_defaults.data_source_metadata,
     )
@@ -299,7 +384,6 @@ def resolve_partition_options(
         resolved_kwargs["data_source_metadata"] = data_source_metadata_value
 
     metadata_filename_value = _pick(
-        "metadata_filename",
         metadata_filename,
         profile_defaults.metadata_filename,
     )
@@ -307,7 +391,6 @@ def resolve_partition_options(
         resolved_kwargs["metadata_filename"] = str(metadata_filename_value)
 
     hi_res_model_value = _pick(
-        "hi_res_model_name",
         hi_res_model_name,
         profile_defaults.hi_res_model_name,
     )
@@ -315,7 +398,6 @@ def resolve_partition_options(
         resolved_kwargs["hi_res_model_name"] = str(hi_res_model_value)
 
     model_name_value = _pick(
-        "model_name",
         model_name,
         profile_defaults.model_name,
     )
@@ -323,12 +405,14 @@ def resolve_partition_options(
         resolved_kwargs["model_name"] = str(model_name_value)
 
     starting_page_value = _pick(
-        "starting_page_number",
         starting_page_number,
         profile_defaults.starting_page_number,
     )
     if starting_page_value is not None and starting_page_value is not _UNSET:
-        resolved_kwargs["starting_page_number"] = int(starting_page_value)
+        resolved_kwargs["starting_page_number"] = _coerce_int_option(
+            field_name="starting_page_number",
+            value=starting_page_value,
+        )
 
     normalized_extra = _normalize_extra_partition_kwargs(extra_partition_kwargs)
     return ResolvedPartitionOptions(
