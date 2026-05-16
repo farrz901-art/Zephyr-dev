@@ -1,6 +1,10 @@
 """Smoke tests for zephyr-core package."""
 
+import pytest
+
 import zephyr_core
+
+pytestmark = [pytest.mark.unit]
 
 
 def test_package_exists() -> None:

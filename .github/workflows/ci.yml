@@ -2,12 +2,12 @@ name: CI
 
 on:
   push:
-    branches: [ master, main ]
+    branches: [master, main]
   pull_request:
-    branches: [ master, main ]
+    branches: [master, main]
 
 jobs:
-  check:
+  quality:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -25,13 +25,99 @@ jobs:
         run: uv python install ${{ env.PYTHON_VERSION }}
 
       - name: Install deps
-        run: uv sync --locked --all-groups --all-packages --all-extras
+        run: uv sync --locked --all-groups --all-packages
 
-      - name: Lint & Typecheck
+      - name: Quality gates
         run: make check
 
-      - name: Prepare test environment
-        run: mkdir -p .tmp/pytest
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
-      - name: Test
-        run: make test
+      - name: Read Python version from .python-version
+        run: echo "PYTHON_VERSION=$(cat .python-version)" >> $GITHUB_ENV
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@4db96194c378173c656ce18a155ffc14a9fc4355
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Install deps
+        run: uv sync --locked --all-groups --all-packages
+
+      - name: Stable core tests
+        run: make test-core
+
+  contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Read Python version from .python-version
+        run: echo "PYTHON_VERSION=$(cat .python-version)" >> $GITHUB_ENV
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@4db96194c378173c656ce18a155ffc14a9fc4355
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Install deps
+        run: uv sync --locked --all-groups --all-packages
+
+      - name: Contract tests
+        run: make test-contracts
+
+  fixtures:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Read Python version from .python-version
+        run: echo "PYTHON_VERSION=$(cat .python-version)" >> $GITHUB_ENV
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@4db96194c378173c656ce18a155ffc14a9fc4355
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Install deps
+        run: uv sync --locked --all-groups --all-packages
+
+      - name: Fixture tests
+        run: make test-fixtures
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Read Python version from .python-version
+        run: echo "PYTHON_VERSION=$(cat .python-version)" >> $GITHUB_ENV
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@4db96194c378173c656ce18a155ffc14a9fc4355
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Install deps
+        run: uv sync --locked --all-groups --all-packages
+
+      - name: Build smoke
+        run: make build-smoke

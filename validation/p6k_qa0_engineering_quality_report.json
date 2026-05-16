@@ -1,0 +1,64 @@
+{
+  "repository": "Zephyr-dev",
+  "phase": "P6K-QA0",
+  "previous_head_sha": "d43dea0a6058cc36b8985afd3d6580f1a12996d5",
+  "markers_added": [
+    "unit",
+    "contract",
+    "fixture",
+    "uns",
+    "it",
+    "connector",
+    "p45",
+    "slow",
+    "integration"
+  ],
+  "make_targets_added": [
+    "check-format",
+    "lint",
+    "typecheck",
+    "check-tools",
+    "test-core",
+    "test-contracts",
+    "test-fixtures",
+    "test-uns",
+    "test-it",
+    "test-connectors",
+    "build-smoke",
+    "offline-proof"
+  ],
+  "ci_jobs_added": [
+    "quality",
+    "unit",
+    "contracts",
+    "fixtures",
+    "build"
+  ],
+  "default_test_marker_exclusion": "not auth_local_real and not auth_service_live and not auth_recovery_drill and not slow",
+  "p45_targets_added_or_aliased": [
+    "p45-auth-substrate-up",
+    "p45-auth-substrate-down",
+    "p45-auth-substrate-healthcheck",
+    "p45-auth-test-local-real",
+    "p45-auth-test-service-live",
+    "p45-auth-test-recovery-drill",
+    "p45-auth-compose-config",
+    "p45-auth-evidence-proof"
+  ],
+  "contract_fixture_tests_added": [
+    "packages/zephyr-core/src/zephyr_core/tests/test_delivery_contracts.py"
+  ],
+  "dependency_changed": false,
+  "uv_lock_changed": false,
+  "runtime_behavior_changed": false,
+  "base_changed": false,
+  "commercial_logic_added": false,
+  "ordinary_ci_excludes_real_service_tests": true,
+  "known_limitations": [
+    "ordinary CI still installs --all-groups --all-packages and does not yet trim heavy optional capability pulled in by the current root dev group",
+    "tool scripts are syntax-checked by check-tools, but repo-wide tool formatting/lint normalization is deferred",
+    "marker adoption is intentionally partial in QA0; unmarked stable tests still run under test-core",
+    "legacy p45-substrate-up/down env-file path join remains Windows-oriented; use p45-auth-compose-config for inspection"
+  ],
+  "next_recommended_phase": "P6K-OCR1"
+}

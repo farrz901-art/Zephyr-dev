@@ -26,6 +26,8 @@ from it_stream.artifacts import load_it_checkpoint
 from it_stream.sources import http_source
 from zephyr_core import ErrorCode, PartitionStrategy, ZephyrError
 
+pytestmark = [pytest.mark.it, pytest.mark.connector]
+
 
 class _FakeResponse:
     def __init__(self, payload: dict[str, object]) -> None:

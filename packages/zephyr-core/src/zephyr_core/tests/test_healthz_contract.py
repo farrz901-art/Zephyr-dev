@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import pytest
+
 from zephyr_core import HealthCheckKind, HealthCheckProvider, HealthCheckResult
 from zephyr_core.contracts.v2 import HealthCheckKind as HealthCheckKindV2
 from zephyr_core.contracts.v2 import HealthCheckProvider as HealthCheckProviderV2
 from zephyr_core.contracts.v2 import HealthCheckResult as HealthCheckResultV2
+
+pytestmark = [pytest.mark.contract]
 
 
 def test_health_check_kind_values_are_stable() -> None:

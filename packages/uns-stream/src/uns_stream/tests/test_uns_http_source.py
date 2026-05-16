@@ -17,6 +17,8 @@ from zephyr_core import (
     ZephyrError,
 )
 
+pytestmark = [pytest.mark.uns, pytest.mark.connector]
+
 
 def test_normalize_uns_input_identity_sha_is_stable_for_http_source_specs(tmp_path: Path) -> None:
     spec_a = tmp_path / "source-a.json"

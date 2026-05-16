@@ -126,12 +126,20 @@ testpaths = ["packages"]
 addopts = ["-q", "-n", "auto", "--basetemp=.pytest_tmp_artifacts"]
 cache_dir = ".pytest_tmp_artifacts/.pytest_cache"
 markers = [
-  "integration: requires optional extras and fixture files",
+  "unit: fast deterministic unit test",
+  "contract: stable core contract/schema test",
+  "fixture: fixture or golden-output regression test",
+  "uns: uns-stream related test",
+  "it: it-stream related test",
+  "connector: source/destination connector contract test",
+  "p45: P4.5 authenticity/substrate related test",
+  "slow: slow test excluded from ordinary PR test target",
+  "integration: integration test requiring optional extras or fixtures",
   "auth_contract: P4.5 authenticity contract tier",
   "auth_orchestration: P4.5 authenticity orchestration tier",
-  "auth_local_real: P4.5 authenticity local-real tier",
-  "auth_service_live: P4.5 authenticity service-live tier",
-  "auth_saas_live: P4.5 authenticity saas-live tier",
+  "auth_local_real: P4.5 authenticity local-real tier requiring local services",
+  "auth_service_live: P4.5 authenticity service-live tier requiring external/live credentials",
+  "auth_saas_live: P4.5 authenticity saas-live tier requiring external SaaS credentials",
   "auth_recovery_drill: P4.5 authenticity recovery-drill tier",
 ]
 

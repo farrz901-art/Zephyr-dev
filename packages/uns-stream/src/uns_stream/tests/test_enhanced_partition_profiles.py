@@ -14,6 +14,8 @@ from uns_stream.partition.auto import partition as auto_partition
 from uns_stream.service import partition_file
 from zephyr_core import ErrorCode, PartitionStrategy, ZephyrElement, ZephyrError
 
+pytestmark = [pytest.mark.uns]
+
 
 class RecordingBackend:
     name = "dummy"

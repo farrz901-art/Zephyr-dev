@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Mapping
 
 from uns_stream.sources import (
     confluence_source,
@@ -24,15 +25,53 @@ from zephyr_core import (
 def _fake_auto_partition(
     *,
     filename: str,
-    strategy: PartitionStrategy = PartitionStrategy.AUTO,
+    strategy: PartitionStrategy | None = PartitionStrategy.AUTO,
     unique_element_ids: bool = True,
     backend: object | None = None,
     run_id: str | None = None,
     pipeline_version: str | None = None,
     sha256: str | None = None,
     size_bytes: int | None = None,
+    profile: str | None = None,
+    languages: object = None,
+    detect_language_per_element: object = None,
+    language_fallback: object = None,
+    skip_infer_table_types: object = None,
+    infer_table_structure: object = None,
+    pdf_infer_table_structure: object = None,
+    extract_image_block_types: object = None,
+    extract_image_block_output_dir: object = None,
+    extract_image_block_to_payload: object = None,
+    data_source_metadata: object = None,
+    metadata_filename: object = None,
+    hi_res_model_name: object = None,
+    model_name: object = None,
+    starting_page_number: object = None,
+    extra_partition_kwargs: Mapping[str, object] | None = None,
 ) -> PartitionResult:
-    del strategy, unique_element_ids, backend, run_id, pipeline_version
+    del (
+        strategy,
+        unique_element_ids,
+        backend,
+        run_id,
+        pipeline_version,
+        profile,
+        languages,
+        detect_language_per_element,
+        language_fallback,
+        skip_infer_table_types,
+        infer_table_structure,
+        pdf_infer_table_structure,
+        extract_image_block_types,
+        extract_image_block_output_dir,
+        extract_image_block_to_payload,
+        data_source_metadata,
+        metadata_filename,
+        hi_res_model_name,
+        model_name,
+        starting_page_number,
+        extra_partition_kwargs,
+    )
     fetched_path = Path(filename)
     content = fetched_path.read_text(encoding="utf-8")
     encoded_content = content.encode("utf-8")

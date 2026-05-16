@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from zephyr_core import ExecutionModeV1
 from zephyr_core import RunProvenanceV1 as ExportedRunProvenanceV1
 from zephyr_core.contracts.v1.enums import RunOutcome
@@ -16,6 +18,8 @@ from zephyr_core.contracts.v1.run_meta import (
     ExecutionModeV1 as InternalExecutionModeV1,
 )
 from zephyr_core.versioning import RUN_META_SCHEMA_VERSION
+
+pytestmark = [pytest.mark.contract]
 
 
 def test_run_meta_v1_is_json_serializable_and_has_keys() -> None:

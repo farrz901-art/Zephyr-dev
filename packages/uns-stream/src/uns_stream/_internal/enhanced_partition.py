@@ -108,6 +108,7 @@ _PROFILE_SPECS: Final[dict[PartitionProfileName, PartitionOptionSpec]] = {
         extract_image_block_to_payload=True,
     ),
 }
+_PROFILE_NAMES: Final[tuple[PartitionProfileName, ...]] = tuple(_PROFILE_SPECS.keys())
 
 
 def direct_known_partition_fields() -> frozenset[str]:
@@ -115,22 +116,23 @@ def direct_known_partition_fields() -> frozenset[str]:
 
 
 def supported_partition_profiles() -> tuple[PartitionProfileName, ...]:
-    return tuple(_PROFILE_SPECS.keys())
+    return _PROFILE_NAMES
 
 
 def _coerce_profile(value: str | None) -> PartitionProfileName:
     profile_name = "default" if value is None else value
-    if profile_name not in _PROFILE_SPECS:
-        raise ZephyrError(
-            code=ErrorCode.UNS_PARTITION_FAILED,
-            message=f"Unsupported partition profile: {profile_name}",
-            details={
-                "retryable": False,
-                "profile": profile_name,
-                "supported_profiles": list(_PROFILE_SPECS.keys()),
-            },
-        )
-    return profile_name
+    for candidate in _PROFILE_NAMES:
+        if candidate == profile_name:
+            return candidate
+    raise ZephyrError(
+        code=ErrorCode.UNS_PARTITION_FAILED,
+        message=f"Unsupported partition profile: {profile_name}",
+        details={
+            "retryable": False,
+            "profile": profile_name,
+            "supported_profiles": list(_PROFILE_SPECS.keys()),
+        },
+    )
 
 
 def _normalize_str_list(value: object, *, field_name: str) -> list[str]:

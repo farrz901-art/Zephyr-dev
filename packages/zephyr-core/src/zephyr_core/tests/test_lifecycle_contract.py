@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import pytest
+
 from zephyr_core import Lifecycle, WorkerPhase
 from zephyr_core.contracts.v2 import Lifecycle as LifecycleV2
 from zephyr_core.contracts.v2 import WorkerPhase as WorkerPhaseV2
+
+pytestmark = [pytest.mark.contract]
 
 
 def test_worker_phase_values_are_stable() -> None:
