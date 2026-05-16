@@ -1,0 +1,22 @@
+{
+  "repository": "Zephyr-dev",
+  "phase": "P6K-QA0-FIX",
+  "previous_head_sha": "b5227c29d1019465422b6973a52fb5520796eba7",
+  "pytest_basetemp_creation_fixed": true,
+  "basetemp_forms_supported": [
+    "--basetemp=PATH",
+    "--basetemp PATH"
+  ],
+  "install_targets_added": [
+    "install-all",
+    "install-full",
+    "install-dev-full"
+  ],
+  "ordinary_ci_uses_all_extras": false,
+  "dependency_changed": false,
+  "uv_lock_changed": false,
+  "runtime_behavior_changed": false,
+  "base_changed": false,
+  "commercial_logic_added": false,
+  "next_recommended_phase": "P6K-OCR1"
+}

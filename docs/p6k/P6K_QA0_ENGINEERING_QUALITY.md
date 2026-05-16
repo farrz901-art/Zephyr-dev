@@ -40,6 +40,22 @@ QA0 explicitly keeps these out of ordinary PR CI:
 
 Those remain manual, dispatch, or release-candidate style paths.
 
+## Install modes
+
+QA0 keeps ordinary developer and CI install behavior lightweight:
+
+- `make install` -> `uv sync --locked --all-groups --all-packages`
+
+QA0-FIX adds explicit full local development install targets:
+
+- `make install-all`
+- `make install-full`
+- `make install-dev-full`
+
+These full targets intentionally keep `--all-extras` available for local capability-heavy work such
+as later OCR, PDF, image, or broader connector validation, without putting `--all-extras` back
+into ordinary CI.
+
 ## Pytest marker taxonomy
 
 QA0 adds these markers:
@@ -100,6 +116,8 @@ Important notes:
 - `check-tools` still compiles `tools/*.py` to keep local helper scripts syntactically valid.
 - marker-specific targets use dedicated `--basetemp` directories and `-n 0` on Windows to avoid
   xdist temp cleanup noise from leaking across layered targets.
+- `tools/pytest_target.py` now pre-creates `--basetemp` directories for both `--basetemp=PATH` and
+  `--basetemp PATH` forms so local and remote CI do not fail on missing temp roots.
 - `test-core` remains parallel and broad.
 
 ## P4.5 authenticity naming
@@ -157,6 +175,11 @@ QA0 intentionally does not add:
 - broad extras-matrix jobs
 
 Ordinary CI also stops using `--all-extras`.
+
+This remains true after QA0-FIX:
+
+- CI jobs keep `uv sync --locked --all-groups --all-packages`
+- full extras stay opt-in through `make install-all` / `make install-dev-full`
 
 Current limitation:
 

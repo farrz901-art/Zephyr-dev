@@ -2,6 +2,16 @@
 install:
 	uv sync --locked --all-groups --all-packages
 
+.PHONY: install-all
+install-all:
+	uv sync --locked --all-groups --all-packages --all-extras
+
+.PHONY: install-full
+install-full: install-all
+
+.PHONY: install-dev-full
+install-dev-full: install-all
+
 .PHONY: lock
 lock:
 	uv lock --upgrade
