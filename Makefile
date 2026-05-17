@@ -12,6 +12,10 @@ install-full: install-all
 .PHONY: install-dev-full
 install-dev-full: install-all
 
+.PHONY: install-ocr
+install-ocr:
+	uv sync --locked --all-groups --all-packages --extra paddleocr
+
 .PHONY: lock
 lock:
 	uv lock --upgrade

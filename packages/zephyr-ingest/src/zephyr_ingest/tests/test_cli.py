@@ -140,7 +140,7 @@ def test_cli_enhanced_partition_flags_flow_into_runner_and_snapshot(
             "--out",
             str(tmp_path / "out-enhanced"),
             "--profile",
-            "invoice",
+            "invoice-paddle",
             "--languages",
             "zho,eng",
             "--languages",
@@ -161,6 +161,10 @@ def test_cli_enhanced_partition_flags_flow_into_runner_and_snapshot(
             "invoice.pdf",
             "--starting-page-number",
             "3",
+            "--ocr-agent",
+            "tesseract",
+            "--table-ocr-agent",
+            "paddle",
             "--infer-table-structure",
             "--strategy",
             "hi_res",
@@ -171,7 +175,7 @@ def test_cli_enhanced_partition_flags_flow_into_runner_and_snapshot(
     assert captured["strategy"] == PartitionStrategy.HI_RES
     partition_options = cast(dict[str, object], captured["partition_options"])
     assert partition_options == {
-        "profile": "invoice",
+        "profile": "invoice-paddle",
         "languages": ["zho", "eng", "fra"],
         "detect_language_per_element": True,
         "skip_infer_table_types": ["pdf", "jpg"],
@@ -182,13 +186,15 @@ def test_cli_enhanced_partition_flags_flow_into_runner_and_snapshot(
         "model_name": "layout-model",
         "metadata_filename": "invoice.pdf",
         "starting_page_number": 3,
+        "ocr_agent": "tesseract",
+        "table_ocr_agent": "paddle",
         "infer_table_structure": True,
     }
 
     snap = cast(ConfigSnapshotV1, captured["snapshot"])
     runner_snapshot = cast(dict[str, object], snap["runner"])
     assert runner_snapshot["strategy"] == "hi_res"
-    assert runner_snapshot["profile"] == "invoice"
+    assert runner_snapshot["profile"] == "invoice-paddle"
     assert runner_snapshot["languages"] == ["zho", "eng", "fra"]
     assert runner_snapshot["detect_language_per_element"] is True
     assert runner_snapshot["skip_infer_table_types"] == ["pdf", "jpg"]
@@ -199,6 +205,8 @@ def test_cli_enhanced_partition_flags_flow_into_runner_and_snapshot(
     assert runner_snapshot["model_name"] == "layout-model"
     assert runner_snapshot["metadata_filename"] == "invoice.pdf"
     assert runner_snapshot["starting_page_number"] == 3
+    assert runner_snapshot["ocr_agent"] == "tesseract"
+    assert runner_snapshot["table_ocr_agent"] == "paddle"
     assert runner_snapshot["infer_table_structure"] is True
 
 

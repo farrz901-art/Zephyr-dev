@@ -47,6 +47,8 @@ def _fake_auto_partition(
     hi_res_model_name: object = None,
     model_name: object = None,
     starting_page_number: object = None,
+    ocr_agent: object = None,
+    table_ocr_agent: object = None,
     extra_partition_kwargs: Mapping[str, object] | None = None,
 ) -> PartitionResult:
     del (
@@ -70,6 +72,8 @@ def _fake_auto_partition(
         hi_res_model_name,
         model_name,
         starting_page_number,
+        ocr_agent,
+        table_ocr_agent,
         extra_partition_kwargs,
     )
     fetched_path = Path(filename)

@@ -109,6 +109,8 @@ def partition(
     hi_res_model_name: object = UNSET_PARTITION_OPTION,
     model_name: object = UNSET_PARTITION_OPTION,
     starting_page_number: object = UNSET_PARTITION_OPTION,
+    ocr_agent: object = UNSET_PARTITION_OPTION,
+    table_ocr_agent: object = UNSET_PARTITION_OPTION,
     extra_partition_kwargs: Mapping[str, object] | None = None,
 ) -> PartitionResult:
     ext = Path(filename).suffix.lower()
@@ -146,5 +148,7 @@ def partition(
         hi_res_model_name=hi_res_model_name,
         model_name=model_name,
         starting_page_number=starting_page_number,
+        ocr_agent=ocr_agent,
+        table_ocr_agent=table_ocr_agent,
         extra_partition_kwargs=extra_partition_kwargs,
     )

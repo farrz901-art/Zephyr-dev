@@ -4,9 +4,12 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Final, Literal, Mapping, cast
 
+from uns_stream._internal.ocr_agents import OCR_AGENT_PADDLE_QNAME, resolve_ocr_agent_alias
 from zephyr_core import ErrorCode, PartitionStrategy, ZephyrError
 
-PartitionProfileName = Literal["default", "zh", "html_heavy", "invoice", "contract"]
+PartitionProfileName = Literal[
+    "default", "zh", "html_heavy", "invoice", "contract", "zh_paddle", "invoice_paddle"
+]
 
 _UNSET: Final = object()
 UNSET_PARTITION_OPTION: Final = _UNSET
@@ -28,6 +31,8 @@ _DIRECT_KNOWN_FIELDS: Final[frozenset[str]] = frozenset(
         "hi_res_model_name",
         "model_name",
         "starting_page_number",
+        "ocr_agent",
+        "table_ocr_agent",
         "coordinates",
         "include_page_breaks",
     }
@@ -73,6 +78,8 @@ class PartitionOptionSpec:
     hi_res_model_name: str | None = None
     model_name: str | None = None
     starting_page_number: int | None = None
+    ocr_agent: str | None = None
+    table_ocr_agent: str | None = None
     extra_partition_kwargs: dict[str, object] = field(default_factory=_new_object_dict)
 
 
@@ -107,8 +114,29 @@ _PROFILE_SPECS: Final[dict[PartitionProfileName, PartitionOptionSpec]] = {
         extract_image_block_types=["Image", "Table"],
         extract_image_block_to_payload=True,
     ),
+    "zh_paddle": PartitionOptionSpec(
+        profile="zh_paddle",
+        strategy=PartitionStrategy.HI_RES,
+        languages=["zho", "eng"],
+        ocr_agent=OCR_AGENT_PADDLE_QNAME,
+        table_ocr_agent=OCR_AGENT_PADDLE_QNAME,
+    ),
+    "invoice_paddle": PartitionOptionSpec(
+        profile="invoice_paddle",
+        strategy=PartitionStrategy.HI_RES,
+        languages=["zho", "eng"],
+        skip_infer_table_types=[],
+        extract_image_block_types=["Image", "Table"],
+        extract_image_block_to_payload=True,
+        ocr_agent=OCR_AGENT_PADDLE_QNAME,
+        table_ocr_agent=OCR_AGENT_PADDLE_QNAME,
+    ),
 }
 _PROFILE_NAMES: Final[tuple[PartitionProfileName, ...]] = tuple(_PROFILE_SPECS.keys())
+_PROFILE_ALIASES: Final[dict[str, PartitionProfileName]] = {
+    "zh-paddle": "zh_paddle",
+    "invoice-paddle": "invoice_paddle",
+}
 
 
 def direct_known_partition_fields() -> frozenset[str]:
@@ -119,8 +147,13 @@ def supported_partition_profiles() -> tuple[PartitionProfileName, ...]:
     return _PROFILE_NAMES
 
 
+def accepted_partition_profiles() -> tuple[str, ...]:
+    return _PROFILE_NAMES + tuple(_PROFILE_ALIASES.keys())
+
+
 def _coerce_profile(value: str | None) -> PartitionProfileName:
     profile_name = "default" if value is None else value
+    profile_name = _PROFILE_ALIASES.get(profile_name, profile_name)
     for candidate in _PROFILE_NAMES:
         if candidate == profile_name:
             return candidate
@@ -130,7 +163,7 @@ def _coerce_profile(value: str | None) -> PartitionProfileName:
         details={
             "retryable": False,
             "profile": profile_name,
-            "supported_profiles": list(_PROFILE_SPECS.keys()),
+            "supported_profiles": list(_PROFILE_SPECS.keys()) + sorted(_PROFILE_ALIASES),
         },
     )
 
@@ -232,6 +265,8 @@ def build_explicit_partition_kwargs(
     hi_res_model_name: str | None = None,
     model_name: str | None = None,
     starting_page_number: int | None = None,
+    ocr_agent: str | None = None,
+    table_ocr_agent: str | None = None,
     extra_partition_kwargs: Mapping[str, object] | None = None,
 ) -> dict[str, Any]:
     partition_kwargs: dict[str, Any] = {}
@@ -265,6 +300,10 @@ def build_explicit_partition_kwargs(
         partition_kwargs["model_name"] = model_name
     if starting_page_number is not None:
         partition_kwargs["starting_page_number"] = starting_page_number
+    if ocr_agent is not None:
+        partition_kwargs["ocr_agent"] = ocr_agent
+    if table_ocr_agent is not None:
+        partition_kwargs["table_ocr_agent"] = table_ocr_agent
     if extra_partition_kwargs is not None:
         partition_kwargs["extra_partition_kwargs"] = dict(extra_partition_kwargs)
     return partition_kwargs
@@ -288,6 +327,8 @@ def resolve_partition_options(
     hi_res_model_name: object = _UNSET,
     model_name: object = _UNSET,
     starting_page_number: object = _UNSET,
+    ocr_agent: object = _UNSET,
+    table_ocr_agent: object = _UNSET,
     extra_partition_kwargs: Mapping[str, object] | None = None,
 ) -> ResolvedPartitionOptions:
     resolved_profile = _coerce_profile(profile)
@@ -415,6 +456,26 @@ def resolve_partition_options(
             field_name="starting_page_number",
             value=starting_page_value,
         )
+
+    ocr_agent_value = _pick(ocr_agent, profile_defaults.ocr_agent)
+    if ocr_agent_value is not None and ocr_agent_value is not _UNSET:
+        if not isinstance(ocr_agent_value, str):
+            raise ZephyrError(
+                code=ErrorCode.UNS_PARTITION_FAILED,
+                message="ocr_agent must be a string alias or qualified name",
+                details={"retryable": False, "field": "ocr_agent"},
+            )
+        resolved_kwargs["ocr_agent"] = resolve_ocr_agent_alias(ocr_agent_value)
+
+    table_ocr_agent_value = _pick(table_ocr_agent, profile_defaults.table_ocr_agent)
+    if table_ocr_agent_value is not None and table_ocr_agent_value is not _UNSET:
+        if not isinstance(table_ocr_agent_value, str):
+            raise ZephyrError(
+                code=ErrorCode.UNS_PARTITION_FAILED,
+                message="table_ocr_agent must be a string alias or qualified name",
+                details={"retryable": False, "field": "table_ocr_agent"},
+            )
+        resolved_kwargs["table_ocr_agent"] = resolve_ocr_agent_alias(table_ocr_agent_value)
 
     normalized_extra = _normalize_extra_partition_kwargs(extra_partition_kwargs)
     return ResolvedPartitionOptions(

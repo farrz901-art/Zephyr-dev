@@ -1,0 +1,41 @@
+{
+  "repository": "Zephyr-dev",
+  "phase": "P6K-OCR1",
+  "previous_head_sha": "8d9d4f831794bd0b70bba24aa154b126a29989b1",
+  "unstructured_version": "0.22.28",
+  "paddle_extra_added": true,
+  "uv_lock_changed": true,
+  "ordinary_ci_uses_all_extras": false,
+  "install_all_preserved": true,
+  "install_dev_full_preserved": true,
+  "default_pdf_ocr_agent": "paddle",
+  "default_image_ocr_agent": "paddle",
+  "default_table_ocr_agent": "paddle",
+  "tesseract_fallback_preserved": true,
+  "google_vision_added": false,
+  "non_ocr_types_unchanged": true,
+  "profiles_added": [
+    "zh_paddle",
+    "invoice_paddle"
+  ],
+  "cli_flags_added": [
+    "--ocr-agent",
+    "--table-ocr-agent"
+  ],
+  "benchmark_tool_added": true,
+  "manual_benchmark_pending": true,
+  "dependency_changed": true,
+  "runtime_behavior_changed": true,
+  "base_changed": false,
+  "commercial_logic_added": false,
+  "benchmark_summary": {
+    "attempted": true,
+    "completed": false,
+    "reason": "Real local Paddle benchmark remains blocked in this environment by transitive Paddle/Torch runtime initialization constraints."
+  },
+  "known_limitations": [
+    "Direct import of unstructured_paddleocr failed in this local Codex environment with WinError 127 while loading a transitive torch DLL dependency.",
+    "The real local Paddle vs Tesseract benchmark against E:\\Github_Projects\\Zephyr-zh-test did not complete within the allowed Codex run window after model/runtime initialization began."
+  ],
+  "next_recommended_phase": "P6K-M2"
+}

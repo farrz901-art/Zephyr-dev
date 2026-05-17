@@ -4,6 +4,11 @@ import inspect
 from typing import Any, Callable
 
 from uns_stream._internal.errors import missing_extra
+from uns_stream._internal.ocr_agents import OCR_AGENT_PADDLE_QNAME
+from uns_stream._internal.paddleocr_runtime import (
+    ensure_paddleocr_base_dir,
+    partition_call_uses_paddle_ocr,
+)
 from uns_stream._internal.serde import to_zephyr_elements
 from zephyr_core import ErrorCode, PartitionStrategy, ZephyrElement, ZephyrError
 
@@ -116,6 +121,10 @@ class LocalUnstructuredBackend:
                 call_kwargs["strategy"] = "auto"
             else:
                 call_kwargs["strategy"] = strategy.value
+            if accepts_var_kwargs or "ocr_agent" in accepted_params:
+                call_kwargs.setdefault("ocr_agent", OCR_AGENT_PADDLE_QNAME)
+            if accepts_var_kwargs or "table_ocr_agent" in accepted_params:
+                call_kwargs.setdefault("table_ocr_agent", OCR_AGENT_PADDLE_QNAME)
 
         unsupported_keys = [
             key for key in kwargs if not accepts_var_kwargs and key not in accepted_params
@@ -136,6 +145,8 @@ class LocalUnstructuredBackend:
             )
 
         call_kwargs.update(kwargs)
+        if kind in {"pdf", "image"} and partition_call_uses_paddle_ocr(call_kwargs):
+            ensure_paddleocr_base_dir()
 
         # 执行调用
         elements = fn(**call_kwargs)

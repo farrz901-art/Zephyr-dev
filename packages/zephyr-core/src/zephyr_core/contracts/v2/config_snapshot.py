@@ -33,6 +33,8 @@ class RunnerSnapshotV1(TypedDict):
     model_name: NotRequired[str]
     metadata_filename: NotRequired[str]
     starting_page_number: NotRequired[int]
+    ocr_agent: NotRequired[str]
+    table_ocr_agent: NotRequired[str]
 
 
 class RetrySnapshotV1(TypedDict):

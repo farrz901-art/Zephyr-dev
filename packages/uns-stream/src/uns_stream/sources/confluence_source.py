@@ -523,6 +523,8 @@ def process_file(
     hi_res_model_name: str | None = None,
     model_name: str | None = None,
     starting_page_number: int | None = None,
+    ocr_agent: str | None = None,
+    table_ocr_agent: str | None = None,
     extra_partition_kwargs: Mapping[str, object] | None = None,
     run_id: str | None = None,
     pipeline_version: str | None = None,
@@ -546,6 +548,8 @@ def process_file(
         hi_res_model_name=hi_res_model_name,
         model_name=model_name,
         starting_page_number=starting_page_number,
+        ocr_agent=ocr_agent,
+        table_ocr_agent=table_ocr_agent,
         extra_partition_kwargs=extra_partition_kwargs,
     )
     config = _load_confluence_document_source_config_from_path(path)

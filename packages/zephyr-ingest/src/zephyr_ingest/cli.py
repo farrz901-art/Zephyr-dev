@@ -9,7 +9,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Sequence, cast
 
-from uns_stream._internal.enhanced_partition import supported_partition_profiles
+from uns_stream._internal.enhanced_partition import accepted_partition_profiles
 from uns_stream.backends.http_uns_api import HttpUnsApiBackend
 from zephyr_core import RunContext
 from zephyr_core.contracts.v1.document_ref import DocumentRef
@@ -123,6 +123,8 @@ class RunCmd:
     model_name: str | None
     metadata_filename: str | None
     starting_page_number: int | None
+    ocr_agent: str | None
+    table_ocr_agent: str | None
     partition_options: dict[str, object]
 
     uns_api_url: str
@@ -290,7 +292,7 @@ def _add_runlike_args(*, p: argparse.ArgumentParser, paths_required: bool) -> No
     p.add_argument(
         "--profile",
         default=None,
-        choices=list(supported_partition_profiles()),
+        choices=list(accepted_partition_profiles()),
         help="Enhanced partition profile. Heavy profiles are opt-in.",
     )
     p.add_argument(
@@ -362,6 +364,16 @@ def _add_runlike_args(*, p: argparse.ArgumentParser, paths_required: bool) -> No
         type=int,
         default=None,
         help="Optional starting page number for partition metadata.",
+    )
+    p.add_argument(
+        "--ocr-agent",
+        default=None,
+        help="OCR agent alias or qualified name. Supported aliases: paddle, tesseract.",
+    )
+    p.add_argument(
+        "--table-ocr-agent",
+        default=None,
+        help="Table OCR agent alias or qualified name. Supported aliases: paddle, tesseract.",
     )
     p.add_argument(
         "--pdf-infer-table-structure",
@@ -887,6 +899,14 @@ def _parse_run_cmd(ns: argparse.Namespace, argv: Sequence[str]) -> RunCmd:
     if starting_page_number is not None:
         sources["runner.starting_page_number"] = "cli"
 
+    ocr_agent = get_opt_str(ns, "ocr_agent")
+    if ocr_agent is not None:
+        sources["runner.ocr_agent"] = "cli"
+
+    table_ocr_agent = get_opt_str(ns, "table_ocr_agent")
+    if table_ocr_agent is not None:
+        sources["runner.table_ocr_agent"] = "cli"
+
     infer_table_structure = getattr(ns, "infer_table_structure", None)
     infer_table_structure_present = any_flag_present(
         present,
@@ -942,6 +962,10 @@ def _parse_run_cmd(ns: argparse.Namespace, argv: Sequence[str]) -> RunCmd:
         partition_options["metadata_filename"] = metadata_filename
     if starting_page_number is not None:
         partition_options["starting_page_number"] = starting_page_number
+    if ocr_agent is not None:
+        partition_options["ocr_agent"] = ocr_agent
+    if table_ocr_agent is not None:
+        partition_options["table_ocr_agent"] = table_ocr_agent
 
     backend_cli = get_req_str(ns, "backend")
     file_backend = None if run_file is None else run_file.backend
@@ -1901,6 +1925,8 @@ def _parse_run_cmd(ns: argparse.Namespace, argv: Sequence[str]) -> RunCmd:
         model_name=model_name,
         metadata_filename=metadata_filename,
         starting_page_number=starting_page_number,
+        ocr_agent=ocr_agent,
+        table_ocr_agent=table_ocr_agent,
         partition_options=partition_options,
         # uns_api_url=get_req_str(ns, "uns_api_url"),
         uns_api_url=uns_api_url,
@@ -2381,6 +2407,10 @@ def _build_config_snapshot(*, cmd: RunCmd) -> ConfigSnapshotV1:
         runner_snapshot["metadata_filename"] = cmd.metadata_filename
     if cmd.starting_page_number is not None:
         runner_snapshot["starting_page_number"] = cmd.starting_page_number
+    if cmd.ocr_agent is not None:
+        runner_snapshot["ocr_agent"] = cmd.ocr_agent
+    if cmd.table_ocr_agent is not None:
+        runner_snapshot["table_ocr_agent"] = cmd.table_ocr_agent
 
     return {
         "schema_version": CONFIG_SNAPSHOT_SCHEMA_VERSION,

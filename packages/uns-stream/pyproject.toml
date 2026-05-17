@@ -20,6 +20,7 @@ dependencies = [
 [project.optional-dependencies]
 all-docs = ["unstructured[all-docs]"]
 pdf = ["unstructured[pdf]"]
+paddleocr = ["unstructured[paddleocr]"]
 doc = ["unstructured[doc]"]
 docx = ["unstructured[docx]"]
 ppt = ["unstructured[ppt]"]

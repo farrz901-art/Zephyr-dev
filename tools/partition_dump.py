@@ -1,25 +1,18 @@
 from __future__ import annotations
 
 import argparse
-# import json
 import logging
 import time
-# import uuid
-# from datetime import datetime, timezone
-# from dataclasses import asdict
 from pathlib import Path
 
-from zephyr_core.versioning import PIPELINE_VERSION
-from uns_stream._internal.utils import sha256_file
-from zephyr_core.contracts.v1.run_meta import RunMetaV1, EngineMetaV1, MetricsV1, ErrorInfoV1
-from zephyr_core.contracts.v1.enums import RunOutcome
 from uns_stream._internal.artifacts import dump_partition_artifacts
+from uns_stream._internal.utils import sha256_file
 from uns_stream.partition.auto import partition as auto_partition
 from zephyr_core import PartitionStrategy, ZephyrError
-# from zephyr_core.versioning import PIPELINE_VERSION
+from zephyr_core.contracts.v1.enums import RunOutcome
+from zephyr_core.contracts.v1.run_meta import EngineMetaV1, ErrorInfoV1, MetricsV1, RunMetaV1
 from zephyr_core.run_context import RunContext
-
-
+from zephyr_core.versioning import PIPELINE_VERSION
 
 # def _write_text(path: Path, text: str) -> None:
 #     path.write_text(text, encoding="utf-8")
@@ -31,7 +24,10 @@ from zephyr_core.run_context import RunContext
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Dump Zephyr partition outputs (elements.json / normalized.txt / run_meta.json).",
+        description=(
+            "Dump Zephyr partition outputs "
+            "(elements.json / normalized.txt / run_meta.json)."
+        ),
     )
     parser.add_argument("--file", required=True, help="Input file path")
     parser.add_argument(
@@ -41,6 +37,16 @@ def main() -> None:
         help="Partition strategy (mainly for pdf/image).",
     )
     parser.add_argument("--out", default=".cache/out", help="Output directory root")
+    parser.add_argument(
+        "--ocr-agent",
+        default=None,
+        help="OCR agent alias or qualified name for PDF/Image partitioning.",
+    )
+    parser.add_argument(
+        "--table-ocr-agent",
+        default=None,
+        help="Table OCR agent alias or qualified name for PDF/Image partitioning.",
+    )
 
     parser.add_argument("--pipeline-version", help="Override pipeline version")
     parser.add_argument("--run-id", help="Override run ID (UUID)")
@@ -77,6 +83,8 @@ def main() -> None:
             filename=str(in_path),
             strategy=strategy,
             unique_element_ids=bool(args.unique_element_ids),
+            ocr_agent=args.ocr_agent,
+            table_ocr_agent=args.table_ocr_agent,
         )
         duration_ms = int((time.perf_counter() - t0) * 1000)
 
@@ -113,10 +121,7 @@ def main() -> None:
         logger.info("Success. Wrote to: %s", out_dir)
 
     except ZephyrError as e:
-        import hashlib
-
         duration_ms = int((time.perf_counter() - t0) * 1000)
-        # h = hashlib.sha256(in_path.read_bytes()).hexdigest()
         h = sha256_file(in_path)
 
         # 2. 【失败时】构造包含 ErrorInfo 的契约对象

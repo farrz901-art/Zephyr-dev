@@ -281,6 +281,8 @@ def test_runner_passes_enhanced_partition_options_to_legacy_partition_fn(tmp_pat
             "languages": ["zho", "eng"],
             "detect_language_per_element": True,
             "extract_image_block_to_payload": True,
+            "ocr_agent": "tesseract",
+            "table_ocr_agent": "paddle",
         },
     )
 
@@ -300,6 +302,8 @@ def test_runner_passes_enhanced_partition_options_to_legacy_partition_fn(tmp_pat
         languages: list[str] | None = None,
         detect_language_per_element: bool | None = None,
         extract_image_block_to_payload: bool | None = None,
+        ocr_agent: str | None = None,
+        table_ocr_agent: str | None = None,
     ) -> PartitionResult:
         captured.update(
             {
@@ -315,6 +319,8 @@ def test_runner_passes_enhanced_partition_options_to_legacy_partition_fn(tmp_pat
                 "languages": languages,
                 "detect_language_per_element": detect_language_per_element,
                 "extract_image_block_to_payload": extract_image_block_to_payload,
+                "ocr_agent": ocr_agent,
+                "table_ocr_agent": table_ocr_agent,
             }
         )
         return _partition_ok(
@@ -342,6 +348,8 @@ def test_runner_passes_enhanced_partition_options_to_legacy_partition_fn(tmp_pat
     assert captured["languages"] == ["zho", "eng"]
     assert captured["detect_language_per_element"] is True
     assert captured["extract_image_block_to_payload"] is True
+    assert captured["ocr_agent"] == "tesseract"
+    assert captured["table_ocr_agent"] == "paddle"
 
 
 def test_runner_rejects_enhanced_partition_options_for_legacy_partition_fn_without_support(
