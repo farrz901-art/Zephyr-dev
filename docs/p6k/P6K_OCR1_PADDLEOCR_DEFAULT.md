@@ -80,6 +80,10 @@ OCR. If neither `ZEPHYR_PADDLE_OCR_BASE_DIR` nor `PADDLE_OCR_BASE_DIR` is set, Z
 
 This avoids hard dependence on `~/.paddleocr` being writable in constrained environments.
 
+For Windows runtimes that expose a Paddle/Torch import-order conflict, Zephyr now preloads
+`torch` before PaddleOCR runtime initialization, but only on the actual `pdf` / `image` +
+PaddleOCR path. Explicit Tesseract calls and non-OCR kinds do not trigger that preload.
+
 ## Install Paths
 
 Ordinary CI remains lightweight and does not use `--all-extras`.
@@ -137,16 +141,25 @@ uv run --locked --no-sync python tools/p6k_ocr1_paddle_vs_tesseract_benchmark.py
 Repository-side implementation, lockfile update, CLI/profile wiring, and focused tests are in
 place.
 
-Current environment limitation observed during this Codex run:
+Current environment findings after `P6K-OCR1-FIX`:
 
-- `unstructured-paddleocr==2.10.0` was installed successfully through the new extra
-- direct `import unstructured_paddleocr` failed in this local environment because a transitive
-  `torch` DLL dependency failed to load with `WinError 127`
-- the real local Paddle vs Tesseract benchmark therefore remains pending in this environment
+- `unstructured-paddleocr==2.10.0` is installed and the runtime diagnosis now correctly classifies
+  the original blocker as a Windows Paddle/Torch import-order conflict
+- `torch` preload was added before PaddleOCR runtime initialization on the Zephyr `pdf` / `image`
+  Paddle path
+- the real local Paddle vs Tesseract benchmark now completes against:
+  - `fapiao.jpeg`
+  - `fapiao3.jpg`
+  - `hetong2-jiashuiyin.pdf`
+- benchmark outcome in this local environment:
+  - default PaddleOCR: `0/3` ok, `3/3` error
+  - explicit Tesseract: `3/3` ok, `0/3` error
+- the import-order failure is no longer the only blocker; a remaining local Paddle runtime failure
+  still affects real partition execution on all three planned samples
 
 Current judgment:
 
-- implementation complete
+- implementation complete for OCR defaultization and Windows torch-preload hardening
 - repository quality gates pass
-- real Paddle runtime evidence in this environment remains blocked by external runtime dependency
-  conditions
+- real Paddle runtime evidence now exists, but Paddle default mode still fails in this local
+  environment and keeps OCR1 below final pass

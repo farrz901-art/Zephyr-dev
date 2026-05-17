@@ -23,19 +23,32 @@
     "--table-ocr-agent"
   ],
   "benchmark_tool_added": true,
-  "manual_benchmark_pending": true,
+  "manual_benchmark_pending": false,
   "dependency_changed": true,
   "runtime_behavior_changed": true,
   "base_changed": false,
   "commercial_logic_added": false,
   "benchmark_summary": {
     "attempted": true,
-    "completed": false,
-    "reason": "Real local Paddle benchmark remains blocked in this environment by transitive Paddle/Torch runtime initialization constraints."
+    "completed": true,
+    "samples": [
+      "fapiao.jpeg",
+      "fapiao3.jpg",
+      "hetong2-jiashuiyin.pdf"
+    ],
+    "default_paddleocr": {
+      "ok": 0,
+      "error": 3
+    },
+    "explicit_tesseract": {
+      "ok": 3,
+      "error": 0
+    },
+    "reason": "The Windows import-order blocker is mitigated, but default PaddleOCR still fails during real local partition execution on all three planned samples."
   },
   "known_limitations": [
-    "Direct import of unstructured_paddleocr failed in this local Codex environment with WinError 127 while loading a transitive torch DLL dependency.",
-    "The real local Paddle vs Tesseract benchmark against E:\\Github_Projects\\Zephyr-zh-test did not complete within the allowed Codex run window after model/runtime initialization began."
+    "Real local Paddle vs Tesseract benchmark now completes, but default PaddleOCR still fails on fapiao.jpeg, fapiao3.jpg, and hetong2-jiashuiyin.pdf in this Windows environment.",
+    "Paddle runtime emitted unsupported language-code fallback warnings and then raised RuntimeError during real partition execution."
   ],
   "next_recommended_phase": "P6K-M2"
 }

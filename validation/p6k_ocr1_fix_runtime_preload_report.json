@@ -1,0 +1,38 @@
+{
+  "repository": "Zephyr-dev",
+  "phase": "P6K-OCR1-FIX",
+  "previous_head_sha": "780fab42c8f29a8c62b3c51832cf6c3249d3c9ff",
+  "current_head_sha": null,
+  "runtime_root_cause": "windows_paddle_torch_import_order_conflict",
+  "fix_strategy": "torch-first preload before PaddleOCR runtime",
+  "dependency_changed": false,
+  "uv_lock_changed": false,
+  "runtime_behavior_changed": true,
+  "base_changed": false,
+  "commercial_logic_added": false,
+  "ordinary_ci_uses_all_extras": false,
+  "tesseract_fallback_preserved": true,
+  "non_ocr_types_unchanged": true,
+  "torch_preload_only_for_paddleocr": true,
+  "benchmark_completed": true,
+  "manual_benchmark_pending": false,
+  "benchmark_summary": {
+    "samples": [
+      "fapiao.jpeg",
+      "fapiao3.jpg",
+      "hetong2-jiashuiyin.pdf"
+    ],
+    "default_paddleocr": {
+      "ok": 0,
+      "error": 3
+    },
+    "explicit_tesseract": {
+      "ok": 3,
+      "error": 0
+    }
+  },
+  "known_limitations": [
+    "The Windows import-order issue is mitigated, but default PaddleOCR still fails during real partition execution on all three planned benchmark samples in this environment.",
+    "Paddle runtime emitted unsupported language-code fallback warnings and then raised RuntimeError during the real benchmark."
+  ]
+}

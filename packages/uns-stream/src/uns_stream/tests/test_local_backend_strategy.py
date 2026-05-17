@@ -9,6 +9,8 @@ from uns_stream._internal.ocr_agents import OCR_AGENT_PADDLE_QNAME, OCR_AGENT_TE
 from uns_stream.backends.local_unstructured import LocalUnstructuredBackend
 from zephyr_core import ErrorCode, PartitionStrategy, ZephyrElement, ZephyrError
 
+pytestmark = [pytest.mark.uns, pytest.mark.unit]
+
 
 class FakeElement:
     """Minimal fake unstructured element compatible with to_zephyr_elements()."""
@@ -43,10 +45,21 @@ def _install_fake_loader(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]
 def _install_runtime_recorder(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     calls: list[str] = []
 
+    def fake_preload_torch_for_paddleocr() -> dict[str, object]:
+        calls.append("preload")
+        return {
+            "torch_preload_applied": True,
+            "torch_import_ok": True,
+            "torch_version": "fake",
+            "torch_error_type": None,
+            "torch_error": None,
+        }
+
     def fake_ensure_paddleocr_base_dir() -> str:
-        calls.append("called")
+        calls.append("ensure")
         return "tmp"
 
+    monkeypatch.setattr(local_mod, "preload_torch_for_paddleocr", fake_preload_torch_for_paddleocr)
     monkeypatch.setattr(local_mod, "ensure_paddleocr_base_dir", fake_ensure_paddleocr_base_dir)
     return calls
 
@@ -73,7 +86,7 @@ def test_strategy_is_passed_only_for_pdf_and_image(monkeypatch: pytest.MonkeyPat
     assert calls[-1]["kwargs"]["strategy"] == "hi_res"
     assert calls[-1]["kwargs"]["ocr_agent"] == OCR_AGENT_PADDLE_QNAME
     assert calls[-1]["kwargs"]["table_ocr_agent"] == OCR_AGENT_PADDLE_QNAME
-    assert runtime_calls == ["called"]
+    assert runtime_calls == ["preload", "ensure"]
 
     # image: should pass strategy through (FAST should be normalized elsewhere; see next test)
     backend.partition_elements(
@@ -88,7 +101,7 @@ def test_strategy_is_passed_only_for_pdf_and_image(monkeypatch: pytest.MonkeyPat
     assert calls[-1]["kwargs"]["languages"] == ["eng"]
     assert calls[-1]["kwargs"]["ocr_agent"] == OCR_AGENT_PADDLE_QNAME
     assert calls[-1]["kwargs"]["table_ocr_agent"] == OCR_AGENT_PADDLE_QNAME
-    assert runtime_calls == ["called", "called"]
+    assert runtime_calls == ["preload", "ensure", "preload", "ensure"]
 
     # text: should NOT pass strategy at all (avoid TypeError for non-pdf/image partition fns)
     backend.partition_elements(
@@ -101,7 +114,7 @@ def test_strategy_is_passed_only_for_pdf_and_image(monkeypatch: pytest.MonkeyPat
     assert "strategy" not in calls[-1]["kwargs"]
     assert "ocr_agent" not in calls[-1]["kwargs"]
     assert "table_ocr_agent" not in calls[-1]["kwargs"]
-    assert runtime_calls == ["called", "called"]
+    assert runtime_calls == ["preload", "ensure", "preload", "ensure"]
 
 
 def test_image_fast_strategy_maps_to_auto(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -121,10 +134,10 @@ def test_image_fast_strategy_maps_to_auto(monkeypatch: pytest.MonkeyPatch) -> No
     assert calls[-1]["kwargs"]["strategy"] == "auto"
     assert calls[-1]["kwargs"]["ocr_agent"] == OCR_AGENT_PADDLE_QNAME
     assert calls[-1]["kwargs"]["table_ocr_agent"] == OCR_AGENT_PADDLE_QNAME
-    assert runtime_calls == ["called"]
+    assert runtime_calls == ["preload", "ensure"]
 
 
-@pytest.mark.parametrize("kind", ["text", "docx", "xlsx", "csv"])
+@pytest.mark.parametrize("kind", ["text", "docx", "xlsx", "csv", "html", "md"])
 def test_non_ocr_kinds_do_not_receive_default_ocr_agents(
     monkeypatch: pytest.MonkeyPatch,
     kind: str,

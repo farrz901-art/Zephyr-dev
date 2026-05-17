@@ -8,6 +8,7 @@ from uns_stream._internal.ocr_agents import OCR_AGENT_PADDLE_QNAME
 from uns_stream._internal.paddleocr_runtime import (
     ensure_paddleocr_base_dir,
     partition_call_uses_paddle_ocr,
+    preload_torch_for_paddleocr,
 )
 from uns_stream._internal.serde import to_zephyr_elements
 from zephyr_core import ErrorCode, PartitionStrategy, ZephyrElement, ZephyrError
@@ -146,6 +147,7 @@ class LocalUnstructuredBackend:
 
         call_kwargs.update(kwargs)
         if kind in {"pdf", "image"} and partition_call_uses_paddle_ocr(call_kwargs):
+            preload_torch_for_paddleocr()
             ensure_paddleocr_base_dir()
 
         # 执行调用
