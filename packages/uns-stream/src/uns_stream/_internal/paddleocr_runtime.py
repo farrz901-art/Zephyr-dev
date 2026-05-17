@@ -2,11 +2,31 @@ from __future__ import annotations
 
 import os
 import sys
+import traceback
 from importlib import import_module
 from pathlib import Path
-from typing import Mapping
+from typing import Mapping, cast
 
-from uns_stream._internal.ocr_agents import OCR_AGENT_PADDLE_QNAME
+from uns_stream._internal.ocr_agents import (
+    OCR_AGENT_PADDLE_QNAME,
+    OCR_AGENT_TESSERACT_QNAME,
+)
+from uns_stream._internal.paddleocr_languages import normalize_languages_for_paddleocr
+
+
+def _languages_before_list(languages: object) -> list[str]:
+    if isinstance(languages, str):
+        return [languages]
+    if isinstance(languages, list):
+        list_values = cast("list[object]", languages)
+        return [item for item in list_values if isinstance(item, str)]
+    if isinstance(languages, tuple):
+        tuple_values = cast("tuple[object, ...]", languages)
+        return [item for item in tuple_values if isinstance(item, str)]
+    if isinstance(languages, (set, frozenset)):
+        set_values = cast("set[object] | frozenset[object]", languages)
+        return [item for item in set_values if isinstance(item, str)]
+    return [str(languages)]
 
 
 def partition_call_uses_paddle_ocr(call_kwargs: Mapping[str, object]) -> bool:
@@ -35,6 +55,55 @@ def preload_torch_for_paddleocr() -> dict[str, object]:
     version_value = getattr(torch_module, "__version__", None)
     result["torch_version"] = str(version_value) if version_value is not None else None
     return result
+
+
+def apply_paddle_language_normalization(
+    *, kind: str, call_kwargs: Mapping[str, object]
+) -> tuple[dict[str, object], dict[str, object] | None]:
+    updated = dict(call_kwargs)
+    if kind not in {"pdf", "image"} or not partition_call_uses_paddle_ocr(updated):
+        return updated, None
+
+    languages = updated.get("languages")
+    if languages is None:
+        return updated, None
+
+    normalized = normalize_languages_for_paddleocr(languages)
+    if normalized is None:
+        return updated, None
+
+    updated["languages"] = normalized
+    note: dict[str, object] = {
+        "event": "paddle_language_normalization",
+        "paddle_language_normalization_applied": True,
+        "paddle_languages_before": _languages_before_list(languages),
+        "paddle_languages_after": list(normalized),
+    }
+    return updated, note
+
+
+def format_traceback_tail(exc: BaseException, *, line_count: int = 12) -> str:
+    formatted = traceback.format_exception(type(exc), exc, exc.__traceback__)
+    tail = "".join(formatted[-line_count:]).strip()
+    return tail
+
+
+def is_known_paddle_runtime_failure(exc: BaseException) -> bool:
+    haystack = f"{type(exc).__name__}: {exc}\n{format_traceback_tail(exc, line_count=24)}".lower()
+    markers = (
+        "unstructured_paddleocr",
+        "paddle_ocr",
+        "language code",
+        "unsupported language",
+    )
+    return any(marker in haystack for marker in markers)
+
+
+def build_tesseract_fallback_kwargs(call_kwargs: Mapping[str, object]) -> dict[str, object]:
+    fallback_kwargs = dict(call_kwargs)
+    fallback_kwargs["ocr_agent"] = OCR_AGENT_TESSERACT_QNAME
+    fallback_kwargs["table_ocr_agent"] = OCR_AGENT_TESSERACT_QNAME
+    return fallback_kwargs
 
 
 def ensure_paddleocr_base_dir() -> str:

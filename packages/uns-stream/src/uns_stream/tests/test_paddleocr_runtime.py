@@ -76,3 +76,44 @@ def test_preload_torch_for_paddleocr_failure_path(monkeypatch: pytest.MonkeyPatc
     assert observed["torch_version"] is None
     assert observed["torch_error_type"] == "OSError"
     assert observed["torch_error"] == "shm.dll missing"
+
+
+def test_apply_paddle_language_normalization_only_on_paddle_pdf_image_path() -> None:
+    updated, note = runtime_mod.apply_paddle_language_normalization(
+        kind="pdf",
+        call_kwargs={
+            "ocr_agent": OCR_AGENT_PADDLE_QNAME,
+            "table_ocr_agent": OCR_AGENT_PADDLE_QNAME,
+            "languages": ["zho", "eng"],
+        },
+    )
+
+    assert updated["languages"] == ["ch"]
+    assert note is not None
+    assert note["paddle_languages_before"] == ["zho", "eng"]
+    assert note["paddle_languages_after"] == ["ch"]
+
+
+def test_apply_paddle_language_normalization_skips_non_paddle_paths() -> None:
+    updated, note = runtime_mod.apply_paddle_language_normalization(
+        kind="text",
+        call_kwargs={
+            "ocr_agent": OCR_AGENT_PADDLE_QNAME,
+            "languages": ["zho", "eng"],
+        },
+    )
+
+    assert updated["languages"] == ["zho", "eng"]
+    assert note is None
+
+
+def test_is_known_paddle_runtime_failure_uses_traceback_context() -> None:
+    with pytest.raises(RuntimeError) as excinfo:
+        raise RuntimeError("unstructured_paddleocr language code failure")
+
+    assert runtime_mod.is_known_paddle_runtime_failure(excinfo.value) is True
+
+    with pytest.raises(ValueError) as excinfo2:
+        raise ValueError("bad filename")
+
+    assert runtime_mod.is_known_paddle_runtime_failure(excinfo2.value) is False

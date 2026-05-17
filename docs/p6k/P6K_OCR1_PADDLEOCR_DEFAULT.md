@@ -161,5 +161,12 @@ Current judgment:
 
 - implementation complete for OCR defaultization and Windows torch-preload hardening
 - repository quality gates pass
-- real Paddle runtime evidence now exists, but Paddle default mode still fails in this local
-  environment and keeps OCR1 below final pass
+- real Paddle runtime evidence now exists
+- after `P6K-OCR1-FIX2`, the default OCR user path is product-safe in this environment because
+  known Paddle runtime failures now fall back to explicit Tesseract
+- current local benchmark outcome:
+  - default path final ok: `3/3`
+  - Paddle native ok: `0/3`
+  - Paddle fallback ok: `3/3`
+  - explicit Tesseract ok: `3/3`
+- OCR1 final status therefore becomes `risk_reduced_pass`, not full native-Paddle pass

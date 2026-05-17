@@ -1,0 +1,29 @@
+{
+  "repository": "Zephyr-dev",
+  "phase": "P6K-OCR1-FIX2",
+  "previous_head_sha": "fbead84f2606675de7b2b6c89945156cf81ac6a7",
+  "current_head_sha": null,
+  "runtime_root_cause_before_fix2": "paddle_runtime_execution_or_language_mapping_failure",
+  "language_normalization_added": true,
+  "fallback_added": true,
+  "fallback_strategy": "Paddle-first, Tesseract-safe-fallback",
+  "dependency_changed": false,
+  "uv_lock_changed": false,
+  "runtime_behavior_changed": true,
+  "base_changed": false,
+  "commercial_logic_added": false,
+  "ordinary_ci_uses_all_extras": false,
+  "tesseract_fallback_preserved": true,
+  "non_ocr_types_unchanged": true,
+  "benchmark_completed": true,
+  "manual_benchmark_pending": false,
+  "default_path_final_ok": 3,
+  "paddle_native_ok_count": 0,
+  "paddle_fallback_ok_count": 3,
+  "explicit_tesseract_ok_count": 3,
+  "ocr1_final_status_after_fix2": "risk_reduced_pass",
+  "known_limitations": [
+    "Native Paddle runtime still fails on the three planned local OCR samples in this Windows environment.",
+    "Current default-path success depends on the safe Tesseract fallback path."
+  ]
+}

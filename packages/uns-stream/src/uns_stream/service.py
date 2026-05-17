@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import time
 from contextlib import nullcontext
@@ -31,6 +32,24 @@ from zephyr_core import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _collect_backend_runtime_warnings(backend: PartitionBackend) -> list[str]:
+    consume = getattr(backend, "consume_runtime_notes", None)
+    if not callable(consume):
+        return []
+    raw_notes = consume()
+    if not isinstance(raw_notes, list):
+        return []
+    notes = cast("list[object]", raw_notes)
+    warnings: list[str] = []
+    for note in notes:
+        if isinstance(note, dict):
+            warnings.append(
+                "zephyr_runtime_note:"
+                + json.dumps(note, ensure_ascii=False, sort_keys=True, default=str)
+            )
+    return warnings
 
 
 def _partition_with_backend(
@@ -179,6 +198,7 @@ def partition_file(
                 unique_element_ids=unique_element_ids,
                 partition_kwargs=call_partition_kwargs,
             )
+            result_warnings.extend(_collect_backend_runtime_warnings(b))
 
     except ZephyrError as ze:
         duration_ms = int((time.perf_counter() - t0) * 1000)

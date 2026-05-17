@@ -1,12 +1,20 @@
 from __future__ import annotations
 
 import inspect
+from collections.abc import Mapping
 from typing import Any, Callable
 
 from uns_stream._internal.errors import missing_extra
-from uns_stream._internal.ocr_agents import OCR_AGENT_PADDLE_QNAME
+from uns_stream._internal.ocr_agents import (
+    OCR_AGENT_PADDLE_QNAME,
+    OCR_AGENT_TESSERACT_QNAME,
+)
 from uns_stream._internal.paddleocr_runtime import (
+    apply_paddle_language_normalization,
+    build_tesseract_fallback_kwargs,
     ensure_paddleocr_base_dir,
+    format_traceback_tail,
+    is_known_paddle_runtime_failure,
     partition_call_uses_paddle_ocr,
     preload_torch_for_paddleocr,
 )
@@ -83,6 +91,15 @@ class LocalUnstructuredBackend:
 
             # 如果 v 是模块，尝试取其属性，否则转字符串
             self.version = getattr(v, "__version__", str(v))
+        self._runtime_notes: list[dict[str, object]] = []
+
+    def consume_runtime_notes(self) -> list[dict[str, object]]:
+        notes = list(self._runtime_notes)
+        self._runtime_notes.clear()
+        return notes
+
+    def _record_runtime_note(self, note: Mapping[str, object]) -> None:
+        self._runtime_notes.append(dict(note))
 
     def partition_elements(
         self,
@@ -101,6 +118,7 @@ class LocalUnstructuredBackend:
         - image：支持 auto / hi_res / ocr_only（FAST 自动降级为 auto）
         - 其他格式：不传递 strategy 参数，避免 TypeError
         """
+        self._runtime_notes.clear()
         fn = _load_partition_fn(kind)
         fn_signature = inspect.signature(fn)
         accepted_params = set(fn_signature.parameters.keys())
@@ -146,12 +164,67 @@ class LocalUnstructuredBackend:
             )
 
         call_kwargs.update(kwargs)
-        if kind in {"pdf", "image"} and partition_call_uses_paddle_ocr(call_kwargs):
-            preload_torch_for_paddleocr()
-            ensure_paddleocr_base_dir()
+        original_call_kwargs = dict(call_kwargs)
+        paddle_path = kind in {"pdf", "image"} and partition_call_uses_paddle_ocr(call_kwargs)
+        if paddle_path:
+            self._record_runtime_note(preload_torch_for_paddleocr())
+            self._record_runtime_note(
+                {
+                    "event": "paddleocr_base_dir",
+                    "paddle_ocr_base_dir": ensure_paddleocr_base_dir(),
+                }
+            )
+            call_kwargs, normalization_note = apply_paddle_language_normalization(
+                kind=kind,
+                call_kwargs=call_kwargs,
+            )
+            if normalization_note is not None:
+                self._record_runtime_note(normalization_note)
 
-        # 执行调用
-        elements = fn(**call_kwargs)
+        try:
+            elements = fn(**call_kwargs)
+        except Exception as exc:
+            if paddle_path and is_known_paddle_runtime_failure(exc):
+                fallback_kwargs = build_tesseract_fallback_kwargs(original_call_kwargs)
+                fallback_note: dict[str, object] = {
+                    "event": "paddle_fallback",
+                    "paddle_fallback_applied": True,
+                    "paddle_fallback_reason": "known_paddle_runtime_failure",
+                    "paddle_status": "error",
+                    "paddle_original_error_type": type(exc).__name__,
+                    "paddle_original_error_message": str(exc),
+                    "paddle_traceback_tail": format_traceback_tail(exc),
+                    "fallback_ocr_agent": OCR_AGENT_TESSERACT_QNAME,
+                    "fallback_table_ocr_agent": OCR_AGENT_TESSERACT_QNAME,
+                }
+                try:
+                    elements = fn(**fallback_kwargs)
+                except Exception as fallback_exc:
+                    fallback_note["fallback_status"] = "error"
+                    fallback_note["fallback_exception_type"] = type(fallback_exc).__name__
+                    fallback_note["fallback_exception_message"] = str(fallback_exc)
+                    fallback_note["fallback_traceback_tail"] = format_traceback_tail(fallback_exc)
+                    self._record_runtime_note(fallback_note)
+                    raise ZephyrError(
+                        code=ErrorCode.UNS_PARTITION_FAILED,
+                        message="PaddleOCR partition failed and Tesseract fallback also failed",
+                        details={
+                            "retryable": False,
+                            "kind": kind,
+                            "engine_version": self.version,
+                            "paddle_original_error_type": type(exc).__name__,
+                            "paddle_original_error_message": str(exc),
+                            "paddle_traceback_tail": format_traceback_tail(exc),
+                            "fallback_error_type": type(fallback_exc).__name__,
+                            "fallback_error_message": str(fallback_exc),
+                            "fallback_traceback_tail": format_traceback_tail(fallback_exc),
+                        },
+                    ) from fallback_exc
+
+                fallback_note["fallback_status"] = "ok"
+                self._record_runtime_note(fallback_note)
+            else:
+                raise
 
         return to_zephyr_elements(elements)
 

@@ -98,7 +98,7 @@ def test_strategy_is_passed_only_for_pdf_and_image(monkeypatch: pytest.MonkeyPat
     )
     assert calls[-1]["kind"] == "image"
     assert calls[-1]["kwargs"]["strategy"] == "ocr_only"
-    assert calls[-1]["kwargs"]["languages"] == ["eng"]
+    assert calls[-1]["kwargs"]["languages"] == ["en"]
     assert calls[-1]["kwargs"]["ocr_agent"] == OCR_AGENT_PADDLE_QNAME
     assert calls[-1]["kwargs"]["table_ocr_agent"] == OCR_AGENT_PADDLE_QNAME
     assert runtime_calls == ["preload", "ensure", "preload", "ensure"]
@@ -176,6 +176,144 @@ def test_explicit_tesseract_override_is_preserved(monkeypatch: pytest.MonkeyPatc
     assert calls[-1]["kwargs"]["ocr_agent"] == OCR_AGENT_TESSERACT_QNAME
     assert calls[-1]["kwargs"]["table_ocr_agent"] == OCR_AGENT_TESSERACT_QNAME
     assert runtime_calls == []
+
+
+def test_pdf_paddle_path_normalizes_mixed_chinese_languages(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = _install_fake_loader(monkeypatch)
+    _install_runtime_recorder(monkeypatch)
+    backend = LocalUnstructuredBackend()
+
+    backend.partition_elements(
+        filename="x.pdf",
+        kind="pdf",
+        strategy=PartitionStrategy.HI_RES,
+        unique_element_ids=True,
+        languages=["zho", "eng"],
+    )
+
+    assert calls[-1]["kwargs"]["languages"] == ["ch"]
+    notes = backend.consume_runtime_notes()
+    normalization_note = next(
+        note for note in notes if note.get("event") == "paddle_language_normalization"
+    )
+    assert normalization_note["paddle_languages_before"] == ["zho", "eng"]
+    assert normalization_note["paddle_languages_after"] == ["ch"]
+
+
+def test_tesseract_path_is_not_language_normalized(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = _install_fake_loader(monkeypatch)
+    _install_runtime_recorder(monkeypatch)
+    backend = LocalUnstructuredBackend()
+
+    backend.partition_elements(
+        filename="x.pdf",
+        kind="pdf",
+        strategy=PartitionStrategy.HI_RES,
+        unique_element_ids=True,
+        ocr_agent=OCR_AGENT_TESSERACT_QNAME,
+        table_ocr_agent=OCR_AGENT_TESSERACT_QNAME,
+        languages=["zho", "eng"],
+    )
+
+    assert calls[-1]["kwargs"]["languages"] == ["zho", "eng"]
+    assert backend.consume_runtime_notes() == []
+
+
+def test_known_paddle_failure_triggers_tesseract_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[dict[str, Any]] = []
+    _install_runtime_recorder(monkeypatch)
+
+    def fake_loader(kind: str) -> Callable[..., Any]:
+        def fake_partition_fn(**kwargs: Any) -> list[FakeElement]:
+            calls.append({"kind": kind, "kwargs": dict(kwargs)})
+            if kwargs["ocr_agent"] == OCR_AGENT_PADDLE_QNAME:
+                raise RuntimeError("paddle_ocr runtime failed")
+            return [FakeElement(text="fallback-ok")]
+
+        return fake_partition_fn
+
+    monkeypatch.setattr(local_mod, "_load_partition_fn", fake_loader)
+    backend = LocalUnstructuredBackend()
+
+    out = backend.partition_elements(
+        filename="x.pdf",
+        kind="pdf",
+        strategy=PartitionStrategy.HI_RES,
+        unique_element_ids=True,
+        languages=["zho", "eng"],
+    )
+
+    assert isinstance(out, list)
+    assert len(calls) == 2
+    assert calls[0]["kwargs"]["ocr_agent"] == OCR_AGENT_PADDLE_QNAME
+    assert calls[0]["kwargs"]["languages"] == ["ch"]
+    assert calls[1]["kwargs"]["ocr_agent"] == OCR_AGENT_TESSERACT_QNAME
+    assert calls[1]["kwargs"]["table_ocr_agent"] == OCR_AGENT_TESSERACT_QNAME
+    assert calls[1]["kwargs"]["languages"] == ["zho", "eng"]
+    notes = backend.consume_runtime_notes()
+    fallback_note = next(note for note in notes if note.get("event") == "paddle_fallback")
+    assert fallback_note["paddle_fallback_applied"] is True
+    assert fallback_note["fallback_status"] == "ok"
+
+
+def test_fallback_failure_reports_both_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    _install_runtime_recorder(monkeypatch)
+
+    def fake_loader(kind: str) -> Callable[..., Any]:
+        def fake_partition_fn(**kwargs: Any) -> list[FakeElement]:
+            if kwargs["ocr_agent"] == OCR_AGENT_PADDLE_QNAME:
+                raise RuntimeError("paddle_ocr runtime failed")
+            raise RuntimeError("tesseract fallback failed")
+
+        return fake_partition_fn
+
+    monkeypatch.setattr(local_mod, "_load_partition_fn", fake_loader)
+    backend = LocalUnstructuredBackend()
+
+    with pytest.raises(ZephyrError) as excinfo:
+        backend.partition_elements(
+            filename="x.pdf",
+            kind="pdf",
+            strategy=PartitionStrategy.HI_RES,
+            unique_element_ids=True,
+            languages=["zho", "eng"],
+        )
+
+    assert excinfo.value.details is not None
+    assert excinfo.value.details["paddle_original_error_type"] == "RuntimeError"
+    assert excinfo.value.details["fallback_error_type"] == "RuntimeError"
+    notes = backend.consume_runtime_notes()
+    fallback_note = next(note for note in notes if note.get("event") == "paddle_fallback")
+    assert fallback_note["fallback_status"] == "error"
+
+
+def test_non_paddle_error_does_not_trigger_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[dict[str, Any]] = []
+    _install_runtime_recorder(monkeypatch)
+
+    def fake_loader(kind: str) -> Callable[..., Any]:
+        def fake_partition_fn(**kwargs: Any) -> list[FakeElement]:
+            calls.append({"kind": kind, "kwargs": dict(kwargs)})
+            raise ValueError("bad filename")
+
+        return fake_partition_fn
+
+    monkeypatch.setattr(local_mod, "_load_partition_fn", fake_loader)
+    backend = LocalUnstructuredBackend()
+
+    with pytest.raises(ValueError):
+        backend.partition_elements(
+            filename="x.pdf",
+            kind="pdf",
+            strategy=PartitionStrategy.HI_RES,
+            unique_element_ids=True,
+        )
+
+    assert len(calls) == 1
 
 
 def test_local_backend_rejects_unsupported_enhanced_kwargs_for_strict_partition_fn(

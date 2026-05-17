@@ -52,16 +52,43 @@ def test_ocr1_benchmark_reports_modes_and_outputs(
     monkeypatch.setattr(benchmark_mod, "PLANNED_INPUTS", ["fapiao.jpeg"])
 
     class _Result:
-        def __init__(self) -> None:
+        def __init__(self, *, warnings: list[str]) -> None:
             self.elements: list[object] = []
             self.normalized_text = "测试invoice"
-            self.warnings = ["warn"]
+            self.warnings = warnings
 
     captured: list[dict[str, object]] = []
 
     def _fake_partition(**kwargs: object) -> _Result:
         captured.append(dict(kwargs))
-        return _Result()
+        if kwargs["ocr_agent"] is None:
+            return _Result(
+                warnings=[
+                    "warn",
+                    (
+                        benchmark_mod.RUNTIME_NOTE_PREFIX
+                        + json.dumps(
+                            {
+                                "event": "paddle_language_normalization",
+                                "paddle_languages_before": ["zho", "eng"],
+                                "paddle_languages_after": ["ch"],
+                            }
+                        )
+                    ),
+                    (
+                        benchmark_mod.RUNTIME_NOTE_PREFIX
+                        + json.dumps(
+                            {
+                                "event": "paddle_fallback",
+                                "paddle_fallback_applied": True,
+                                "paddle_status": "error",
+                                "fallback_status": "ok",
+                            }
+                        )
+                    ),
+                ]
+            )
+        return _Result(warnings=["warn"])
 
     monkeypatch.setattr(benchmark_mod, "auto_partition", _fake_partition)
 
@@ -79,7 +106,15 @@ def test_ocr1_benchmark_reports_modes_and_outputs(
 
     assert report["summary"]["ok"] == 2
     assert report["summary"]["manual_benchmark_pending"] is False
+    assert report["summary"]["default_path_final_ok"] == 1
+    assert report["summary"]["paddle_fallback_ok"] == 1
+    assert report["summary"]["explicit_tesseract_ok"] == 1
     assert len(captured) == 2
     assert captured[0]["ocr_agent"] is None
     assert captured[1]["ocr_agent"] == "tesseract"
+    assert report["results"][0]["status"] == "paddle_failed_fallback_ok"
+    assert report["results"][0]["default_path_final_status"] == "ok"
+    assert report["results"][0]["paddle_fallback_applied"] is True
+    assert report["results"][0]["paddle_language_after"] == ["ch"]
+    assert report["results"][1]["status"] == "explicit_tesseract_ok"
     assert report["results"][0]["normalized_output_path"] is not None
