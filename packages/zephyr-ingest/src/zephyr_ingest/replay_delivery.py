@@ -281,13 +281,14 @@ class FilesystemReplaySink:
             for key in (
                 "elements_path",
                 "normalized_path",
+                "package_manifest_path",
                 "records_path",
                 "state_path",
                 "logs_path",
             ):
                 raw_source = artifacts.get(key)
                 if raw_source is None:
-                    if key in {"records_path", "state_path", "logs_path"}:
+                    if key in {"package_manifest_path", "records_path", "state_path", "logs_path"}:
                         continue
                     return DeliveryReceipt(
                         destination="filesystem",

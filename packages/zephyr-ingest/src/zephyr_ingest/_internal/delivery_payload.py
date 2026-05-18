@@ -13,6 +13,11 @@ from zephyr_core.contracts.v2.delivery_payload import (
     DeliveryContentEvidenceV1,
     DeliveryPayloadV1,
 )
+from zephyr_ingest._internal.artifacts import dump_partition_artifacts
+from zephyr_ingest._internal.package_manifest import (
+    PACKAGE_MANIFEST_FILENAME,
+    load_package_manifest_if_available,
+)
 
 DELIVERY_NORMALIZED_TEXT_PREVIEW_MAX_CHARS = 16 * 1024
 DELIVERY_RECORDS_PREVIEW_MAX_RECORDS = 10
@@ -47,6 +52,9 @@ def build_artifacts_paths_for_run_meta_v1(
     run_meta: dict[str, Any],
 ) -> ArtifactsPathsV1:
     paths = build_artifacts_paths_v1(out_root=out_root, sha256=sha256)
+    package_manifest_path = ((out_root / sha256) / PACKAGE_MANIFEST_FILENAME).resolve()
+    if package_manifest_path.exists():
+        paths["package_manifest_path"] = str(package_manifest_path)
     if _is_it_stream_run_meta(run_meta=run_meta):
         paths["records_path"] = str(((out_root / sha256) / "records.jsonl").resolve())
         paths["state_path"] = str(((out_root / sha256) / "checkpoint.json").resolve())
@@ -248,6 +256,33 @@ def build_delivery_content_evidence_v1(
     else:
         evidence["evidence_kind"] = "artifact_reference_only_v1"
 
+    manifest_path_raw = artifacts.get("package_manifest_path")
+    if isinstance(manifest_path_raw, str):
+        manifest_payload = load_package_manifest_if_available(Path(manifest_path_raw))
+        if manifest_payload is not None:
+            evidence["package_manifest_available"] = True
+            artifacts_obj = manifest_payload.get("artifacts")
+            if isinstance(artifacts_obj, list):
+                manifest_artifacts = cast("list[object]", artifacts_obj)
+                evidence["artifact_count"] = len(manifest_artifacts)
+                primary_artifact_kinds: list[str] = []
+                for item_obj in manifest_artifacts:
+                    if not isinstance(item_obj, dict):
+                        continue
+                    item = cast("dict[str, object]", item_obj)
+                    role = item.get("role")
+                    artifact_kind = item.get("artifact_kind")
+                    if (
+                        isinstance(role, str)
+                        and role in {"metadata", "primary_structured_output", "primary_text_output"}
+                        and isinstance(artifact_kind, str)
+                        and artifact_kind not in primary_artifact_kinds
+                    ):
+                        primary_artifact_kinds.append(artifact_kind)
+                evidence["primary_artifact_kinds"] = primary_artifact_kinds
+        else:
+            evidence["package_manifest_available"] = False
+
     return evidence
 
 
@@ -259,6 +294,13 @@ def build_delivery_payload_v1(
     result: PartitionResult | None = None,
 ) -> DeliveryPayloadV1:
     run_meta = meta.to_dict()
+    if result is not None:
+        dump_partition_artifacts(
+            out_root=out_root,
+            sha256=sha256,
+            meta=meta,
+            result=result,
+        )
     artifacts = build_artifacts_paths_for_run_meta_v1(
         out_root=out_root,
         sha256=sha256,

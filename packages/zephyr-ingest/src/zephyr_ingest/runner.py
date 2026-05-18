@@ -26,7 +26,9 @@ from zephyr_core.contracts.v1.run_meta import (
     MetricsV1,
     RunProvenanceV1,
 )
+from zephyr_ingest._internal.artifacts import dump_partition_artifacts
 from zephyr_ingest._internal.delivery_dlq import write_delivery_dlq
+from zephyr_ingest._internal.package_manifest import write_package_manifest_for_run
 from zephyr_ingest._internal.retry_policy import is_retryable_exception
 from zephyr_ingest._internal.utils import sha256_file
 from zephyr_ingest.config.snapshot_v1 import ConfigSnapshotV1
@@ -175,6 +177,27 @@ def _write_delivery_receipt(out_dir: Path, receipt: DeliveryReceipt) -> None:
     (out_dir / "delivery_receipt.json").write_text(
         json.dumps(receipt.to_dict(), ensure_ascii=False, indent=2, default=str),
         encoding="utf-8",
+    )
+
+
+def _refresh_package_manifest(
+    *,
+    out_dir: Path,
+    sha256: str,
+    run_meta: RunMetaV1,
+    cfg: RunnerConfig,
+    task: TaskV1,
+) -> None:
+    profile_obj = cfg.partition_options.get("profile")
+    profile = profile_obj if isinstance(profile_obj, str) else None
+    source_id = task.inputs.document.source_contract_id or task.inputs.document.source
+    write_package_manifest_for_run(
+        out_dir=out_dir,
+        source_sha256=sha256,
+        run_meta=run_meta.to_dict(),
+        profile=profile,
+        source_id=source_id,
+        source_kind=task.inputs.document.source,
     )
 
 
@@ -354,6 +377,12 @@ def process_task(
                     execution_mode=execution_mode,
                 ),
             )
+            dump_partition_artifacts(
+                out_root=resolved_out_root,
+                sha256=sha,
+                meta=meta,
+                result=res,
+            )
 
             log_event(
                 logger,
@@ -390,6 +419,13 @@ def process_task(
 
             _write_delivery_receipt(out_dir, receipt)
             write_usage_record_v1(out_dir=out_dir, task=task, meta=meta, receipt=receipt)
+            _refresh_package_manifest(
+                out_dir=out_dir,
+                sha256=sha,
+                run_meta=meta,
+                cfg=cfg,
+                task=task,
+            )
 
             dlq_written = False
             delivery_retryable: bool | None = None

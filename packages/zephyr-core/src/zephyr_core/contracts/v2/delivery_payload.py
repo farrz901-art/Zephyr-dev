@@ -10,6 +10,7 @@ class ArtifactsPathsV1(TypedDict):
     run_meta_path: str
     elements_path: str
     normalized_path: str
+    package_manifest_path: NotRequired[str]
     records_path: NotRequired[str]
     state_path: NotRequired[str]
     logs_path: NotRequired[str]
@@ -29,6 +30,10 @@ class DeliveryContentEvidenceV1(TypedDict, total=False):
     elements_count: int
     structured_state_visibility: str
     structured_log_visibility: str
+    package_manifest_available: bool
+    artifact_count: int
+    primary_artifact_kinds: list[str]
+    package_id: str
 
 
 class DeliveryPayloadV1(TypedDict):

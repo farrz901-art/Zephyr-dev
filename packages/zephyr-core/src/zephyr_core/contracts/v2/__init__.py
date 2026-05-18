@@ -20,6 +20,21 @@ from zephyr_core.contracts.v2.healthz import (
     HealthCheckResult,
 )
 from zephyr_core.contracts.v2.lifecycle import Lifecycle, WorkerPhase
+from zephyr_core.contracts.v2.package_identity import (
+    build_artifact_id_v1,
+    build_package_id_v1,
+    normalize_identity_part,
+)
+from zephyr_core.contracts.v2.package_manifest import (
+    ARTIFACT_DESCRIPTOR_SCHEMA_VERSION,
+    PACKAGE_MANIFEST_SCHEMA_VERSION,
+    ArtifactDescriptorV1,
+    PackageManifestV1,
+    PackageRunMetaV1,
+    validate_artifact_descriptor_v1,
+    validate_package_manifest_v1,
+    validate_package_run_meta_v1,
+)
 from zephyr_core.contracts.v2.spec import ConnectorSpecV1, SpecFieldTypeV1, SpecFieldV1
 
 __all__ = [
@@ -27,6 +42,17 @@ __all__ = [
     "ArtifactsPathsV1",
     "DeliveryPayloadV1",
     "DeliveryReceiptV1",
+    "PACKAGE_MANIFEST_SCHEMA_VERSION",
+    "ARTIFACT_DESCRIPTOR_SCHEMA_VERSION",
+    "ArtifactDescriptorV1",
+    "PackageManifestV1",
+    "PackageRunMetaV1",
+    "normalize_identity_part",
+    "build_package_id_v1",
+    "build_artifact_id_v1",
+    "validate_artifact_descriptor_v1",
+    "validate_package_run_meta_v1",
+    "validate_package_manifest_v1",
     "BATCH_REPORT_SCHEMA_VERSION",
     "BatchReportV1",
     "CONFIG_SNAPSHOT_SCHEMA_VERSION",
